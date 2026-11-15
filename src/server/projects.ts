@@ -24,37 +24,11 @@ const decodeProject = Schema.decodeUnknownEffect(ProjectFile)
 const encodeProject = Schema.encodeEffect(ProjectFile)
 const decodeId = Schema.decodeUnknownEffect(ProjectId)
 
-import { Array as Arr, Context, Crypto, DateTime, Effect, FileSystem, Layer, Path, Schema } from "effect"
-import { ApiError, badRequest, notFound } from "./api-error.ts"
-import { Settings } from "./settings.ts"
-
-const ProjectId = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]{0,63}$/))
-
-const Project = Schema.Struct({
-  id: ProjectId,
-  title: Schema.String,
-  createdAt: Schema.String,
-  model: Schema.optionalKey(Schema.String)
-})
-type Project = typeof Project.Type
-
-type Stage = "created" | "uploaded"
-
-export interface ProjectView extends Project {
-  readonly stage: Stage
-  readonly files: ReadonlyArray<{ readonly name: string; readonly size: number }>
-}
-
-const ProjectFile = Schema.fromJsonString(Project)
-const decodeProject = Schema.decodeUnknownEffect(ProjectFile)
-const encodeProject = Schema.encodeEffect(ProjectFile)
-const decodeId = Schema.decodeUnknownEffect(ProjectId)
-
-const UNAVAILABLE = "\u041f\u0430\u043f\u043a\u0430 \u043f\u0440\u043e\u0435\u043a\u0442\u043e\u0432 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u043e\u0442\u043a\u0440\u044b\u0442\u044c \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u0443 \u0435\u0449\u0451 \u0440\u0430\u0437."
+const UNAVAILABLE = "Папка проектов недоступна. Попробуйте открыть страницу ещё раз."
 
 const orBroken = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, ApiError> =>
   effect.pipe(
-    Effect.catchAll((cause) =>
+    Effect.catch((cause) =>
       Effect.as(Effect.logError("the projects failed", cause), new ApiError({ status: 500, message: UNAVAILABLE })))
   )
 

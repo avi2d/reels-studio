@@ -9,10 +9,9 @@ test("sizes use 1024 steps and a decimal comma, not a point", () => {
   expect(formatSize(3 * 1024 ** 3)).toBe("3,0 ГБ")
 })
 
-test("a date keeps the browser day instead of forcing the UTC date", () => {
-  const iso = "2026-11-15T12:00:00"
-  const expected = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric" }).format(new Date(iso))
-  expect(formatDay(iso)).toBe(expected)
+test("a Moscow evening date keeps the local day, not the UTC date", () => {
+  process.env.TZ = "Europe/Moscow"
+  expect(formatDay("2026-11-14T22:30:00Z")).toBe("15 ноября 2026 г.")
 })
 
 test("a Cyrillic file name is base64 of its UTF-8 bytes, which btoa alone would refuse", () => {

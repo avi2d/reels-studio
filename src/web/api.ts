@@ -23,6 +23,7 @@ export type Message = typeof Message.Type
 export const ChatEvent = Schema.Union([
   Schema.Struct({ type: Schema.Literal("delta"), text: Schema.String }),
   Schema.Struct({ type: Schema.Literal("step"), text: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("start") }),
   Schema.Struct({ type: Schema.Literal("retry") }),
   Schema.Struct({ type: Schema.Literal("error"), message: Schema.String }),
   Schema.Struct({ type: Schema.Literal("done") })

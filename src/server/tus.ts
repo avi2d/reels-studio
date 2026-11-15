@@ -17,11 +17,11 @@ const encodeMeta = Schema.encodeEffect(UploadMeta)
 
 const UPLOAD_ID = /^[0-9a-f-]{36}$/
 
-const UNAVAILABLE = "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u043f\u0438\u0441\u0430\u0442\u044c \u0432\u0438\u0434\u0435\u043e."
+const UNAVAILABLE = "Не удалось записать видео."
 
 const orBroken = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, ApiError> =>
   effect.pipe(
-    Effect.catchAll((cause) =>
+    Effect.catch((cause) =>
       Effect.as(Effect.logError("the upload failed", cause), new ApiError({ status: 500, message: UNAVAILABLE })))
   )
 

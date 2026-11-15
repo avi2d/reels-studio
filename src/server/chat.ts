@@ -17,10 +17,10 @@ const decodeLine = Schema.decodeUnknownOption(MessageLine)
 const encodeLine = Schema.encodeEffect(MessageLine)
 
 const TOOLS = "read,grep,find,ls,write,edit"
-const STOPPED = "\u0447\u0430\u0442 \u043d\u0435 \u0437\u0430\u043f\u0443\u0441\u0442\u0438\u043b\u0441\u044f. \u041e\u0442\u043f\u0440\u0430\u0432\u044c\u0442\u0435 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u0435\u0449\u0451 \u0440\u0430\u0437 \u0438\u043b\u0438 \u0432\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0440\u0443\u0433\u0443\u044e \u043c\u043e\u0434\u0435\u043b\u044c."
-const MODEL_FAILED = "\u043c\u043e\u0434\u0435\u043b\u044c \u043d\u0435 \u043e\u0442\u0432\u0435\u0442\u0438\u043b\u0430. \u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0440\u0443\u0433\u0443\u044e \u043c\u043e\u0434\u0435\u043b\u044c \u0438\u043b\u0438 \u043e\u0442\u043f\u0440\u0430\u0432\u044c\u0442\u0435 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u0435\u0449\u0451 \u0440\u0430\u0437."
-const UNAVAILABLE = "\u0427\u0430\u0442 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d. \u041e\u0442\u043f\u0440\u0430\u0432\u044c\u0442\u0435 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u0435\u0449\u0451 \u0440\u0430\u0437."
-const INTERRUPTED = "\u0441\u0442\u0443\u0434\u0438\u044f \u043e\u0441\u0442\u0430\u043d\u043e\u0432\u0438\u043b\u0430\u0441\u044c \u0440\u0430\u043d\u044c\u0448\u0435, \u0447\u0435\u043c \u043e\u0442\u0432\u0435\u0442\u0438\u043b\u0430. \u041e\u0442\u043f\u0440\u0430\u0432\u044c\u0442\u0435 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u0435\u0449\u0451 \u0440\u0430\u0437."
+const STOPPED = "чат не запустился. Отправьте сообщение ещё раз или выберите другую модель."
+const MODEL_FAILED = "модель не ответила. Выберите другую модель или отправьте сообщение ещё раз."
+const UNAVAILABLE = "Чат недоступен. Отправьте сообщение ещё раз."
+const INTERRUPTED = "студия остановилась раньше, чем ответила. Отправьте сообщение ещё раз."
 
 const inPlainWords = (event: ChatEvent): Effect.Effect<ChatEvent> =>
   event.type === "error"
@@ -29,7 +29,7 @@ const inPlainWords = (event: ChatEvent): Effect.Effect<ChatEvent> =>
 
 const orBroken = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, ApiError> =>
   effect.pipe(
-    Effect.catchAll((cause) =>
+    Effect.catch((cause) =>
       Effect.as(Effect.logError("the chat failed", cause), new ApiError({ status: 500, message: UNAVAILABLE })))
   )
 
@@ -48,7 +48,7 @@ interface RunState {
 }
 
 const lastWords = (state: RunState): Message => {
-  const failed = state.failed ?? (state.pending !== undefined ? MODEL_FAILED : undefined) ?? (state.settled ? undefined : INTERRUPTED)
+  const failed = state.failed ?? state.pending ?? (state.settled ? undefined : INTERRUPTED)
   const text = state.text.trim()
   return failed === undefined ? { role: "assistant", text } : { role: "assistant", text, failed }
 }
@@ -119,10 +119,17 @@ export class Chat extends Context.Service<Chat, {
           const expand = (event: ChatEvent): Effect.Effect<ReadonlyArray<ChatEvent>> =>
             Effect.gen(function*() {
               const current = yield* Ref.get(state)
-              if (event.type === "delta" && event.text === "\n\n") {
-                if (current.text === "") return []
-                yield* Ref.set(state, { ...current, base: current.text, text: `${current.text}\n\n` })
-                return [event]
+              if (event.type === "start") {
+                if (current.pending !== undefined) {
+                  yield* Effect.logError("the model recovered after an error", current.pending)
+                }
+                if (current.text === "") {
+                  if (current.pending === undefined) return [event]
+                  yield* Ref.set(state, { ...current, pending: undefined })
+                  return [event]
+                }
+                yield* Ref.set(state, { ...current, base: current.text, pending: undefined, text: `${current.text}\n\n` })
+                return [event, { type: "delta" as const, text: "\n\n" }]
               }
               if (event.type === "delta") {
                 const next = { ...current, text: current.text + event.text }
@@ -145,7 +152,8 @@ export class Chat extends Context.Service<Chat, {
                 return [event]
               }
               if (event.type === "error") {
-                yield* Ref.set(state, { ...current, pending: event.message })
+                yield* Effect.logError("the model failed", event.message)
+                yield* Ref.set(state, { ...current, pending: MODEL_FAILED })
                 return []
               }
               yield* Ref.set(state,
@@ -177,11 +185,11 @@ export class Chat extends Context.Service<Chat, {
 
       const send = Effect.fn("Chat.send")(function*(id: string, text: string, model: string) {
         const trimmed = text.trim()
-        if (trimmed === "") return yield* badRequest("\u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435")
-        if (!settings.models.includes(model)) return yield* badRequest("\u0422\u0430\u043a\u043e\u0439 \u043c\u043e\u0434\u0435\u043b\u0438 \u0432 \u0441\u0442\u0443\u0434\u0438\u0438 \u043d\u0435\u0442")
+        if (trimmed === "") return yield* badRequest("Напишите сообщение")
+        if (!settings.models.includes(model)) return yield* badRequest("Такой модели в студии нет")
         const dir = yield* projects.folder(id)
         const taken = yield* Ref.modify(busy, (set) => [set.has(id), new Set([...set, id])])
-        if (taken) return yield* new ApiError({ status: 409, message: "\u0414\u043e\u0436\u0434\u0438\u0442\u0435\u0441\u044c \u043e\u0442\u0432\u0435\u0442\u0430 \u043d\u0430 \u043f\u0440\u043e\u0448\u043b\u043e\u0435 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435" })
+        if (taken) return yield* new ApiError({ status: 409, message: "Дождитесь ответа на прошлое сообщение" })
         const release = Ref.update(busy, (set) => new Set([...set].filter((other) => other !== id)))
         yield* Effect.gen(function*() {
           yield* fs.makeDirectory(path.join(dir, "chat"), { recursive: true }).pipe(orBroken)

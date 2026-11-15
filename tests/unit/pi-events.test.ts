@@ -31,9 +31,9 @@ test("a tool start becomes a Russian step, not the tool's name", () => {
   expect(toChatEvents(line({ type: "tool_execution_start", toolName: "mystery" }))).toEqual([{ type: "step", text: "Работаю" }])
 })
 
-test("a second assistant message starts with a paragraph break, not glued to the first", () => {
+test("a new assistant message is a boundary event, not text the model wrote", () => {
   expect(toChatEvents(line({ type: "message_start", message: { role: "assistant" } })))
-    .toEqual([{ type: "delta", text: "\n\n" }])
+    .toEqual([{ type: "start" }])
   expect(toChatEvents(line({ type: "message_start", message: { role: "user" } }))).toEqual([])
 })
 

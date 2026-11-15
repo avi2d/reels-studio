@@ -1,12 +1,12 @@
 import { Option, Schema } from "effect"
 
-const UNITS = ["\u0411", "\u041a\u0411", "\u041c\u0411", "\u0413\u0411", "\u0422\u0411"]
+const UNITS = ["Б", "КБ", "МБ", "ГБ", "ТБ"]
 
 export const formatSize = (bytes: number): string => {
   const power = bytes < 1 ? 0 : Math.min(UNITS.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
   const value = bytes / 1024 ** power
   const digits = power === 0 || value >= 100 ? 0 : 1
-  return `${value.toFixed(digits).replace(".", ",")} ${UNITS[power] ?? "\u0411"}`
+  return `${value.toFixed(digits).replace(".", ",")} ${UNITS[power] ?? "Б"}`
 }
 
 export const formatDay = (iso: string): string =>
