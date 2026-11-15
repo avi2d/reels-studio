@@ -126,14 +126,14 @@ const makeExpand = (state: Ref.Ref<RunState>) => (event: ChatEvent): Effect.Effe
   return expandSettled(state, event)
 }
 
-const stoppedStream = (
+const stoppedStream = <E>(
   state: Ref.Ref<RunState>,
-  complaints: string
-): Effect.Effect<Stream.Stream<ChatEvent>> =>
-  Effect.gen(function*() {
+  complaints: Fiber.Fiber<string, E>
+): Stream.Stream<ChatEvent> =>
+  Stream.unwrap(Effect.gen(function*() {
     const last = yield* Ref.get(state)
     if (last.settled) return Stream.make<Array<ChatEvent>>()
-    yield* Effect.logError("pi stopped before it settled", complaints)
+    yield* Effect.logError("pi stopped before it settled", yield* Effect.exit(Fiber.join(complaints)))
     yield* Ref.update(state, (current) => ({
       ...current,
       failed: current.failed ?? current.pending ?? STOPPED,
@@ -141,7 +141,7 @@ const stoppedStream = (
       settled: true
     }))
     return Stream.make<Array<ChatEvent>>({ type: "error", message: STOPPED }, { type: "done" })
-  })
+  }))
 
 const piStream = <E>(
   stdout: Stream.Stream<Uint8Array, E>,
@@ -218,8 +218,7 @@ export class Chat extends Context.Service<Chat, {
             ))
           const handle = yield* command(dir, text, model).pipe(orBroken)
           const complaints = yield* handle.stderr.pipe(Stream.decodeText(), Stream.mkString, Effect.forkScoped)
-          const stopped = yield* stoppedStream(state, yield* Fiber.join(complaints))
-          return piStream(handle.stdout, makeExpand(state), stopped)
+          return piStream(handle.stdout, makeExpand(state), stoppedStream(state, complaints))
         })).pipe(brokenStream, Stream.provideContext(context))
       const send = Effect.fn("Chat.send")(function*(id: string, text: string, model: string) {
         const trimmed = text.trim()
