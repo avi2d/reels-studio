@@ -24,7 +24,39 @@ const decodeProject = Schema.decodeUnknownEffect(ProjectFile)
 const encodeProject = Schema.encodeEffect(ProjectFile)
 const decodeId = Schema.decodeUnknownEffect(ProjectId)
 
-const broken = (cause: unknown): ApiError => new ApiError({ status: 500, message: `Папка проектов недоступна: ${String(cause)}` })
+import { Array as Arr, Context, Crypto, DateTime, Effect, FileSystem, Layer, Path, Schema } from "effect"
+import { ApiError, badRequest, notFound } from "./api-error.ts"
+import { Settings } from "./settings.ts"
+
+const ProjectId = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]{0,63}$/))
+
+const Project = Schema.Struct({
+  id: ProjectId,
+  title: Schema.String,
+  createdAt: Schema.String,
+  model: Schema.optionalKey(Schema.String)
+})
+type Project = typeof Project.Type
+
+type Stage = "created" | "uploaded"
+
+export interface ProjectView extends Project {
+  readonly stage: Stage
+  readonly files: ReadonlyArray<{ readonly name: string; readonly size: number }>
+}
+
+const ProjectFile = Schema.fromJsonString(Project)
+const decodeProject = Schema.decodeUnknownEffect(ProjectFile)
+const encodeProject = Schema.encodeEffect(ProjectFile)
+const decodeId = Schema.decodeUnknownEffect(ProjectId)
+
+const UNAVAILABLE = "\u041f\u0430\u043f\u043a\u0430 \u043f\u0440\u043e\u0435\u043a\u0442\u043e\u0432 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u043e\u0442\u043a\u0440\u044b\u0442\u044c \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u0443 \u0435\u0449\u0451 \u0440\u0430\u0437."
+
+const orBroken = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, ApiError> =>
+  effect.pipe(
+    Effect.catchAll((cause) =>
+      Effect.as(Effect.logError("the projects failed", cause), new ApiError({ status: 500, message: UNAVAILABLE })))
+  )
 
 export class Projects extends Context.Service<Projects, {
   readonly list: Effect.Effect<ReadonlyArray<ProjectView>, ApiError>
@@ -44,7 +76,7 @@ export class Projects extends Context.Service<Projects, {
       const folder = Effect.fn("Projects.folder")(function*(id: string) {
         const valid = yield* decodeId(id).pipe(Effect.mapError(() => notFound("Такого ролика нет")))
         const dir = path.join(settings.projectsDir, valid)
-        const exists = yield* fs.exists(path.join(dir, "project.json")).pipe(Effect.mapError(broken))
+        const exists = yield* fs.exists(path.join(dir, "project.json")).pipe(orBroken)
         if (!exists) return yield* notFound("Такого ролика нет")
         return dir
       })
@@ -52,21 +84,21 @@ export class Projects extends Context.Service<Projects, {
       const read = Effect.fn("Projects.read")(function*(dir: string) {
         const text = yield* fs.readFileString(path.join(dir, "project.json"))
         return yield* decodeProject(text)
-      }, Effect.mapError(broken))
+      }, orBroken)
 
       const write = Effect.fn("Projects.write")(function*(dir: string, project: Project) {
         const text = yield* encodeProject(project)
         yield* fs.writeFileString(path.join(dir, "project.json"), text)
-      }, Effect.mapError(broken))
+      }, orBroken)
 
       const view = Effect.fn("Projects.view")(function*(dir: string) {
         const project = yield* read(dir)
         const source = path.join(dir, "source")
-        const names = yield* fs.readDirectory(source).pipe(Effect.mapError(broken))
+        const names = yield* fs.readDirectory(source).pipe(orBroken)
         const files = yield* Effect.forEach(names.toSorted(), (name) =>
           fs.stat(path.join(source, name)).pipe(
             Effect.map((info) => ({ name, size: Number(info.size) })),
-            Effect.mapError(broken)
+            orBroken
           ))
         const stage: Stage = files.length > 0 ? "uploaded" : "created"
         return { ...project, stage, files }
@@ -75,8 +107,8 @@ export class Projects extends Context.Service<Projects, {
       const get = (id: string) => Effect.flatMap(folder(id), view)
 
       const list = Effect.gen(function*() {
-        yield* fs.makeDirectory(settings.projectsDir, { recursive: true }).pipe(Effect.mapError(broken))
-        const names = yield* fs.readDirectory(settings.projectsDir).pipe(Effect.mapError(broken))
+        yield* fs.makeDirectory(settings.projectsDir, { recursive: true }).pipe(orBroken)
+        const names = yield* fs.readDirectory(settings.projectsDir).pipe(orBroken)
         const views = yield* Effect.forEach(names, (name) => Effect.option(get(name)))
         return Arr.getSomes(views).toSorted((left, right) => right.createdAt.localeCompare(left.createdAt))
       })
@@ -87,11 +119,11 @@ export class Projects extends Context.Service<Projects, {
           return yield* badRequest("Назовите ролик: от 1 до 120 знаков")
         }
         const now = yield* DateTime.now
-        const uuid = yield* crypto.randomUUIDv4.pipe(Effect.mapError(broken))
+        const uuid = yield* crypto.randomUUIDv4.pipe(orBroken)
         const id = `${DateTime.formatIso(now).slice(0, 10)}-${uuid.slice(0, 8)}`
         const dir = path.join(settings.projectsDir, id)
-        yield* fs.makeDirectory(path.join(dir, "source"), { recursive: true }).pipe(Effect.mapError(broken))
-        yield* fs.makeDirectory(path.join(dir, "uploads"), { recursive: true }).pipe(Effect.mapError(broken))
+        yield* fs.makeDirectory(path.join(dir, "source"), { recursive: true }).pipe(orBroken)
+        yield* fs.makeDirectory(path.join(dir, "uploads"), { recursive: true }).pipe(orBroken)
         yield* write(dir, { id, title: trimmed, createdAt: DateTime.formatIso(now) })
         return yield* view(dir)
       })

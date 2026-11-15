@@ -31,6 +31,27 @@ test("a tool start becomes a Russian step, not the tool's name", () => {
   expect(toChatEvents(line({ type: "tool_execution_start", toolName: "mystery" }))).toEqual([{ type: "step", text: "Работаю" }])
 })
 
+test("a second assistant message starts with a paragraph break, not glued to the first", () => {
+  expect(toChatEvents(line({ type: "message_start", message: { role: "assistant" } })))
+    .toEqual([{ type: "delta", text: "\n\n" }])
+  expect(toChatEvents(line({ type: "message_start", message: { role: "user" } }))).toEqual([])
+})
+
+test("a retry start clears the failed attempt while a final retry failure reports", () => {
+  expect(toChatEvents(line({ type: "auto_retry_start", attempt: 1 })))
+    .toEqual([{ type: "retry" }])
+  expect(toChatEvents(line({ type: "auto_retry_end", success: true, attempt: 2 }))).toEqual([])
+  expect(toChatEvents(line({ type: "auto_retry_end", success: false, attempt: 2, finalError: "overloaded" })))
+    .toEqual([{ type: "error", message: "overloaded" }])
+})
+
+test("a handled prompt ends the reply instead of waiting for a run that never starts", () => {
+  expect(toChatEvents(line({ type: "response", command: "prompt", success: true, data: { disposition: "handled" } })))
+    .toEqual([{ type: "done" }])
+  expect(toChatEvents(line({ type: "response", command: "prompt", success: true, data: { disposition: "started" } })))
+    .toEqual([])
+})
+
 test("a line that is not JSON is skipped, not thrown", () => {
   expect(toChatEvents("not json")).toEqual([])
   expect(toChatEvents("")).toEqual([])

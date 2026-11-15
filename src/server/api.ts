@@ -2,7 +2,7 @@ import { Effect, Layer, Option, Schema, Stream } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { ApiError, badRequest } from "./api-error.ts"
 import { Chat } from "./chat.ts"
-import { isHomeAddress, isSameOrigin } from "./home-network.ts"
+import { allowedHosts, isAllowedHost, isHomeAddress, isSameOrigin } from "./home-network.ts"
 import { Projects } from "./projects.ts"
 import { Settings } from "./settings.ts"
 import * as Tus from "./tus.ts"
@@ -59,7 +59,7 @@ const chat = Layer.mergeAll(
     const input = yield* body(NewMessage)
     const events = yield* talk.send(yield* param("id"), input.text, input.model)
     const lines = events.pipe(
-      Stream.catch((error) => Stream.make({ type: "error" as const, message: error.message })),
+      Stream.catch((error) => Stream.make({ type: "error" as const, message: error.message }, { type: "done" as const })),
       Stream.map((event) => `data: ${JSON.stringify(event)}\n\n`)
     )
     return HttpServerResponse.stream(
@@ -74,7 +74,6 @@ const uploads = Layer.mergeAll(
     const store = yield* Projects
     const id = yield* param("id")
     const dir = yield* store.folder(id)
-    if (request.method === "OPTIONS") return Tus.options
     if (request.method === "POST") return yield* Tus.create(request, dir, `/api/projects/${id}/uploads`)
     return yield* new ApiError({ status: 405, message: "Так загрузку не начать" })
   }))),
@@ -82,7 +81,6 @@ const uploads = Layer.mergeAll(
     const store = yield* Projects
     const dir = yield* store.folder(yield* param("id"))
     const upload = yield* param("upload")
-    if (request.method === "OPTIONS") return Tus.options
     if (request.method === "HEAD") return yield* Tus.head(request, dir, upload)
     if (request.method === "PATCH") return yield* Tus.patch(request, dir, upload)
     return yield* new ApiError({ status: 405, message: "Так загрузку не продолжить" })
@@ -95,8 +93,12 @@ const homeOnly = HttpRouter.middleware(
   (httpEffect) =>
     Effect.gen(function*() {
       const request = yield* HttpServerRequest.HttpServerRequest
+      const settings = yield* Settings
       const remote = Option.getOrUndefined(request.remoteAddress)
       if (remote !== undefined && !isHomeAddress(remote)) {
+        return refuse("Студия открывается только из домашней сети")
+      }
+      if (!isAllowedHost(request.headers["host"], allowedHosts(settings.port))) {
         return refuse("Студия открывается только из домашней сети")
       }
       if (!isSameOrigin(request.headers["origin"], request.headers["host"])) {

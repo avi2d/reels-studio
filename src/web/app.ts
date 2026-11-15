@@ -1,7 +1,7 @@
 import { Effect, Option, Schema } from "effect"
 import * as Api from "./api.ts"
 import { h } from "./dom.ts"
-import { formatDay, formatSize, parseEventBlock, strongRuns } from "./format.ts"
+import { formatDay, formatSize, parseEventBlock } from "./format.ts"
 import { upload, type Progress } from "./upload.ts"
 
 const app = document.querySelector("#app") ?? document.body
@@ -101,11 +101,13 @@ const videoCard = (project: Api.ProjectView): HTMLElement => {
     h("p", { class: "muted" }, "Не закрывайте страницу, пока идёт загрузка. Исходное видео студия не меняет."))
 }
 
-const written = (text: string): ReadonlyArray<Node | string> =>
-  strongRuns(text).map((part) => (part.strong ? h("strong", {}, part.text) : part.text))
+const paragraphs = (text: string): ReadonlyArray<Node | string> => {
+  const parts = text.split("\n\n")
+  return parts.flatMap((part, index) => (index === 0 ? [part] : [h("br"), h("br"), part]))
+}
 
 const bubble = (message: Api.Message): HTMLElement => {
-  const node = h("div", { class: `bubble ${message.role}` }, ...(message.role === "assistant" ? written(message.text) : [message.text]))
+  const node = h("div", { class: `bubble ${message.role}` }, ...paragraphs(message.text))
   if (message.failed !== undefined) node.append(h("span", { class: "note" }, `Ответ не дошёл: ${message.failed}`))
   return node
 }
@@ -143,6 +145,9 @@ const chatCard = (project: Api.ProjectView, messages: ReadonlyArray<Api.Message>
     Effect.gen(function*() {
       const words = h("span")
       const answer = h("div", { class: "bubble assistant" }, words)
+      const refresh = (): void => {
+        words.replaceChildren(...paragraphs(state.text))
+      }
       const step = h("p", { class: "muted step", role: "status" }, "Студия думает…")
       const state = { done: false, text: "" }
       const fail = (reason: string): void => { answer.append(h("span", { class: "note" }, `Ответ не дошёл: ${reason}`)) }
@@ -156,10 +161,16 @@ const chatCard = (project: Api.ProjectView, messages: ReadonlyArray<Api.Message>
       step.scrollIntoView({ block: "nearest" })
       yield* readReply(response.body.getReader(), (event) => {
         if (event.type === "step") step.textContent = `${event.text}…`
+        if (event.type === "retry") {
+          state.text = state.text.includes("\n\n") ? state.text.slice(0, state.text.lastIndexOf("\n\n")) : ""
+          answer.querySelector(".note")?.remove()
+          refresh()
+        }
         if (event.type === "delta") {
           if (!answer.isConnected) step.before(answer)
+          if (event.text === "\n\n" && state.text === "") return
           state.text += event.text
-          words.replaceChildren(...written(state.text))
+          refresh()
         }
         if (event.type === "error") {
           if (!answer.isConnected) step.before(answer)

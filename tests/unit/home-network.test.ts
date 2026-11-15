@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { isHomeAddress, isSameOrigin } from "../../src/server/home-network.ts"
+import { allowedHosts, isAllowedHost, isHomeAddress, isSameOrigin } from "../../src/server/home-network.ts"
 
 test("a public address is refused, not treated as home", () => {
   expect(isHomeAddress("8.8.8.8")).toBe(false)
@@ -34,6 +34,21 @@ test("loopback, unique local fc00::/7 and link-local fe80::/10 are home", () => 
 
 test("an octet above 255 is not an address, even with a home prefix", () => {
   expect(isHomeAddress("10.0.0.256")).toBe(false)
+})
+
+test("a rebound host is refused while the loopback allow list passes", () => {
+  const allowed = new Set(["localhost:8765", "127.0.0.1:8765", "[::1]:8765", "192.168.1.62:8765", "winbox.local:8765"])
+  expect(isAllowedHost("attacker.example:8765", allowed)).toBe(false)
+  expect(isAllowedHost("192.168.1.62:8765", allowed)).toBe(true)
+  expect(isAllowedHost("localhost:8765", allowed)).toBe(true)
+  expect(isAllowedHost("192.168.1.62:9999", allowed)).toBe(false)
+  expect(isAllowedHost(undefined, allowed)).toBe(false)
+})
+
+test("the allow list always carries loopback with the studio port", () => {
+  const allowed = allowedHosts(8765)
+  expect(allowed.has("localhost:8765")).toBe(true)
+  expect(allowed.has("127.0.0.1:8765")).toBe(true)
 })
 
 test("a request from another site's page is refused, not let through by a matching path", () => {

@@ -17,7 +17,13 @@ const encodeMeta = Schema.encodeEffect(UploadMeta)
 
 const UPLOAD_ID = /^[0-9a-f-]{36}$/
 
-const broken = (cause: unknown): ApiError => new ApiError({ status: 500, message: `Не удалось записать файл: ${String(cause)}` })
+const UNAVAILABLE = "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u043f\u0438\u0441\u0430\u0442\u044c \u0432\u0438\u0434\u0435\u043e."
+
+const orBroken = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, ApiError> =>
+  effect.pipe(
+    Effect.catchAll((cause) =>
+      Effect.as(Effect.logError("the upload failed", cause), new ApiError({ status: 500, message: UNAVAILABLE })))
+  )
 
 export const parseMetadata = (header: string | undefined): ReadonlyMap<string, string> => {
   const pairs = (header ?? "").split(",").map((pair) => pair.trim().split(" ")).filter((pair) => pair[0] !== "")
@@ -59,28 +65,23 @@ const paths = Effect.fnUntraced(function*(dir: string, uploadId: string) {
 
 const readMeta = Effect.fnUntraced(function*(file: string) {
   const fs = yield* FileSystem.FileSystem
-  const exists = yield* fs.exists(file).pipe(Effect.mapError(broken))
+  const exists = yield* fs.exists(file).pipe(orBroken)
   if (!exists) return yield* notFound("Такой загрузки нет")
-  const text = yield* fs.readFileString(file).pipe(Effect.mapError(broken))
-  return yield* decodeMeta(text).pipe(Effect.mapError(broken))
+  const text = yield* fs.readFileString(file).pipe(orBroken)
+  return yield* decodeMeta(text).pipe(orBroken)
 })
 
 const writeMeta = Effect.fnUntraced(function*(file: string, meta: UploadMeta) {
   const fs = yield* FileSystem.FileSystem
-  const text = yield* encodeMeta(meta).pipe(Effect.mapError(broken))
-  yield* fs.writeFileString(file, text).pipe(Effect.mapError(broken))
+  const text = yield* encodeMeta(meta).pipe(orBroken)
+  yield* fs.writeFileString(file, text).pipe(orBroken)
 })
 
 const offsetOf = Effect.fnUntraced(function*(part: string, meta: UploadMeta) {
   const fs = yield* FileSystem.FileSystem
   if (meta.completed !== undefined) return meta.length
-  const info = yield* fs.stat(part).pipe(Effect.mapError(broken))
+  const info = yield* fs.stat(part).pipe(orBroken)
   return Number(info.size)
-})
-
-export const options = HttpServerResponse.empty({
-  status: 204,
-  headers: { ...TUS_HEADERS, "tus-version": TUS_VERSION, "tus-extension": "creation" }
 })
 
 export const create = Effect.fn("tus.create")(function*(
@@ -93,10 +94,10 @@ export const create = Effect.fn("tus.create")(function*(
   const crypto = yield* Crypto.Crypto
   const length = wholeNumber(request.headers["upload-length"])
   if (length === undefined || length === 0) return yield* badRequest("Нужен заголовок Upload-Length с размером файла")
-  const uploadId = yield* crypto.randomUUIDv4.pipe(Effect.mapError(broken))
+  const uploadId = yield* crypto.randomUUIDv4.pipe(orBroken)
   const files = yield* paths(dir, uploadId)
   const filename = safeFileName(parseMetadata(request.headers["upload-metadata"]).get("filename"))
-  yield* fs.writeFile(files.part, new Uint8Array()).pipe(Effect.mapError(broken))
+  yield* fs.writeFile(files.part, new Uint8Array()).pipe(orBroken)
   yield* writeMeta(files.meta, { length, filename })
   return HttpServerResponse.empty({ status: 201, headers: { ...TUS_HEADERS, location: `${location}/${uploadId}` } })
 })
@@ -126,7 +127,7 @@ const freeName = (source: string, name: string, attempt: number): Effect.Effect<
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     const candidate = numbered(name, attempt)
-    const taken = yield* fs.exists(path.join(source, candidate)).pipe(Effect.mapError(broken))
+    const taken = yield* fs.exists(path.join(source, candidate)).pipe(orBroken)
     return taken ? yield* freeName(source, name, attempt + 1) : candidate
   })
 
@@ -135,7 +136,7 @@ const finish = Effect.fnUntraced(function*(dir: string, files: { meta: string; p
   const path = yield* Path.Path
   const source = path.join(dir, "source")
   const name = yield* freeName(source, meta.filename, 0)
-  yield* fs.rename(files.part, path.join(source, name)).pipe(Effect.mapError(broken))
+  yield* fs.rename(files.part, path.join(source, name)).pipe(orBroken)
   yield* writeMeta(files.meta, { ...meta, completed: name })
 })
 
@@ -159,11 +160,11 @@ export const patch = Effect.fn("tus.patch")(function*(
     return yield* new ApiError({ status: 413, message: "Часть больше, чем остаток файла" })
   }
   if (meta.completed === undefined) {
-    yield* request.stream.pipe(Stream.run(fs.sink(files.part, { flag: "a" })), Effect.mapError(broken))
+    yield* request.stream.pipe(Stream.run(fs.sink(files.part, { flag: "a" })), orBroken)
   }
   const written = yield* offsetOf(files.part, meta)
   if (written > meta.length) {
-    yield* fs.truncate(files.part, offset).pipe(Effect.mapError(broken))
+    yield* fs.truncate(files.part, offset).pipe(orBroken)
     return yield* new ApiError({ status: 413, message: "Часть больше, чем остаток файла" })
   }
   if (written === meta.length && meta.completed === undefined) yield* finish(dir, files, meta)

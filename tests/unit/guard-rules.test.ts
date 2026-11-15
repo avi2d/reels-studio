@@ -35,3 +35,17 @@ test("a tool that is neither a read nor a write is blocked, not waved through", 
 test("a read with no path means the project folder itself and is allowed", () => {
   expect(judge(scope, "ls", undefined).allowed).toBe(true)
 })
+
+test("a home shortcut or scheme never reaches the project, even when joined with it", () => {
+  expect(judge(scope, "read", "~/.bashrc").allowed).toBe(false)
+  expect(judge(scope, "write", "~/.bashrc").allowed).toBe(false)
+  expect(judge(scope, "read", "@/etc/passwd").allowed).toBe(false)
+  expect(judge(scope, "read", "file:///etc/passwd").allowed).toBe(false)
+  expect(judge(scope, "write", "~/projects/p1/notes.md").allowed).toBe(false)
+})
+
+test("a write into project-local trust folders is blocked, not just source and chat", () => {
+  expect(judge(scope, "write", ".pi/extensions/evil.ts").allowed).toBe(false)
+  expect(judge(scope, "write", ".agents/skills/x.md").allowed).toBe(false)
+  expect(judge(scope, "write", "notes.md").allowed).toBe(true)
+})

@@ -1,3 +1,5 @@
+import os from "node:os"
+
 const V4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/
 const MAPPED = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i
 
@@ -28,4 +30,23 @@ export const isSameOrigin = (origin: string | undefined, host: string | undefine
   if (origin === undefined) return true
   if (host === undefined || !URL.canParse(origin)) return false
   return new URL(origin).host === host
+}
+
+export const allowedHosts = (port: number): ReadonlySet<string> => {
+  const hosts = new Set<string>([`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`])
+  for (const group of Object.values(os.networkInterfaces())) {
+    for (const entry of group ?? []) {
+      const address = entry.address.split("%")[0] ?? ""
+      if (!isHomeAddress(address)) continue
+      hosts.add(entry.family === 6 ? `[${address}]:${port}` : `${address.toLowerCase()}:${port}`)
+    }
+  }
+  const short = os.hostname().toLowerCase().split(".")[0] ?? ""
+  if (short !== "") hosts.add(`${short}.local:${port}`)
+  return hosts
+}
+
+export const isAllowedHost = (host: string | undefined, allowed: ReadonlySet<string>): boolean => {
+  if (host === undefined) return false
+  return allowed.has(host.toLowerCase())
 }
