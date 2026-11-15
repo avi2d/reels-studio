@@ -140,6 +140,17 @@ button:disabled, .button[aria-disabled="true"] { background: var(--rose); color:
 .files span:first-child { overflow-wrap: anywhere; min-width: 0; }
 .files span:last-child { flex: none; color: var(--ruby); font-variant-numeric: tabular-nums; }
 
+.uploads { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.uploads:empty { display: none; }
+.upload { display: flex; flex-direction: column; gap: 6px; }
+.upload .name { display: flex; justify-content: space-between; gap: 12px; font-weight: 600; }
+.upload .name span:first-child { overflow-wrap: anywhere; min-width: 0; }
+.upload .name span:last-child { flex: none; color: var(--ruby); font-variant-numeric: tabular-nums; }
+.upload p { margin: 0; }
+.upload button { align-self: flex-start; }
+button.quiet { background: transparent; color: var(--wine); border: 1px solid var(--wine); padding: 8px 14px; }
+button.quiet[hidden] { display: none; }
+
 progress { width: 100%; height: 12px; accent-color: var(--wine); }
 
 .chat { display: flex; flex-direction: column; gap: 10px; }

@@ -2,6 +2,7 @@ import { Effect, Option, Schema } from "effect"
 import * as Api from "./api.ts"
 import { h } from "./dom.ts"
 import { formatDay, formatSize, modelName, parseEventBlock } from "./format.ts"
+import { oneAfterAnother } from "./queue.ts"
 import { upload, type Progress } from "./upload.ts"
 
 const app = document.querySelector("#app") ?? document.body
@@ -58,18 +59,19 @@ const fileList = (project: Api.ProjectView): HTMLElement =>
     ? h("p", { class: "muted" }, "Видео ещё не загружено.")
     : h("ul", { class: "files" }, ...project.files.map((file) => h("li", {}, h("span", {}, file.name), h("span", {}, formatSize(file.size)))))
 
-const videoCard = (project: Api.ProjectView): HTMLElement => {
-  const files = h("div", {}, fileList(project))
-  const bar = h("progress", { max: "1", value: "0", hidden: true })
-  const status = h("p", { class: "muted", role: "status" })
-  const input = h("input", { class: "file-input", type: "file", accept: "video/*" })
-  const pick = h("label", { class: "button" }, project.files.length === 0 ? "Загрузить видео" : "Загрузить ещё одно видео", input)
-  const busy = (value: boolean): void => {
-    input.disabled = value
-    pick.setAttribute("aria-disabled", String(value))
-  }
+const PICK_FIRST = "Загрузить видео"
+const PICK_MORE = "Добавить ещё видео"
+
+const uploadRow = (projectId: string, file: File, onDone: () => Effect.Effect<void, Api.Failed>, again: (file: File) => void) => {
+  const bar = h("progress", { max: "1", value: "0" })
+  const status = h("p", { class: "muted", role: "status" }, "Ждёт своей очереди.")
+  const retry = h("button", { type: "button", class: "quiet", hidden: true, click: () => {
+    node.remove()
+    again(file)
+  } }, "Повторить")
+  const node = h("li", { class: "upload" },
+    h("div", { class: "name" }, h("span", {}, file.name), h("span", {}, formatSize(file.size))), bar, status, retry)
   const onProgress = (progress: Progress): void => {
-    bar.hidden = false
     if (progress.waiting) {
       status.textContent = "Связь пропала. Загрузка продолжится сама, когда связь вернётся."
       return
@@ -78,29 +80,43 @@ const videoCard = (project: Api.ProjectView): HTMLElement => {
     const percent = Math.floor((progress.sent / progress.total) * 100)
     status.textContent = `Загружено ${formatSize(progress.sent)} из ${formatSize(progress.total)}, ${percent}%`
   }
-  input.addEventListener("change", () => {
-    const file = input.files?.[0]
-    if (file === undefined) return
-    busy(true)
-    status.className = "muted"
-    const done = Effect.gen(function*() {
-      yield* upload(project.id, file, onProgress)
-      const fresh = yield* Api.getProject(project.id)
-      files.replaceChildren(fileList(fresh.project))
-      bar.hidden = true
-      status.textContent = `Видео «${file.name}» загружено.`
-      input.value = ""
-      busy(false)
-    })
-    run(done, (message) => {
+  const work = upload(projectId, file, onProgress).pipe(
+    Effect.flatMap(onDone),
+    Effect.map(() => { node.remove() }),
+    Effect.catch((error) => Effect.sync(() => {
       status.className = "error"
-      status.textContent = `${message} Выберите тот же файл ещё раз, и загрузка продолжится с того же места.`
-      input.value = ""
-      busy(false)
+      bar.hidden = file.size === 0
+      retry.hidden = file.size === 0
+      status.textContent = file.size === 0
+        ? error.message
+        : `${error.message} Нажмите «Повторить», и загрузка продолжится с того же места.`
+    }))
+  )
+  return { node, work }
+}
+
+const videoCard = (project: Api.ProjectView): HTMLElement => {
+  const files = h("div", {}, fileList(project))
+  const rows = h("ul", { class: "uploads" })
+  const input = h("input", { class: "file-input", type: "file", accept: "video/*", multiple: true })
+  const label = h("span", {}, project.files.length === 0 ? PICK_FIRST : PICK_MORE)
+  const refresh = (): Effect.Effect<void, Api.Failed> =>
+    Effect.map(Api.getProject(project.id), (fresh) => {
+      files.replaceChildren(fileList(fresh.project))
+      label.textContent = PICK_MORE
     })
+  const add = (chosen: ReadonlyArray<File>): void => {
+    const made = chosen.map((file) => uploadRow(project.id, file, refresh, (same) => { add([same]) }))
+    rows.append(...made.map((row) => row.node))
+    enqueue(made.map((row) => row.work))
+  }
+  const enqueue = oneAfterAnother((work: Effect.Effect<void>) => work)
+  input.addEventListener("change", () => {
+    add([...(input.files ?? [])])
+    input.value = ""
   })
-  return h("section", { class: "card" }, h("h2", {}, "Видео"), files, pick, bar, status,
-    h("p", { class: "muted" }, "Не закрывайте страницу, пока идёт загрузка. Исходное видео студия не меняет."))
+  return h("section", { class: "card" }, h("h2", {}, "Видео"), files, rows, h("label", { class: "button" }, label, input),
+    h("p", { class: "muted" }, "Можно выбрать сразу несколько видео: они загрузятся по очереди. Не закрывайте страницу, пока идёт загрузка. Исходные видео студия не меняет."))
 }
 
 const bubble = (message: Api.Message): HTMLElement => {
