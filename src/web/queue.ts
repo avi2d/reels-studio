@@ -9,7 +9,7 @@ export const oneAfterAnother = <T>(work: (item: T) => Effect.Effect<void>): (ite
       state.running = false
       return Effect.void
     }
-    return Effect.flatMap(work(next), () => drain)
+    return Effect.flatMap(Effect.exit(work(next)), () => drain)
   })
   return (items) => {
     waiting.push(...items)

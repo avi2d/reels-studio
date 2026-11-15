@@ -62,15 +62,17 @@ const fileList = (project: Api.ProjectView): HTMLElement =>
 const PICK_FIRST = "Загрузить видео"
 const PICK_MORE = "Добавить ещё видео"
 
-const uploadRow = (projectId: string, file: File, onDone: () => Effect.Effect<void, Api.Failed>, again: (file: File) => void) => {
+const enqueue = oneAfterAnother((work: Effect.Effect<void>) => work)
+const uploadsByProject = new Map<string, Array<HTMLElement>>()
+
+const uploadKey = (file: File): string => `${file.name}:${file.size}:${file.lastModified}`
+
+const uploadRow = (projectId: string, file: File, onDone: () => Effect.Effect<void, Api.Failed>) => {
   const bar = h("progress", { max: "1", value: "0" })
   const status = h("p", { class: "muted", role: "status" }, "Ждёт своей очереди.")
-  const retry = h("button", { type: "button", class: "quiet", hidden: true, click: () => {
-    node.remove()
-    again(file)
-  } }, "Повторить")
   const node = h("li", { class: "upload" },
-    h("div", { class: "name" }, h("span", {}, file.name), h("span", {}, formatSize(file.size))), bar, status, retry)
+    h("div", { class: "name" }, h("span", {}, file.name), h("span", {}, formatSize(file.size))), bar, status)
+  node.dataset.key = uploadKey(file)
   const onProgress = (progress: Progress): void => {
     if (progress.waiting) {
       status.textContent = "Связь пропала. Загрузка продолжится сама, когда связь вернётся."
@@ -80,16 +82,29 @@ const uploadRow = (projectId: string, file: File, onDone: () => Effect.Effect<vo
     const percent = Math.floor((progress.sent / progress.total) * 100)
     status.textContent = `Загружено ${formatSize(progress.sent)} из ${formatSize(progress.total)}, ${percent}%`
   }
+  const failUpload = (message: string): void => {
+    node.dataset.failed = "true"
+    status.className = "error"
+    bar.hidden = file.size === 0
+    status.textContent = file.size === 0
+      ? message
+      : `${message} Выберите тот же файл ещё раз, и загрузка продолжится с того же места.`
+  }
   const work = upload(projectId, file, onProgress).pipe(
-    Effect.flatMap(onDone),
-    Effect.map(() => { node.remove() }),
+    Effect.flatMap(() => onDone.pipe(
+      Effect.map(() => {
+        uploadsByProject.set(projectId, (uploadsByProject.get(projectId) ?? []).filter((kept) => kept !== node))
+        node.remove()
+      }),
+      Effect.catchAllCause(() => Effect.sync(() => {
+        status.textContent = "Видео загружено. Список обновится при следующей загрузке."
+      }))
+    )),
     Effect.catch((error) => Effect.sync(() => {
-      status.className = "error"
-      bar.hidden = file.size === 0
-      retry.hidden = file.size === 0
-      status.textContent = file.size === 0
-        ? error.message
-        : `${error.message} Нажмите «Повторить», и загрузка продолжится с того же места.`
+      failUpload(error.message)
+    })),
+    Effect.catchAllCause(() => Effect.sync(() => {
+      failUpload("Не получилось загрузить.")
     }))
   )
   return { node, work }
@@ -98,6 +113,8 @@ const uploadRow = (projectId: string, file: File, onDone: () => Effect.Effect<vo
 const videoCard = (project: Api.ProjectView): HTMLElement => {
   const files = h("div", {}, fileList(project))
   const rows = h("ul", { class: "uploads" })
+  if (!uploadsByProject.has(project.id)) uploadsByProject.set(project.id, [])
+  rows.append(...(uploadsByProject.get(project.id) ?? []))
   const input = h("input", { class: "file-input", type: "file", accept: "video/*", multiple: true })
   const label = h("span", {}, project.files.length === 0 ? PICK_FIRST : PICK_MORE)
   const refresh = (): Effect.Effect<void, Api.Failed> =>
@@ -106,11 +123,18 @@ const videoCard = (project: Api.ProjectView): HTMLElement => {
       label.textContent = PICK_MORE
     })
   const add = (chosen: ReadonlyArray<File>): void => {
-    const made = chosen.map((file) => uploadRow(project.id, file, refresh, (same) => { add([same]) }))
+    const kept = uploadsByProject.get(project.id) ?? []
+    const made = chosen.map((file) => uploadRow(project.id, file, refresh))
+    for (const row of made) {
+      const key = row.node.dataset.key
+      const stale = kept.filter((candidate) => candidate.dataset.key === key && candidate.dataset.failed === "true")
+      for (const old of stale) old.remove()
+      uploadsByProject.set(project.id, (uploadsByProject.get(project.id) ?? []).filter((candidate) => !stale.includes(candidate)))
+      uploadsByProject.get(project.id)?.push(row.node)
+    }
     rows.append(...made.map((row) => row.node))
     enqueue(made.map((row) => row.work))
   }
-  const enqueue = oneAfterAnother((work: Effect.Effect<void>) => work)
   input.addEventListener("change", () => {
     add([...(input.files ?? [])])
     input.value = ""
