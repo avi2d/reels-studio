@@ -99,7 +99,7 @@ const uploadRow = (projectId: string, file: File) => {
         }
         uploadsByProject.set(projectId, (uploadsByProject.get(projectId) ?? []).filter((kept) => kept !== node && kept.dataset.uploaded !== "true"))
       }),
-      Effect.catchCause(() => Effect.sync(() => {
+      Effect.catchTag("Failed", () => Effect.sync(() => {
         node.dataset.uploaded = "true"
         status.textContent = "Видео загружено. Список обновится при следующей загрузке."
       }))
