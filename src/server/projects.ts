@@ -1,5 +1,5 @@
 import { Array as Arr, Context, Crypto, DateTime, Effect, FileSystem, Layer, Path, Schema } from "effect"
-import { ApiError, badRequest, notFound } from "./api-error.ts"
+import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
 import { Settings } from "./settings.ts"
 
 const ProjectId = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]{0,63}$/))
@@ -26,11 +26,7 @@ const decodeId = Schema.decodeUnknownEffect(ProjectId)
 
 const UNAVAILABLE = "Папка проектов недоступна. Попробуйте открыть страницу ещё раз."
 
-const orBroken = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, ApiError> =>
-  effect.pipe(
-    Effect.catch((cause) =>
-      Effect.as(Effect.logError("the projects failed", cause), new ApiError({ status: 500, message: UNAVAILABLE })))
-  )
+const orBroken = orUnavailable("the projects failed", UNAVAILABLE)
 
 export class Projects extends Context.Service<Projects, {
   readonly list: Effect.Effect<ReadonlyArray<ProjectView>, ApiError>

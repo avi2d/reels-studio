@@ -1,6 +1,6 @@
 import { Array as Arr, Context, Effect, Fiber, FileSystem, Layer, Path, Ref, Schema, Stream } from "effect"
 import { ChildProcess, type ChildProcessSpawner } from "effect/process"
-import { ApiError, badRequest } from "./api-error.ts"
+import { ApiError, badRequest, orUnavailable } from "./api-error.ts"
 import { toChatEvents, type ChatEvent } from "./pi-events.ts"
 import { Projects } from "./projects.ts"
 import { Settings } from "./settings.ts"
@@ -27,11 +27,7 @@ const inPlainWords = (event: ChatEvent): Effect.Effect<ChatEvent> =>
     ? Effect.as(Effect.logError("the model failed", event.message), { type: "error", message: MODEL_FAILED })
     : Effect.succeed(event)
 
-const orBroken = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, ApiError, R> =>
-  effect.pipe(
-    Effect.catch((cause) =>
-      Effect.as(Effect.logError("the chat failed", cause), new ApiError({ status: 500, message: UNAVAILABLE })))
-  )
+const orBroken = orUnavailable("the chat failed", UNAVAILABLE)
 
 const brokenStream = <A, E, R>(stream: Stream.Stream<A, E, R>): Stream.Stream<A, ApiError, R> =>
   stream.pipe(

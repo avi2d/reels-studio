@@ -1,6 +1,6 @@
 import { Crypto, Effect, FileSystem, Path, Schema, Stream } from "effect"
 import { HttpServerResponse, type HttpServerRequest } from "effect/http"
-import { ApiError, badRequest, notFound } from "./api-error.ts"
+import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
 
 const TUS_VERSION = "1.0.0"
 const OFFSET_TYPE = "application/offset+octet-stream"
@@ -19,11 +19,7 @@ const UPLOAD_ID = /^[0-9a-f-]{36}$/
 
 const UNAVAILABLE = "Не удалось записать видео."
 
-const orBroken = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, ApiError> =>
-  effect.pipe(
-    Effect.catch((cause) =>
-      Effect.as(Effect.logError("the upload failed", cause), new ApiError({ status: 500, message: UNAVAILABLE })))
-  )
+const orBroken = orUnavailable("the upload failed", UNAVAILABLE)
 
 export const parseMetadata = (header: string | undefined): ReadonlyMap<string, string> => {
   const pairs = (header ?? "").split(",").map((pair) => pair.trim().split(" ")).filter((pair) => pair[0] !== "")

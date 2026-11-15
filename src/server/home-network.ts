@@ -38,7 +38,7 @@ export const allowedHosts = (port: number): ReadonlySet<string> => {
     for (const entry of group ?? []) {
       const address = entry.address.split("%")[0] ?? ""
       if (!isHomeAddress(address)) continue
-      hosts.add(entry.family === 6 ? `[${address}]:${port}` : `${address.toLowerCase()}:${port}`)
+      hosts.add(entry.family === "IPv6" ? `[${address}]:${port}` : `${address.toLowerCase()}:${port}`)
     }
   }
   const short = os.hostname().toLowerCase().split(".")[0] ?? ""
