@@ -27,13 +27,13 @@ const inPlainWords = (event: ChatEvent): Effect.Effect<ChatEvent> =>
     ? Effect.as(Effect.logError("the model failed", event.message), { type: "error", message: MODEL_FAILED })
     : Effect.succeed(event)
 
-const orBroken = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, ApiError> =>
+const orBroken = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, ApiError, R> =>
   effect.pipe(
     Effect.catch((cause) =>
       Effect.as(Effect.logError("the chat failed", cause), new ApiError({ status: 500, message: UNAVAILABLE })))
   )
 
-const brokenStream = <A>(stream: Stream.Stream<A, unknown>): Stream.Stream<A, ApiError> =>
+const brokenStream = <A, E, R>(stream: Stream.Stream<A, E, R>): Stream.Stream<A, ApiError, R> =>
   stream.pipe(
     Stream.tapError((cause) => Effect.logError("the chat failed", cause)),
     Stream.mapError(() => new ApiError({ status: 500, message: UNAVAILABLE }))
@@ -53,6 +53,116 @@ const lastWords = (state: RunState): Message => {
   return failed === undefined ? { role: "assistant", text } : { role: "assistant", text, failed }
 }
 
+const expandStart = (state: Ref.Ref<RunState>): Effect.Effect<ReadonlyArray<ChatEvent>> =>
+  Effect.gen(function*() {
+    const current = yield* Ref.get(state)
+    if (current.pending !== undefined) {
+      yield* Effect.logError("the model recovered after an error", current.pending)
+    }
+    const started: ChatEvent = { type: "start" }
+    if (current.text === "") {
+      if (current.pending === undefined) return [started]
+      yield* Ref.set(state, { ...current, pending: undefined })
+      return [started]
+    }
+    yield* Ref.set(state, { ...current, base: current.text, pending: undefined, text: current.text + "\n\n" })
+    return [started, { type: "delta", text: "\n\n" }]
+  })
+
+const expandDelta = (state: Ref.Ref<RunState>, text: string): Effect.Effect<ReadonlyArray<ChatEvent>> =>
+  Effect.gen(function*() {
+    const current = yield* Ref.get(state)
+    const event: ChatEvent = { type: "delta", text }
+    const next = { ...current, text: current.text + text }
+    if (current.pending === undefined) {
+      yield* Ref.set(state, next)
+      return [event]
+    }
+    yield* Ref.set(state, { ...next, failed: current.pending, pending: undefined })
+    const failure: ChatEvent = { type: "error", message: current.pending }
+    return [failure, event]
+  })
+
+const expandStep = (state: Ref.Ref<RunState>, text: string): Effect.Effect<ReadonlyArray<ChatEvent>> =>
+  Effect.gen(function*() {
+    const current = yield* Ref.get(state)
+    const event: ChatEvent = { type: "step", text }
+    if (current.pending === undefined) return [event]
+    yield* Ref.set(state, { ...current, failed: current.pending, pending: undefined })
+    const failure: ChatEvent = { type: "error", message: current.pending }
+    return [failure, event]
+  })
+
+const expandRetry = (state: Ref.Ref<RunState>): Effect.Effect<ReadonlyArray<ChatEvent>> =>
+  Effect.gen(function*() {
+    const current = yield* Ref.get(state)
+    yield* Ref.set(state, { ...current, text: current.base, pending: undefined, failed: undefined })
+    const event: ChatEvent = { type: "retry" }
+    return [event]
+  })
+
+const expandError = (state: Ref.Ref<RunState>, message: string): Effect.Effect<ReadonlyArray<ChatEvent>> =>
+  Effect.gen(function*() {
+    const current = yield* Ref.get(state)
+    yield* Effect.logError("the model failed", message)
+    yield* Ref.set(state, { ...current, pending: MODEL_FAILED })
+    return []
+  })
+
+const expandSettled = (state: Ref.Ref<RunState>, event: ChatEvent): Effect.Effect<ReadonlyArray<ChatEvent>> =>
+  Effect.gen(function*() {
+    const current = yield* Ref.get(state)
+    if (current.pending === undefined) {
+      yield* Ref.set(state, { ...current, settled: true })
+      return [event]
+    }
+    yield* Ref.set(state, { ...current, failed: current.pending, pending: undefined, settled: true })
+    const failure: ChatEvent = { type: "error", message: current.pending }
+    return [failure, event]
+  })
+
+const makeExpand = (state: Ref.Ref<RunState>) => (event: ChatEvent): Effect.Effect<ReadonlyArray<ChatEvent>> => {
+  if (event.type === "start") return expandStart(state)
+  if (event.type === "delta") return expandDelta(state, event.text)
+  if (event.type === "step") return expandStep(state, event.text)
+  if (event.type === "retry") return expandRetry(state)
+  if (event.type === "error") return expandError(state, event.message)
+  return expandSettled(state, event)
+}
+
+const stoppedStream = (
+  state: Ref.Ref<RunState>,
+  complaints: string
+): Effect.Effect<Stream.Stream<ChatEvent>> =>
+  Effect.gen(function*() {
+    const last = yield* Ref.get(state)
+    if (last.settled) return Stream.make<Array<ChatEvent>>()
+    yield* Effect.logError("pi stopped before it settled", complaints)
+    yield* Ref.update(state, (current) => ({
+      ...current,
+      failed: current.failed ?? current.pending ?? STOPPED,
+      pending: undefined,
+      settled: true
+    }))
+    return Stream.make<Array<ChatEvent>>({ type: "error", message: STOPPED }, { type: "done" })
+  })
+
+const piStream = <E>(
+  stdout: Stream.Stream<Uint8Array, E>,
+  expand: (event: ChatEvent) => Effect.Effect<ReadonlyArray<ChatEvent>>,
+  stopped: Stream.Stream<ChatEvent>
+): Stream.Stream<ChatEvent, E> =>
+  stdout.pipe(
+    Stream.decodeText(),
+    Stream.splitLines,
+    Stream.flatMap((line) => Stream.fromIterable(toChatEvents(line))),
+    Stream.mapEffect(expand),
+    Stream.flatMap((events) => Stream.fromIterable(events)),
+    Stream.takeUntil((event) => event.type === "done"),
+    Stream.mapEffect(inPlainWords),
+    Stream.concat(stopped)
+  )
+
 export class Chat extends Context.Service<Chat, {
   readonly history: (id: string) => Effect.Effect<ReadonlyArray<Message>, ApiError>
   readonly send: (
@@ -71,12 +181,10 @@ export class Chat extends Context.Service<Chat, {
       const context = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>()
       const busy = yield* Ref.make<ReadonlySet<string>>(new Set())
       const systemPrompt = yield* fs.readFileString(path.join(settings.root, "prompts", "studio.md")).pipe(orBroken)
-
       const append = Effect.fn("Chat.append")(function*(dir: string, message: Message) {
         const line = yield* encodeLine(message).pipe(orBroken)
-        yield* fs.writeFileString(path.join(dir, "chat.jsonl"), `${line}\n`, { flag: "a" }).pipe(orBroken)
+        yield* fs.writeFileString(path.join(dir, "chat.jsonl"), line + "\n", { flag: "a" }).pipe(orBroken)
       })
-
       const history = Effect.fn("Chat.history")(function*(id: string) {
         const file = path.join(yield* projects.folder(id), "chat.jsonl")
         const exists = yield* fs.exists(file).pipe(orBroken)
@@ -84,7 +192,6 @@ export class Chat extends Context.Service<Chat, {
         const text = yield* fs.readFileString(file).pipe(orBroken)
         return Arr.getSomes(text.split("\n").map((line) => decodeLine(line)))
       })
-
       const command = (dir: string, text: string, model: string) => {
         const prompt = JSON.stringify({ id: "prompt", type: "prompt", message: text })
         return ChildProcess.make(settings.pi, [
@@ -103,10 +210,9 @@ export class Chat extends Context.Service<Chat, {
           "--system-prompt", systemPrompt
         ], {
           cwd: dir,
-          stdin: Stream.concat(Stream.make(new TextEncoder().encode(`${prompt}\n`)), Stream.never),
+          stdin: Stream.concat(Stream.make(new TextEncoder().encode(prompt + "\n")), Stream.never),
         })
       }
-
       const run = (dir: string, text: string, model: string): Stream.Stream<ChatEvent, ApiError> =>
         Stream.unwrap(Effect.gen(function*() {
           const state = yield* Ref.make<RunState>({ text: "", base: "", pending: undefined, failed: undefined, settled: false })
@@ -116,73 +222,9 @@ export class Chat extends Context.Service<Chat, {
             ))
           const handle = yield* command(dir, text, model).pipe(orBroken)
           const complaints = yield* handle.stderr.pipe(Stream.decodeText(), Stream.mkString, Effect.forkScoped)
-          const expand = (event: ChatEvent): Effect.Effect<ReadonlyArray<ChatEvent>> =>
-            Effect.gen(function*() {
-              const current = yield* Ref.get(state)
-              if (event.type === "start") {
-                if (current.pending !== undefined) {
-                  yield* Effect.logError("the model recovered after an error", current.pending)
-                }
-                if (current.text === "") {
-                  if (current.pending === undefined) return [event]
-                  yield* Ref.set(state, { ...current, pending: undefined })
-                  return [event]
-                }
-                yield* Ref.set(state, { ...current, base: current.text, pending: undefined, text: `${current.text}\n\n` })
-                return [event, { type: "delta" as const, text: "\n\n" }]
-              }
-              if (event.type === "delta") {
-                const next = { ...current, text: current.text + event.text }
-                if (current.pending !== undefined) {
-                  yield* Ref.set(state, { ...next, failed: current.pending, pending: undefined })
-                  return [{ type: "error" as const, message: current.pending }, event]
-                }
-                yield* Ref.set(state, next)
-                return [event]
-              }
-              if (event.type === "step") {
-                if (current.pending !== undefined) {
-                  yield* Ref.set(state, { ...current, failed: current.pending, pending: undefined })
-                  return [{ type: "error" as const, message: current.pending }, event]
-                }
-                return [event]
-              }
-              if (event.type === "retry") {
-                yield* Ref.set(state, { ...current, text: current.base, pending: undefined, failed: undefined })
-                return [event]
-              }
-              if (event.type === "error") {
-                yield* Effect.logError("the model failed", event.message)
-                yield* Ref.set(state, { ...current, pending: MODEL_FAILED })
-                return []
-              }
-              yield* Ref.set(state,
-                current.pending !== undefined
-                  ? { ...current, failed: current.pending, pending: undefined, settled: true }
-                  : { ...current, settled: true })
-              return current.pending !== undefined
-                ? [{ type: "error" as const, message: current.pending }, event]
-                : [event]
-            })
-          const stopped = Stream.unwrap(Effect.gen(function*() {
-            const last = yield* Ref.get(state)
-            if (last.settled) return Stream.empty
-            yield* Effect.logError("pi stopped before it settled", yield* Fiber.join(complaints))
-            yield* Ref.update(state, (current) => ({ ...current, failed: current.failed ?? current.pending ?? STOPPED, pending: undefined, settled: true }))
-            return Stream.make<Array<ChatEvent>>({ type: "error", message: STOPPED }, { type: "done" })
-          }))
-          return handle.stdout.pipe(
-            Stream.decodeText(),
-            Stream.splitLines,
-            Stream.flatMap((line) => Stream.fromIterable(toChatEvents(line))),
-            Stream.mapEffect(expand),
-            Stream.flatMap((events) => Stream.fromIterable(events)),
-            Stream.takeUntil((event) => event.type === "done"),
-            Stream.mapEffect(inPlainWords),
-            Stream.concat(stopped)
-          )
+          const stopped = yield* stoppedStream(state, yield* Fiber.join(complaints))
+          return piStream(handle.stdout, makeExpand(state), stopped)
         })).pipe(brokenStream, Stream.provideContext(context))
-
       const send = Effect.fn("Chat.send")(function*(id: string, text: string, model: string) {
         const trimmed = text.trim()
         if (trimmed === "") return yield* badRequest("Напишите сообщение")
@@ -198,7 +240,6 @@ export class Chat extends Context.Service<Chat, {
         }).pipe(Effect.onError(() => release))
         return run(dir, trimmed, model).pipe(Stream.ensuring(release))
       })
-
       return Chat.of({ history, send })
     })
   )
