@@ -41,7 +41,7 @@ Each setting is an environment variable read at start.
 | `REELS_HOST` | `0.0.0.0` | The address the studio listens on |
 | `REELS_PROJECTS_DIR` | `projects` | The folder that holds one folder per video |
 | `REELS_PI` | `pi` | The pi command the chat starts |
-| `REELS_MODELS` | five models of four providers | The models the page offers, separated by commas, each as `provider/model` |
+| `REELS_MODELS` | Claude Opus 5.5, Claude Sonnet 5.5 and GPT 6.1 Sol | The models the page offers, separated by commas, each as `provider/model` |
 
 ## Run the checks
 

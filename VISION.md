@@ -6,7 +6,8 @@ It owns the path from an uploaded original to a reel that fits the Instagram pla
 
 ## The person reads plain Russian
 
-- The page and the chat answer in plain Russian with no file name, command or model term, at the cost of detail a developer would want.
+- The page and the chat answer in plain Russian with no file name, command or model term.
+  That costs the detail a developer would want.
 
 ## The plan comes before any change
 

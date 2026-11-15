@@ -3,7 +3,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { ApiError, badRequest } from "./api-error.ts"
 import { Chat } from "./chat.ts"
 import { allowedHosts, isAllowedHost, isHomeAddress, isSameOrigin } from "./home-network.ts"
-import { Projects } from "./projects.ts"
+import { Effort, Projects } from "./projects.ts"
 import { Settings } from "./settings.ts"
 import * as Tus from "./tus.ts"
 
@@ -41,7 +41,7 @@ const projects = Layer.mergeAll(
   })))
 )
 
-const NewMessage = Schema.Struct({ text: Schema.String, model: Schema.String })
+const NewMessage = Schema.Struct({ text: Schema.String, model: Schema.String, effort: Effort })
 
 const KEEP_ALIVE = Stream.tick("15 seconds").pipe(Stream.map(() => ": \n\n"))
 
@@ -57,7 +57,7 @@ const chat = Layer.mergeAll(
   HttpRouter.add("POST", "/api/projects/:id/chat", reply(Effect.gen(function*() {
     const talk = yield* Chat
     const input = yield* body(NewMessage)
-    const events = yield* talk.send(yield* param("id"), input.text, input.model)
+    const events = yield* talk.send(yield* param("id"), input.text, input.model, input.effort)
     const lines = events.pipe(
       Stream.catch((error) => Stream.make({ type: "error" as const, message: error.message }, { type: "done" as const })),
       Stream.map((event) => `data: ${JSON.stringify(event)}\n\n`)

@@ -1,7 +1,7 @@
 import { Effect, Option, Schema } from "effect"
 import * as Api from "./api.ts"
 import { h } from "./dom.ts"
-import { formatDay, formatSize, parseEventBlock } from "./format.ts"
+import { formatDay, formatSize, modelName, parseEventBlock } from "./format.ts"
 import { upload, type Progress } from "./upload.ts"
 
 const app = document.querySelector("#app") ?? document.body
@@ -18,7 +18,9 @@ const showFailure = (message: string): void => {
 
 const STAGES = { created: "Ждёт видео", uploaded: "Видео загружено" }
 
-const modelName = (model: string): string => model.split("/").at(-1) ?? model
+const EFFORTS: ReadonlyArray<readonly [Api.Effort, string]> = [["low", "Низкая"], ["medium", "Средняя"], ["high", "Высокая"]]
+const CHOICE_HINT = "Выбранная модель делает в чате всю работу: смотрит материал, планирует нарезку и запускает инструменты. "
+  + "Средняя глубина подходит для обычной нарезки, высокая нужна для трудных случаев."
 
 const projectItem = (project: Api.ProjectView): HTMLElement =>
   h("li", {},
@@ -135,6 +137,8 @@ const chatCard = (project: Api.ProjectView, messages: ReadonlyArray<Api.Message>
   const log = h("div", { class: "chat" }, ...(messages.length === 0 ? [empty] : messages.map(bubble)))
   const text = h("textarea", { name: "text", rows: "3", required: true })
   const model = h("select", { name: "model" }, ...models.map((id) => h("option", { value: id, selected: id === project.model }, modelName(id))))
+  const chosen = project.effort ?? "medium"
+  const effort = h("select", { name: "effort" }, ...EFFORTS.map(([id, name]) => h("option", { value: id, selected: id === chosen }, name)))
   const button = h("button", { type: "submit" }, "Отправить")
   const talk = (message: string): Effect.Effect<void, Api.Failed> =>
     Effect.gen(function*() {
@@ -143,7 +147,7 @@ const chatCard = (project: Api.ProjectView, messages: ReadonlyArray<Api.Message>
       const step = h("p", { class: "muted step", role: "status" }, "Студия думает…")
       const state = { done: false, text: "", base: "" }
       const fail = (reason: string): void => { answer.append(h("span", { class: "note" }, `Ответ не дошёл: ${reason}`)) }
-      const response = yield* Api.postChat(project.id, message, model.value).pipe(
+      const response = yield* Api.postChat(project.id, message, model.value, EFFORTS.find(([id]) => id === effort.value)?.[0] ?? "medium").pipe(
         Effect.catchTag("Offline", () => Effect.fail(new Api.Failed({ message: "Нет связи со студией. Проверьте Wi-Fi." })))
       )
       if (!response.ok || response.body === null) return yield* Effect.flatMap(Api.failure(response), Effect.fail)
@@ -192,7 +196,8 @@ const chatCard = (project: Api.ProjectView, messages: ReadonlyArray<Api.Message>
         finish()
       })
     }
-  }, h("label", {}, "Сообщение", text), h("div", { class: "row" }, h("label", { class: "grow" }, "Модель", model), button), problem)
+  }, h("label", {}, "Сообщение", text), h("div", { class: "row" }, h("label", { class: "grow" }, "Модель", model), h("label", { class: "grow" }, "Глубина размышления", effort)),
+    h("p", { class: "muted" }, CHOICE_HINT), button, problem)
   form.className = "chat"
   return h("section", { class: "card" }, h("h2", {}, "Чат"), log, form)
 }

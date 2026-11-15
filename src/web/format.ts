@@ -12,6 +12,17 @@ export const formatSize = (bytes: number): string => {
 export const formatDay = (iso: string): string =>
   new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric" }).format(new Date(iso))
 
+const MODEL_NAMES: Readonly<Record<string, string>> = {
+  "claude-opus-5-5": "Claude Opus 5.5",
+  "claude-sonnet-5-5": "Claude Sonnet 5.5",
+  "gpt-6.1-sol": "GPT 6.1 Sol"
+}
+
+export const modelName = (model: string): string => {
+  const id = model.split("/").at(-1) ?? model
+  return MODEL_NAMES[id] ?? id
+}
+
 export const encodeMetadata = (filename: string): string => {
   const bytes = new TextEncoder().encode(filename)
   return `filename ${btoa(Array.from(bytes, (byte) => String.fromCodePoint(byte)).join(""))}`

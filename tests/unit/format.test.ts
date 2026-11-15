@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { encodeMetadata, formatDay, formatSize, parseEventBlock } from "../../src/web/format.ts"
+import { encodeMetadata, formatDay, formatSize, modelName, parseEventBlock } from "../../src/web/format.ts"
 
 test("sizes use 1024 steps and a decimal comma, not a point", () => {
   expect(formatSize(0)).toBe("0 Б")
@@ -12,6 +12,12 @@ test("sizes use 1024 steps and a decimal comma, not a point", () => {
 test("a Moscow evening date keeps the local day, not the UTC date", () => {
   process.env.TZ = "Europe/Moscow"
   expect(formatDay("2026-11-14T22:30:00Z")).toBe("15 ноября 2026 г.")
+})
+
+test("a model shows its readable name, not the provider id", () => {
+  expect(modelName("claude-bridge/claude-opus-5-5")).toBe("Claude Opus 5.5")
+  expect(modelName("claude-bridge/claude-sonnet-5-5")).toBe("Claude Sonnet 5.5")
+  expect(modelName("openai/gpt-6.1-sol")).toBe("GPT 6.1 Sol")
 })
 
 test("a Cyrillic file name is base64 of its UTF-8 bytes, which btoa alone would refuse", () => {

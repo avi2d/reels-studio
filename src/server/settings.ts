@@ -1,11 +1,9 @@
 import { Config, Context, Effect, Layer, Path, Schema } from "effect"
 
 const DEFAULT_MODELS = [
-  "claude-bridge/claude-sonnet-5-5",
   "claude-bridge/claude-opus-5-5",
-  "openai/gpt-6.1-sol",
-  "openrouter/google/gemini-3.8-flash",
-  "opencode-go/kimi-k3"
+  "claude-bridge/claude-sonnet-5-5",
+  "openai/gpt-6.1-sol"
 ]
 
 const config = Config.all({

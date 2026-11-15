@@ -3,11 +3,15 @@ import { Data, Effect, Option, Schema } from "effect"
 export class Failed extends Data.TaggedError("Failed")<{ readonly message: string }> {}
 export class Offline extends Data.TaggedError("Offline")<{}> {}
 
+const Effort = Schema.Literals(["low", "medium", "high"])
+export type Effort = typeof Effort.Type
+
 const ProjectView = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
   createdAt: Schema.String,
   model: Schema.optionalKey(Schema.String),
+  effort: Schema.optionalKey(Effort),
   stage: Schema.Literals(["created", "uploaded"]),
   files: Schema.Array(Schema.Struct({ name: Schema.String, size: Schema.Finite }))
 })
@@ -81,5 +85,5 @@ export const getProject = (id: string): Effect.Effect<typeof OneProject.Type, Fa
 export const getChat = (id: string): Effect.Effect<typeof Messages.Type, Failed> =>
   call(Messages, `/api/projects/${id}/chat`)
 
-export const postChat = (id: string, text: string, model: string): Effect.Effect<Response, Offline> =>
-  send(`/api/projects/${id}/chat`, post({ text, model }))
+export const postChat = (id: string, text: string, model: string, effort: Effort): Effect.Effect<Response, Offline> =>
+  send(`/api/projects/${id}/chat`, post({ text, model, effort }))

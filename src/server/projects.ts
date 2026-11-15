@@ -4,11 +4,15 @@ import { Settings } from "./settings.ts"
 
 const ProjectId = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]{0,63}$/))
 
+export const Effort = Schema.Literals(["low", "medium", "high"])
+export type Effort = typeof Effort.Type
+
 const Project = Schema.Struct({
   id: ProjectId,
   title: Schema.String,
   createdAt: Schema.String,
-  model: Schema.optionalKey(Schema.String)
+  model: Schema.optionalKey(Schema.String),
+  effort: Schema.optionalKey(Effort)
 })
 type Project = typeof Project.Type
 
@@ -33,7 +37,7 @@ export class Projects extends Context.Service<Projects, {
   readonly create: (title: string) => Effect.Effect<ProjectView, ApiError>
   readonly get: (id: string) => Effect.Effect<ProjectView, ApiError>
   readonly folder: (id: string) => Effect.Effect<string, ApiError>
-  readonly setModel: (id: string, model: string) => Effect.Effect<void, ApiError>
+  readonly setChoice: (id: string, model: string, effort: Effort) => Effect.Effect<void, ApiError>
 }>()("reels-studio/Projects") {
   static readonly layer = Layer.effect(
     Projects,
@@ -98,13 +102,13 @@ export class Projects extends Context.Service<Projects, {
         return yield* view(dir)
       })
 
-      const setModel = Effect.fn("Projects.setModel")(function*(id: string, model: string) {
+      const setChoice = Effect.fn("Projects.setChoice")(function*(id: string, model: string, effort: Effort) {
         const dir = yield* folder(id)
         const project = yield* read(dir)
-        yield* write(dir, { ...project, model })
+        yield* write(dir, { ...project, model, effort })
       })
 
-      return Projects.of({ list, create, get, folder, setModel })
+      return Projects.of({ list, create, get, folder, setChoice })
     })
   )
 }
