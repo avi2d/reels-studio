@@ -2,7 +2,7 @@ import { type Crypto, Context, Deferred, Effect, Exit, FileSystem, Layer, Ref } 
 import type { ChildProcessSpawner } from "effect/process"
 import type { LibraryVideo, Pick } from "../shared/library.ts"
 import type { VideoView } from "../shared/plan.ts"
-import { badRequest, type ApiError, notFound, orUnavailable } from "./api-error.ts"
+import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
 import { listen, places, readPlan, readTranscript, type Job } from "./media-jobs.ts"
 import { Projects } from "./projects.ts"
 import { gatherLibrary, heardIn, keysIn, reuse as reuseOne, sourceNames } from "./reuse.ts"
@@ -120,6 +120,7 @@ export class Media extends Context.Service<Media, {
         const others = (yield* projects.list).filter((project) => project.id !== id)
         const found = yield* Effect.forEach(others, (project) =>
           Effect.flatMap(projects.folder(project.id), (dir) => heardIn(project, dir)).pipe(
+            Effect.tapError((error) => error instanceof ApiError && error.status === 404 ? Effect.void : Effect.logError("the library skipped a folder", error)),
             Effect.orElseSucceed(() => [])))
         return gatherLibrary(here, found.flat())
       }, orBroken, Effect.provideContext(context))
