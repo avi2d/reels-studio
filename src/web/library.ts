@@ -63,10 +63,15 @@ export const libraryPicker = (
         show(false)
         reload()
       }),
-      Effect.catchTag("Failed", (error) => Effect.sync(() => {
-        problem.textContent = error.message
-        recount()
-      }))
+      Effect.catchTag("Failed", (error) =>
+        Effect.zipRight(
+          Effect.ignore(onAdded()),
+          Effect.sync(() => {
+            problem.textContent = error.message
+            reload()
+            recount()
+          })
+        ))
     ))
   })
   return { open, panel, reload }

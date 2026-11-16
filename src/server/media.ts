@@ -119,7 +119,8 @@ export class Media extends Context.Service<Media, {
         const here = yield* keysIn(yield* projects.folder(id))
         const others = (yield* projects.list).filter((project) => project.id !== id)
         const found = yield* Effect.forEach(others, (project) =>
-          Effect.flatMap(projects.folder(project.id), (dir) => heardIn(project, dir)))
+          Effect.flatMap(projects.folder(project.id), (dir) => heardIn(project, dir)).pipe(
+            Effect.orElseSucceed(() => [])))
         return gatherLibrary(here, found.flat())
       }, orBroken, Effect.provideContext(context))
 
