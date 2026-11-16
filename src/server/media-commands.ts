@@ -1,4 +1,5 @@
 import type { Transcript } from "../shared/plan.ts"
+import { cameraShare, type Gaze } from "../shared/timeline.ts"
 
 const HDR_TRANSFERS = new Set(["arib-std-b67", "smpte2084"])
 
@@ -25,25 +26,52 @@ export const prepareArgs = (files: PrepareFiles, hdr: boolean, encoder: string):
 const LINE_PAUSE = 0.1
 const NAMED_PAUSE = 1
 
-export const transcriptText = (video: string, transcript: Transcript): string => {
-  const lines: Array<string> = []
-  let open: { start: number; end: number; words: Array<string> } | undefined
-  const close = (): void => {
-    if (open !== undefined) lines.push(`[${open.start.toFixed(2)}-${open.end.toFixed(2)}] ${open.words.join(" ")}`)
-    open = undefined
-  }
+interface Stretch {
+  readonly from: number
+  readonly to: number
+  readonly start: number
+  readonly end: number
+  readonly before: number
+}
+
+const stretchesOf = (transcript: Transcript): ReadonlyArray<Stretch> => {
+  const stretches: Array<Stretch> = []
   transcript.words.forEach((word, index) => {
+    const open = stretches.at(-1)
     const pause = word.start - (open?.end ?? 0)
-    if (pause > LINE_PAUSE) close()
-    if (open === undefined && pause >= NAMED_PAUSE) lines.push(`(pause ${pause.toFixed(1)} s)`)
-    open = { start: open?.start ?? word.start, end: word.end, words: [...(open?.words ?? []), `${index}:${word.text}`] }
+    if (open === undefined || pause > LINE_PAUSE) stretches.push({ from: index, to: index, start: word.start, end: word.end, before: pause })
+    else stretches[stretches.length - 1] = { ...open, to: index, end: word.end }
   })
-  close()
+  return stretches
+}
+
+const spanLabel = (stretch: Stretch): string => `[${stretch.start.toFixed(2)}-${stretch.end.toFixed(2)}]`
+
+export const transcriptText = (video: string, transcript: Transcript): string => {
+  const lines = stretchesOf(transcript).flatMap((stretch) => {
+    const words = transcript.words.slice(stretch.from, stretch.to + 1).map((word, offset) => `${stretch.from + offset}:${word.text}`)
+    const line = `${spanLabel(stretch)} ${words.join(" ")}`
+    return stretch.before >= NAMED_PAUSE ? [`(pause ${stretch.before.toFixed(1)} s)`, line] : [line]
+  })
   const tail = transcript.duration - (transcript.words.at(-1)?.end ?? 0)
   if (tail >= NAMED_PAUSE) lines.push(`(pause ${tail.toFixed(1)} s)`)
   return [
     `Video ${video}, ${transcript.duration.toFixed(1)} s. Each line is one stretch of speech with its start and end in seconds.`,
     "Each word is written as number:word. A plan names the words to remove by these numbers.",
+    "",
+    ...lines
+  ].join("\n") + "\n"
+}
+
+export const gazeText = (video: string, transcript: Transcript, gaze: Gaze): string => {
+  const lines = stretchesOf(transcript).map((stretch) => {
+    const share = cameraShare(gaze, stretch)
+    const look = share === undefined ? "not measured" : `${Math.round(share * 100)}%`
+    return `${spanLabel(stretch)} words ${stretch.from}-${stretch.to}: ${look}`
+  })
+  return [
+    `Video ${video}. Each line is one stretch of speech from its transcript, with its word numbers.`,
+    "The percent is the share of that stretch in which the speaker looks into the camera.",
     "",
     ...lines
   ].join("\n") + "\n"

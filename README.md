@@ -11,7 +11,7 @@ It does not cut, caption, crop, restyle or publish a video yet.
 - Bun, at the version `.bun-version` pins.
 - pi, the agent the chat runs on, signed in to at least one model provider.
 - ffmpeg and ffprobe, built with the `zscale` and `tonemap` filters, which turn iPhone HDR video into ordinary colours.
-- uv, which installs and runs the speech recognizer in `tools/transcribe/`.
+- uv, which installs and runs the speech recognizer in `tools/transcribe/` and the gaze measure in `tools/gaze/`.
 - A computer on the home network that keeps running while the studio is in use.
 
 ## Install
@@ -108,6 +108,7 @@ To run the checks:
 1. Run `bun run typecheck` to check the types and the Effect diagnostics.
 
 The project layout lives in [Project layout](docs/project-layout.md).
+The row of blocks and takes is described in [Takes and blocks](docs/timeline.md).
 
 ## Troubleshooting
 

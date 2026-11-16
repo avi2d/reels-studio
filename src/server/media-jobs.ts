@@ -1,7 +1,8 @@
 import { Data, Effect, FileSystem, Option, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/process"
 import { Plan, Transcript } from "../shared/plan.ts"
-import { isHdr, prepareArgs, probeArgs, transcriptText } from "./media-commands.ts"
+import { Gaze } from "../shared/timeline.ts"
+import { gazeText, isHdr, prepareArgs, probeArgs, transcriptText } from "./media-commands.ts"
 import { Settings } from "./settings.ts"
 
 class ToolFailed extends Data.TaggedError("ToolFailed")<{ readonly command: string; readonly output: string }> {}
@@ -12,20 +13,23 @@ const Probe = Schema.fromJsonString(Schema.Struct({
 const decodeProbe = Schema.decodeUnknownEffect(Probe)
 const decodeTranscript = Schema.decodeUnknownEffect(Schema.fromJsonString(Transcript))
 const decodePlan = Schema.decodeUnknownOption(Schema.fromJsonString(Plan))
+const decodeGaze = Schema.decodeUnknownEffect(Schema.fromJsonString(Gaze))
 
 export interface Job {
   readonly dir: string
   readonly name: string
 }
 
-type Place = "source" | "transcript" | "text" | "preview" | "work"
+type Place = "source" | "transcript" | "text" | "preview" | "work" | "gaze" | "gazeText"
 
 export const places = (job: Job): Readonly<Record<Place, string>> => ({
   source: `${job.dir}/source/${job.name}`,
   transcript: `${job.dir}/transcripts/${job.name}.json`,
   text: `${job.dir}/transcripts/${job.name}.txt`,
   preview: `${job.dir}/preview/${job.name}.mp4`,
-  work: `${job.dir}/work/${job.name}`
+  work: `${job.dir}/work/${job.name}`,
+  gaze: `${job.dir}/gaze/${job.name}.json`,
+  gazeText: `${job.dir}/gaze/${job.name}.txt`
 })
 
 const tool = Effect.fnUntraced(function*(command: string, args: ReadonlyArray<string>, prefix: ReadonlyArray<string>) {
@@ -43,6 +47,11 @@ const tool = Effect.fnUntraced(function*(command: string, args: ReadonlyArray<st
 export const readTranscript = Effect.fnUntraced(function*(job: Job) {
   const fs = yield* FileSystem.FileSystem
   return yield* decodeTranscript(yield* fs.readFileString(places(job).transcript))
+})
+
+export const readGaze = Effect.fnUntraced(function*(job: Job) {
+  const fs = yield* FileSystem.FileSystem
+  return yield* decodeGaze(yield* fs.readFileString(places(job).gaze))
 })
 
 export const readPlan = Effect.fnUntraced(function*(job: Job) {
@@ -74,5 +83,19 @@ export const listen = Effect.fn("Media.listen")(function*(job: Job) {
   yield* fs.rename(preview, place.preview)
   yield* fs.writeFileString(place.text, transcriptText(job.name, transcript))
   yield* fs.rename(words, place.transcript)
+  yield* fs.remove(place.work, { recursive: true })
+})
+
+export const look = Effect.fn("Media.look")(function*(job: Job) {
+  const fs = yield* FileSystem.FileSystem
+  const settings = yield* Settings
+  const place = places(job)
+  yield* Effect.forEach([place.work, `${job.dir}/gaze`], (folder) => fs.makeDirectory(folder, { recursive: true }))
+  const measured = `${place.work}/gaze.json`
+  const looker = `${settings.root}/tools/gaze`
+  yield* tool("uv", ["run", "--project", looker, "python", `${looker}/gaze.py`, place.preview, measured], settings.heavy)
+  const gaze = yield* decodeGaze(yield* fs.readFileString(measured))
+  yield* fs.writeFileString(place.gazeText, gazeText(job.name, yield* readTranscript(job), gaze))
+  yield* fs.rename(measured, place.gaze)
   yield* fs.remove(place.work, { recursive: true })
 })

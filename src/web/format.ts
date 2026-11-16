@@ -14,6 +14,8 @@ export const formatLength = (seconds: number): string => {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`
 }
 
+export const formatPause = (seconds: number): string => `${seconds.toFixed(1).replace(".", ",")} с`
+
 export const fromProjects = (titles: ReadonlyArray<string>): string =>
   `${titles.length === 1 ? "из ролика" : "из роликов"} ${titles.map((title) => `«${title}»`).join(", ")}`
 

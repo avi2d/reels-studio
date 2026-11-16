@@ -1,0 +1,176 @@
+import { Schema } from "effect"
+import type { Span, Transcript } from "./plan.ts"
+
+export const MIN_PAUSE = 0.5
+
+export const Gaze = Schema.Struct({
+  step: Schema.Finite.check(Schema.isGreaterThan(0)),
+  samples: Schema.Array(Schema.Literals(["camera", "away", "hidden"]))
+})
+export type Gaze = typeof Gaze.Type
+
+export const cameraShare = (gaze: Gaze, span: Span): number | undefined => {
+  const seen = gaze.samples.slice(Math.ceil(span.start / gaze.step), Math.ceil(span.end / gaze.step))
+  if (seen.length === 0) return undefined
+  return seen.filter((sample) => sample === "camera").length / seen.length
+}
+
+const takeFields = { video: Schema.String, from: Schema.Int, to: Schema.Int, reason: Schema.String }
+const blockFields = { id: Schema.String, title: Schema.String }
+
+export const Blocks = Schema.Struct({
+  blocks: Schema.Array(Schema.Struct({ ...blockFields, takes: Schema.Array(Schema.Struct(takeFields)) }))
+})
+export type Blocks = typeof Blocks.Type
+
+const Take = Schema.Struct({ ...takeFields, camera: Schema.optionalKey(Schema.Finite) })
+export type Take = typeof Take.Type
+
+const Block = Schema.Struct({ ...blockFields, takes: Schema.NonEmptyArray(Take) })
+export type Block = typeof Block.Type
+
+const PauseRef = Schema.Struct({ video: Schema.String, after: Schema.Int })
+type PauseRef = typeof PauseRef.Type
+
+export const Edits = Schema.Struct({
+  order: Schema.Array(Schema.String),
+  deleted: Schema.Array(Schema.String),
+  chosen: Schema.Array(Schema.Struct({ block: Schema.String, video: Schema.String, from: Schema.Int })),
+  pauses: Schema.Array(PauseRef)
+})
+export type Edits = typeof Edits.Type
+
+export const NO_EDITS: Edits = { order: [], deleted: [], chosen: [], pauses: [] }
+
+export const TimelineView = Schema.Struct({
+  looks: Schema.Array(Schema.Struct({ video: Schema.String, state: Schema.Literals(["measured", "waiting", "failed"]) })),
+  timeline: Schema.Union([
+    Schema.Struct({ state: Schema.Literals(["none", "unreadable"]) }),
+    Schema.Struct({ state: Schema.Literal("ready"), blocks: Schema.Array(Block), dropped: Schema.Int, edits: Edits })
+  ])
+})
+export type TimelineView = typeof TimelineView.Type
+
+type Transcripts = ReadonlyMap<string, Transcript>
+
+const speechOf = (transcript: Transcript, take: { readonly from: number; readonly to: number }): Span | undefined => {
+  const first = transcript.words[take.from]
+  const last = transcript.words[take.to]
+  return first === undefined || last === undefined || take.from > take.to ? undefined : { start: first.start, end: last.end }
+}
+
+export const soundBlocks = (
+  written: Blocks,
+  transcripts: Transcripts,
+  gazes: ReadonlyMap<string, Gaze>
+): { readonly blocks: ReadonlyArray<Block>; readonly dropped: number } => {
+  const blocks: Array<Block> = []
+  let dropped = 0
+  for (const block of written.blocks) {
+    const takes = block.takes.flatMap((take): ReadonlyArray<Take> => {
+      const transcript = transcripts.get(take.video)
+      const speech = transcript === undefined ? undefined : speechOf(transcript, take)
+      if (speech === undefined) return []
+      const gaze = gazes.get(take.video)
+      const camera = gaze === undefined ? undefined : cameraShare(gaze, speech)
+      return [camera === undefined ? take : { ...take, camera }]
+    })
+    dropped += block.takes.length - takes.length
+    const [best, ...rest] = takes
+    if (best === undefined) continue
+    if (blocks.some((other) => other.id === block.id)) {
+      dropped += takes.length
+      continue
+    }
+    blocks.push({ id: block.id, title: block.title, takes: [best, ...rest] })
+  }
+  return { blocks, dropped }
+}
+
+export const arrange = (
+  blocks: ReadonlyArray<Block>,
+  edits: Edits
+): { readonly placed: ReadonlyArray<Block>; readonly deleted: ReadonlyArray<Block> } => {
+  const byId = new Map(blocks.map((block) => [block.id, block]))
+  const order = [...new Set(edits.order)].filter((id) => byId.has(id))
+  blocks.forEach((block, index) => {
+    if (order.includes(block.id)) return
+    const before = blocks[index - 1]
+    order.splice(before === undefined ? 0 : order.indexOf(before.id) + 1, 0, block.id)
+  })
+  const gone = new Set(edits.deleted)
+  const inOrder = order.flatMap((id) => byId.get(id) ?? [])
+  return { placed: inOrder.filter((block) => !gone.has(block.id)), deleted: inOrder.filter((block) => gone.has(block.id)) }
+}
+
+export const chosenTake = (block: Block, edits: Edits): Take => {
+  const choice = edits.chosen.find((chosen) => chosen.block === block.id)
+  const take = choice === undefined ? undefined : block.takes.find((one) => one.video === choice.video && one.from === choice.from)
+  return take ?? block.takes[0]
+}
+
+export interface Pause extends Span {
+  readonly after: number
+  readonly removed: boolean
+}
+
+const samePause = (left: PauseRef, right: PauseRef): boolean => left.video === right.video && left.after === right.after
+
+// A word ends where the silence after it starts, so the stretch of a take runs to the next word of its video.
+export const pausesOf = (transcript: Transcript, take: Take, edits: Edits): ReadonlyArray<Pause> =>
+  transcript.words.slice(take.from, take.to + 1).flatMap((word, offset): ReadonlyArray<Pause> => {
+    const after = take.from + offset
+    const end = transcript.words[after + 1]?.start ?? transcript.duration
+    if (end - word.end < MIN_PAUSE) return []
+    return [{ after, start: word.end, end, removed: edits.pauses.some((pause) => samePause(pause, { video: take.video, after })) }]
+  })
+
+export const playedSpans = (transcript: Transcript, take: Take, edits: Edits): ReadonlyArray<Span> => {
+  const speech = speechOf(transcript, take) ?? { start: 0, end: 0 }
+  const end = transcript.words[take.to + 1]?.start ?? transcript.duration
+  const cuts = pausesOf(transcript, take, edits).filter((pause) => pause.removed)
+  const starts = [speech.start, ...cuts.map((cut) => cut.end)]
+  const ends = [...cuts.map((cut) => cut.start), Math.max(end, speech.end)]
+  return starts.flatMap((start, index) => {
+    const stop = ends[index] ?? start
+    return stop > start ? [{ start, end: stop }] : []
+  })
+}
+
+export interface Placed {
+  readonly block: Block
+  readonly take: Take
+  readonly pauses: ReadonlyArray<Pause>
+  readonly spans: ReadonlyArray<Span>
+}
+
+export const assemble = (blocks: ReadonlyArray<Block>, edits: Edits, transcripts: Transcripts): ReadonlyArray<Placed> =>
+  arrange(blocks, edits).placed.flatMap((block): ReadonlyArray<Placed> => {
+    const take = chosenTake(block, edits)
+    const transcript = transcripts.get(take.video)
+    if (transcript === undefined) return []
+    return [{ block, take, pauses: pausesOf(transcript, take, edits), spans: playedSpans(transcript, take, edits) }]
+  })
+
+export interface Clip extends Span {
+  readonly video: string
+  readonly block: string
+}
+
+export const clipsOf = (placed: ReadonlyArray<Placed>): ReadonlyArray<Clip> =>
+  placed.flatMap((one) => one.spans.map((span) => ({ ...span, video: one.take.video, block: one.block.id })))
+
+export const withChoice = (edits: Edits, block: string, take: Take): Edits => ({
+  ...edits,
+  chosen: [...edits.chosen.filter((chosen) => chosen.block !== block), { block, video: take.video, from: take.from }]
+})
+
+export const withDeleted = (edits: Edits, id: string, deleted: boolean): Edits => ({
+  ...edits,
+  deleted: deleted ? [...edits.deleted.filter((other) => other !== id), id] : edits.deleted.filter((other) => other !== id)
+})
+
+export const withPauses = (edits: Edits, pauses: ReadonlyArray<PauseRef>, removed: boolean): Edits => {
+  const kept = edits.pauses.filter((old) => !pauses.some((pause) => samePause(old, pause)))
+  return { ...edits, pauses: removed ? [...kept, ...pauses] : kept }
+}

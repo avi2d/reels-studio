@@ -1,8 +1,8 @@
 import { Crypto, Effect, FileSystem, Option, type PlatformError, Predicate } from "effect"
 import type { LibraryVideo } from "../shared/library.ts"
 import { badRequest } from "./api-error.ts"
-import { transcriptText } from "./media-commands.ts"
-import { places, readTranscript, type Job } from "./media-jobs.ts"
+import { gazeText, transcriptText } from "./media-commands.ts"
+import { places, readGaze, readTranscript, type Job } from "./media-jobs.ts"
 import { numbered } from "./tus.ts"
 
 export interface Found {
@@ -82,7 +82,7 @@ export const heardIn = Effect.fnUntraced(function*(project: { readonly id: strin
 const isTaken = Effect.fnUntraced(function*(dir: string, name: string) {
   const fs = yield* FileSystem.FileSystem
   const place = places({ dir, name })
-  const taken = yield* Effect.forEach([place.source, place.transcript, place.preview], (file) => fs.exists(file))
+  const taken = yield* Effect.forEach([place.source, place.transcript, place.preview, place.gaze], (file) => fs.exists(file))
   return taken.some(Boolean)
 })
 
@@ -113,6 +113,11 @@ export const reuse = Effect.fnUntraced(function*(from: Job, dir: string) {
   yield* fs.link(source.preview, target.preview)
   yield* fs.writeFileString(target.text, transcriptText(name, transcript))
   yield* fs.copyFile(source.transcript, target.transcript)
+  if (yield* fs.exists(source.gaze)) {
+    yield* existingFolder(`${dir}/gaze`)
+    yield* fs.writeFileString(target.gazeText, gazeText(name, transcript, yield* readGaze(from)))
+    yield* fs.copyFile(source.gaze, target.gaze)
+  }
   // The source goes last: the media worker hears every source that has no transcript yet.
   yield* fs.link(source.source, target.source)
 })

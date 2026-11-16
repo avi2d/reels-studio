@@ -5,6 +5,7 @@ import { formatDay, formatSize, modelName, parseEventBlock } from "./format.ts"
 import { libraryPicker } from "./library.ts"
 import { oneAfterAnother } from "./queue.ts"
 import { askToRemove } from "./remove.ts"
+import { timelineCard } from "./timeline.ts"
 import { upload, type Progress } from "./upload.ts"
 import { videosCard } from "./videos.ts"
 
@@ -194,7 +195,12 @@ const readReply = (
   return pump("")
 }
 
-const chatCard = (project: Api.ProjectView, messages: ReadonlyArray<Api.Message>, models: ReadonlyArray<string>, onReply: () => void): HTMLElement => {
+const chatCard = (
+  project: Api.ProjectView,
+  messages: ReadonlyArray<Api.Message>,
+  models: ReadonlyArray<string>,
+  onReply: () => void
+): { readonly node: HTMLElement; readonly ask: (message: string) => void } => {
   const empty = h("p", { class: "muted" }, "Напишите, что оставить в ролике и что убрать. Студия слышит загруженные видео и сначала покажет план.")
   const log = h("div", { class: "chat" }, ...(messages.length === 0 ? [empty] : messages.map(bubble)))
   const text = h("textarea", { name: "text", rows: "3", required: true })
@@ -262,7 +268,14 @@ const chatCard = (project: Api.ProjectView, messages: ReadonlyArray<Api.Message>
   }, h("label", {}, "Сообщение", text), h("div", { class: "row" }, h("label", { class: "grow" }, "Модель", model), h("label", { class: "grow" }, "Глубина размышления", effort)),
     h("p", { class: "muted" }, CHOICE_HINT), button, problem)
   form.className = "chat"
-  return h("section", { class: "card" }, h("h2", {}, "Чат"), log, form)
+  const node = h("section", { class: "card" }, h("h2", {}, "Чат"), log, form)
+  const ask = (message: string): void => {
+    node.scrollIntoView({ block: "end" })
+    if (button.disabled) return
+    text.value = message
+    form.requestSubmit()
+  }
+  return { node, ask }
 }
 
 const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
@@ -270,15 +283,22 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
     const [{ project }, { messages }, { models }] = yield* Effect.all([Api.getProject(id), Api.getChat(id), Api.getModels], { concurrency: 3 })
     document.title = `${project.title} · Студия Reels`
     const videos = videosCard(project.id)
-    const chat = chatCard(project, messages, models, videos.refresh)
+    const holder: { ask: (message: string) => void } = { ask: () => {} }
+    const timeline = timelineCard(project.id, (message) => { holder.ask(message) })
+    const refresh = (): void => {
+      videos.refresh()
+      timeline.refresh()
+    }
+    const chat = chatCard(project, messages, models, refresh)
+    holder.ask = chat.ask
     const remove = h("button", {
       type: "button",
       class: "secondary end",
       click: () => { askToRemove(project, () => { location.hash = "#/" }) }
     }, "Удалить ролик")
-    show(h("a", { class: "back", href: "#/" }, "← Все ролики"), h("h1", {}, project.title), videoCard(project, videos.refresh), videos.node, chat, remove)
-    videos.refresh()
-    if (messages.length > 0) chat.scrollIntoView({ block: "end" })
+    show(h("a", { class: "back", href: "#/" }, "← Все ролики"), h("h1", {}, project.title), videoCard(project, refresh), timeline.node, videos.node, chat.node, remove)
+    refresh()
+    if (messages.length > 0) chat.node.scrollIntoView({ block: "end" })
   })
 
 const route = (): void => {
