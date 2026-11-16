@@ -1,0 +1,16 @@
+[Unit]
+Description=Reels studio
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/Projects/reels-studio
+Environment=PATH=%h/.local/share/mise/shims:%h/.nix-profile/bin:/usr/local/bin:/usr/bin:/bin
+Environment=REELS_PROJECTS_DIR=%h/.local/share/reels-studio/projects
+Environment="REELS_HEAVY=winbox-heavy run --"
+Environment=REELS_ENCODER=h264_nvenc
+ExecStart=%h/.local/share/mise/shims/bun src/index.ts
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

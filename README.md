@@ -48,6 +48,22 @@ Each setting is an environment variable read at start.
 | `REELS_HEAVY` | empty | A command, split at spaces, that the studio puts before each ffmpeg and recognizer run, such as a queue for heavy work |
 | `REELS_ENCODER` | `libx264` | The ffmpeg video encoder, such as `h264_nvenc` on a computer with an NVIDIA card |
 
+## Keep the studio running
+
+The owner's computer serves the studio from a clone of `main` at `~/Projects/reels-studio`.
+The uploaded videos and everything made from them live in `~/.local/share/reels-studio/projects`, outside any clone.
+
+To make the studio start again after a restart of the computer:
+
+1. Copy `deploy/reels-studio.service` to `~/.config/systemd/user/`.
+1. Run `systemctl --user daemon-reload`.
+1. Run `systemctl --user enable --now reels-studio.service`.
+
+To serve a newer `main`:
+
+1. Run `git pull` and `bun install --frozen-lockfile` in `~/Projects/reels-studio`.
+1. Run `systemctl --user restart reels-studio.service`.
+
 ## How the studio hears a video
 
 The studio starts on each uploaded video by itself, one video at a time.
@@ -82,6 +98,7 @@ To run the checks:
 | `src/server/` | The routes, the video folders, the resumable upload, the chat and the transcription job |
 | `src/shared/plan.ts` | The transcript and plan formats and the spans the player skips, used by the server and the page |
 | `tools/transcribe/` | The speech recognizer, a Python script that uv runs |
+| `deploy/reels-studio.service` | The systemd user unit that keeps the studio running |
 | `src/pi/` | The pi extension that keeps the chat model inside one video folder |
 | `src/web/` | The page, its styles and its script |
 | `skills/` | The three skills the chat model reads: plan, style and player zones |
