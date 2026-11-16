@@ -3,7 +3,8 @@ import { videoLines } from "../../src/server/chat.ts"
 import { gazeText } from "../../src/server/media-commands.ts"
 import type { Transcript } from "../../src/shared/plan.ts"
 import {
-  arrange, assemble, cameraShare, chosenTake, clipsOf, NO_EDITS, pausesOf, playedSpans, soundBlocks, withChoice, withDeleted, withNeighbours, withPauses,
+  arrange, assemble, cameraShare, chosenTake, clipsOf, fadeGain, NO_EDITS, offsetIn, pausesOf, playedSpans, soundBlocks, withChoice, withDeleted, withNeighbours,
+  withPauses, within,
   type Block, type Gaze
 } from "../../src/shared/timeline.ts"
 
@@ -41,14 +42,14 @@ test("a take plays through its pauses up to the next word, not only to the end o
   expect(playedSpans(first, take("a", 0, 4), NO_EDITS)).toEqual([{ start: 1, end: 6 }])
 })
 
-test("a removed pause splits the take around the silence, and the kept pause still plays", () => {
+test("a removed pause leaves 0.2 s of rest between its two words, not a cut at the word edges, and the kept pause still plays", () => {
   const edits = withPauses(NO_EDITS, [{ video: "a", after: 1 }], true)
-  expect(playedSpans(first, take("a", 0, 4), edits)).toEqual([{ start: 1, end: 2 }, { start: 3, end: 6 }])
+  expect(playedSpans(first, take("a", 0, 4), edits)).toEqual([{ start: 1, end: 2.1 }, { start: 2.9, end: 6 }])
 })
 
-test("a removed pause after the last word ends the take at that word, not at the next take", () => {
+test("a removed pause after the last word ends the take 0.2 s after that word, not at the next take", () => {
   const edits = withPauses(NO_EDITS, [{ video: "a", after: 1 }, { video: "a", after: 4 }], true)
-  expect(playedSpans(first, take("a", 0, 4), edits)).toEqual([{ start: 1, end: 2 }, { start: 3, end: 4.6 }])
+  expect(playedSpans(first, take("a", 0, 4), edits)).toEqual([{ start: 1, end: 2.1 }, { start: 2.9, end: 4.8 }])
 })
 
 test("a pause removed and then returned plays again, and a pause of another video is not touched", () => {
@@ -137,4 +138,25 @@ test("the chat model is told where the gaze file is, or to rank by speech alone 
   expect(lines).not.toContain("gaze/b.txt")
   expect(lines).toContain("rank its takes by speech alone")
   expect(lines).toContain("blocks.json is not valid")
+})
+
+test("the sound of a clip is silent at both cuts and full between them, not full right at the cut", () => {
+  const clip = { start: 10, end: 12 }
+  expect(fadeGain(clip, 10)).toBe(0)
+  expect(fadeGain(clip, 10.03)).toBeCloseTo(0.5, 5)
+  expect(fadeGain(clip, 11)).toBe(1)
+  expect(fadeGain(clip, 11.97)).toBeCloseTo(0.5, 5)
+  expect(fadeGain(clip, 12)).toBe(0)
+})
+
+test("a time in the second played span sits after only the played seconds before it, not after the removed gap too", () => {
+  const spans = [{ start: 0, end: 2 }, { start: 5, end: 8 }]
+  expect(offsetIn(spans, 6)).toBe(3)
+  expect(offsetIn(spans, 3)).toBe(2)
+  expect(offsetIn(spans, 0)).toBe(0)
+})
+
+test("a window keeps only the parts of the spans inside it, not every span it touches whole", () => {
+  const spans = [{ start: 0, end: 2 }, { start: 5, end: 8 }, { start: 9, end: 10 }]
+  expect(within(spans, { start: 1, end: 6 })).toEqual([{ start: 1, end: 2 }, { start: 5, end: 6 }])
 })

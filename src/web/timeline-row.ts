@@ -1,4 +1,4 @@
-import type { Pause, Placed, Take } from "../shared/timeline.ts"
+import { offsetIn, type Pause, type Placed, type Take } from "../shared/timeline.ts"
 import { lengthOf } from "../shared/plan.ts"
 import { h } from "./dom.ts"
 import { formatLength, formatPause } from "./format.ts"
@@ -10,17 +10,21 @@ export interface RowActions {
   readonly setPause: (video: string, after: number, removed: boolean) => void
 }
 
-const pauseChip = (video: string, pause: Pause, actions: RowActions): HTMLElement => {
-  const length = formatPause(pause.end - pause.start)
-  const label = pause.removed ? `Вернуть паузу ${length}` : `Убрать паузу ${length}`
+const share = (part: number, whole: number): string => `${(whole <= 0 ? 0 : (part / whole) * 100).toFixed(2)}%`
+
+const pauseMark = (one: Placed, pause: Pause, length: number, actions: RowActions): HTMLElement => {
+  const size = formatPause(pause.end - pause.start)
+  const label = pause.removed ? `Вернуть паузу ${size}` : `Убрать паузу ${size}`
+  const left = share(offsetIn(one.spans, pause.start), length)
   return h("button", {
     type: "button",
     class: pause.removed ? "pause removed" : "pause",
+    style: pause.removed ? `left: min(${left}, 100% - var(--gap-min))` : `left: min(${left}, 100% - var(--gap-min)); width: ${share(pause.end - pause.start, length)}`,
     "aria-label": label,
     title: label,
-    "data-key": `pause:${video}:${pause.after}`,
-    click: () => { actions.setPause(video, pause.after, !pause.removed) }
-  }, h("span", {}, `пауза ${length}`), h("span", { "aria-hidden": "true" }, pause.removed ? "↺" : "✕"))
+    "data-key": `pause:${one.take.video}:${pause.after}`,
+    click: () => { actions.setPause(one.take.video, pause.after, !pause.removed) }
+  }, pause.removed ? "↺" : size)
 }
 
 const EDGE = 48
@@ -41,15 +45,12 @@ interface Drag {
   crossed: Element | undefined
 }
 
-// The row is a strip, a column or a grid, so the slot under the pointer decides the place, not one axis.
 // The dragged slot never leaves the document: a node that is re-inserted loses its pointer capture.
 const follow = (row: HTMLElement, slot: HTMLElement, point: Point, drag: Drag): void => {
   const box = row.getBoundingClientRect()
   if (point.x > box.right - EDGE) row.scrollLeft += EDGE_STEP
   if (point.x < box.left + EDGE) row.scrollLeft -= EDGE_STEP
-  if (point.y > box.bottom - EDGE) row.scrollTop += EDGE_STEP
-  if (point.y < box.top + EDGE) row.scrollTop -= EDGE_STEP
-  const under = [...row.children].find((other) => holds(other, point))
+  const under = [...row.children].find((other) => holds(other, { x: point.x, y: box.top + box.height / 2 }))
   if (under === undefined || under === slot) {
     drag.crossed = undefined
     return
@@ -103,31 +104,38 @@ const dragHandle = (row: HTMLElement, slot: HTMLElement, title: string, id: stri
   return handle
 }
 
-const slotOf = (row: HTMLElement, one: Placed, index: number, selected: string | undefined, actions: RowActions): HTMLElement => {
+interface At {
+  readonly index: number
+  readonly start: number
+}
+
+const slotOf = (row: HTMLElement, one: Placed, at: At, selected: string | undefined, actions: RowActions): HTMLElement => {
   const { block, take } = one
+  const length = lengthOf(one.spans)
   const rank = block.takes.indexOf(take) + 1
-  const slot = h("li", { class: "slot", "data-id": block.id, style: `--len: ${lengthOf(one.spans).toFixed(1)}` })
+  const slot = h("li", { class: "slot", "data-id": block.id, style: `--len: ${length.toFixed(1)}` })
   const pick = h("button", {
     type: "button",
     class: "pick",
     "aria-pressed": String(block.id === selected),
+    "aria-label": `Блок ${at.index + 1}. ${block.title}`,
+    title: `${block.title} · ${formatLength(length)}`,
     "data-key": `pick:${block.id}`,
     click: () => { actions.select(block.id) }
   },
-    h("strong", {}, `${index + 1}. ${block.title}`),
-    h("span", { class: "muted" }, `${formatLength(lengthOf(one.spans))} · дубль ${rank} из ${block.takes.length}`))
-  const inner = one.pauses.filter((pause) => pause.after !== take.to).map((pause) => pauseChip(take.video, pause, actions))
-  const after = one.pauses.filter((pause) => pause.after === take.to).map((pause) => pauseChip(take.video, pause, actions))
+    h("span", { class: "name" }, h("b", {}, String(at.index + 1)), block.title),
+    h("span", { class: "rank" }, `дубль ${rank} из ${block.takes.length} · ${formatLength(length)}`))
   slot.append(
-    h("div", { class: block.id === selected ? "block selected" : "block" },
-      h("div", { class: "block-head" }, dragHandle(row, slot, block.title, block.id, actions), pick),
-      h("span", { class: "said" }, actions.textOf(take)), ...inner),
-    ...after)
+    h("span", { class: "at" }, formatLength(at.start)),
+    h("span", { class: "said", title: actions.textOf(take) }, actions.textOf(take)),
+    h("div", { class: block.id === selected ? "clip selected" : "clip" }, dragHandle(row, slot, block.title, block.id, actions), pick),
+    h("div", { class: "gaps" }, ...one.pauses.map((pause) => pauseMark(one, pause, length, actions))))
   return slot
 }
 
 export const blockRow = (placed: ReadonlyArray<Placed>, selected: string | undefined, actions: RowActions): HTMLElement => {
   const row = h("ol", { class: "blocks" })
-  row.append(...placed.map((one, index) => slotOf(row, one, index, selected, actions)))
+  const starts = placed.map((_, index) => lengthOf(placed.slice(0, index).flatMap((one) => one.spans)))
+  row.append(...placed.map((one, index) => slotOf(row, one, { index, start: starts[index] ?? 0 }, selected, actions)))
   return row
 }

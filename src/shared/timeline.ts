@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import type { Span, Transcript } from "./plan.ts"
 
 export const MIN_PAUSE = 0.5
+export const PAUSE_REST = 0.2
 
 export const Gaze = Schema.Struct({
   step: Schema.Finite.check(Schema.isGreaterThan(0)),
@@ -128,7 +129,10 @@ export const pausesOf = (transcript: Transcript, take: Take, edits: Edits): Read
 export const playedSpans = (transcript: Transcript, take: Take, edits: Edits): ReadonlyArray<Span> => {
   const speech = speechOf(transcript, take) ?? { start: 0, end: 0 }
   const end = transcript.words[take.to + 1]?.start ?? transcript.duration
-  const cuts = pausesOf(transcript, take, edits).filter((pause) => pause.removed)
+  const cuts = pausesOf(transcript, take, edits).filter((pause) => pause.removed).map((pause) =>
+    pause.after === take.to
+      ? { start: pause.start + PAUSE_REST, end: pause.end }
+      : { start: pause.start + PAUSE_REST / 2, end: pause.end - PAUSE_REST / 2 })
   const starts = [speech.start, ...cuts.map((cut) => cut.end)]
   const ends = [...cuts.map((cut) => cut.start), Math.max(end, speech.end)]
   return starts.flatMap((start, index) => {
@@ -150,6 +154,21 @@ export const assemble = (blocks: ReadonlyArray<Block>, edits: Edits, transcripts
     const transcript = transcripts.get(take.video)
     if (transcript === undefined) return []
     return [{ block, take, pauses: pausesOf(transcript, take, edits), spans: playedSpans(transcript, take, edits) }]
+  })
+
+const FADE = 0.06
+
+export const fadeGain = (span: Span, time: number): number =>
+  Math.max(0, Math.min(1, (time - span.start) / FADE, (span.end - time) / FADE))
+
+export const offsetIn = (spans: ReadonlyArray<Span>, time: number): number =>
+  spans.reduce((total, span) => total + Math.max(0, Math.min(time, span.end) - span.start), 0)
+
+export const within = <S extends Span>(spans: ReadonlyArray<S>, window: Span): ReadonlyArray<S> =>
+  spans.flatMap((span) => {
+    const start = Math.max(span.start, window.start)
+    const end = Math.min(span.end, window.end)
+    return end > start ? [{ ...span, start, end }] : []
   })
 
 export interface Clip extends Span {

@@ -3,7 +3,15 @@ kind: reference
 ---
 # Takes and blocks
 
-The «Монтаж» card shows the speech of every heard video of one video folder as a row of blocks, each with its takes.
+The page of one video folder shows the speech of every heard video as a row of blocks, each with its takes.
+
+## The working screen
+
+A list of stages stands on the left, and three of them work: «Видео и задание», «Дубли и блоки» and «Паузы и склейки».
+The open stage fills the column next to the list, the player stands in the middle and the chat on the right.
+The row of blocks runs along the bottom, with the text, the clip and the pauses of each block on three tracks.
+«Убрать все паузы» and «Смотреть монтаж» stay at the top of the page at every stage.
+On a phone the same parts follow one another down the page, and the two buttons stay at the top of the screen.
 
 ## Terms
 
@@ -19,13 +27,18 @@ The chat model reads the transcript and the gaze text of every video and writes 
 It puts the takes with one meaning into one block, from whichever videos they come.
 It orders the blocks by where each thought is first said, and the takes of a block from the best to the worst.
 A take ranks higher when the speaker does not stumble and when the speaker looks into the camera.
-The model judges a stumble from the transcript: a repeated word, a word cut off, a sentence started again, a filler or a pause inside the take.
+The model judges a stumble from the transcript.
+A stumble is a repeated word, a word cut off, a sentence started again, a filler or a pause inside the take.
 Each take carries a short reason in Russian.
 
 The person chooses a take, drags and deletes blocks, and removes pauses on the page.
 The studio keeps these choices in `timeline.json`, which the chat model cannot write.
 A deleted block and a removed pause stay listed on the page, and one tap returns each.
-The play button plays the chosen takes in the order of the row, from the previews, and skips the removed pauses.
+«Смотреть монтаж» plays the chosen takes in the order of the row, from the previews, and skips the removed pauses.
+A removed pause leaves 0.2 s of silence in its place.
+The sound fades over 0.06 s on each side of a cut.
+«Послушать» next to a pause plays 1.5 s before it and 1.5 s after it.
+«Отменить» takes back the last change of the cut.
 «С соседями» plays a take with the last 2 s of the block before it and the first 2 s of the block after it.
 A strip of numbered blocks shows the whole cut, each as wide as its length, and a click opens that block.
 The studio writes no video file from the row.
@@ -34,11 +47,11 @@ The studio writes no video file from the row.
 
 | Key | What it does |
 | --- | --- |
-| Space | Starts and stops the cut |
-| Left and Right arrows | Open the block before or after |
+| Space | Plays the cut from the open block, or stops it |
+| Arrow keys | Open the block before or after |
 | 1 to 9 | Choose that take of the open block |
-| Enter | Plays the cut from the open block |
 | Delete | Deletes the open block |
+| Z | Takes back the last change |
 
 The keys do nothing while the person types in a field.
 
@@ -49,7 +62,7 @@ After the studio hears a video, it measures where the speaker looks, on the home
 The model file is downloaded once to `~/.cache/reels-studio/` and checked against its SHA-256.
 No frame leaves the computer.
 
-A frame counts as a look into the camera when the direction of the eyes is within 12 degrees of the line from the face to the lens.
+A frame counts as a look into the camera when the eyes point within 12 degrees of the line from the face to the lens.
 The direction of the eyes is the turn of the head plus the turn of the eyes, which the model gives as blendshape scores.
 A frame with no face counts as no look into the camera.
 

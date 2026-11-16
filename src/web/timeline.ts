@@ -1,202 +1,24 @@
 import { Effect } from "effect"
-import { lengthOf, type Transcript } from "../shared/plan.ts"
+import { lengthOf } from "../shared/plan.ts"
 import {
-  arrange, assemble, chosenTake, clipsOf, MIN_PAUSE, NO_EDITS, playedSpans, withChoice, withDeleted, withNeighbours, withPauses,
-  type Clip, type Edits, type Placed, type Take, type TimelineView
+  assemble, clipsOf, NO_EDITS, playedSpans, withChoice, withDeleted, withNeighbours, withPauses, within,
+  type Clip, type Edits, type Placed, type Take
 } from "../shared/timeline.ts"
 import * as Api from "./api.ts"
 import { h } from "./dom.ts"
-import { formatLength, formatPause } from "./format.ts"
+import { formatLength } from "./format.ts"
 import { montage, type Playing } from "./montage.ts"
-import { blockDetail, deletedList, type DetailActions } from "./timeline-detail.ts"
-import { KEYS_HINT, onKeys } from "./timeline-keys.ts"
-import { cutMap } from "./timeline-map.ts"
-import { blockRow, type RowActions } from "./timeline-row.ts"
+import {
+  drawReady, frameOf, notesOf, partsOf, PLAY, refocus, startOf, STOP, textOf,
+  type Actions, type Frame, type Hooks, type Loaded, type Panels, type Parts
+} from "./timeline-draw.ts"
+import { onKeys } from "./timeline-keys.ts"
+import { POLL_MS, saver } from "./timeline-save.ts"
 
-const POLL_MS = 4000
+export type { Status } from "./timeline-draw.ts"
+
 const AROUND_SECONDS = 2
-const PLAY = "Смотреть монтаж"
-const STOP = "Остановить"
-const GATHER = "Собери блоки из всех видео и расставь дубли от лучшего к худшему."
-const NOT_SAVED = "Изменение не сохранилось. Проверьте Wi-Fi: студия попробует сохранить его ещё раз сама."
-const NO_SPEECH = "Блоки появятся, когда студия услышит первое видео."
-const NO_TAKES = "Здесь появятся дубли блока: от лучшего к худшему, с причиной у каждого."
-const NO_BLOCKS = "Блоков пока нет. Студия соберёт их из текста всех видео: дубли с одним смыслом попадут в один блок, лучший дубль встанет первым."
-
-type Ready = Extract<TimelineView["timeline"], { readonly state: "ready" }>
-
-interface Loaded {
-  readonly transcripts: ReadonlyMap<string, Transcript>
-  readonly view: TimelineView
-}
-
-const looksNote = (looks: TimelineView["looks"]): ReadonlyArray<HTMLElement> => {
-  const named = (state: "waiting" | "failed"): string => looks.filter((look) => look.state === state).map((look) => look.video).join(", ")
-  const waiting = named("waiting")
-  const failed = named("failed")
-  return [
-    ...(waiting === "" ? [] : [h("p", { class: "muted", role: "status" },
-      `Студия ещё измеряет взгляд в камеру в видео: ${waiting}. Когда закончит, попросите в чате расставить дубли заново.`)]),
-    ...(failed === "" ? [] : [h("p", { class: "muted" },
-      `Взгляд в камеру не удалось измерить в видео: ${failed}. Дубли из них расставлены только по речи.`)])
-  ]
-}
-
-const notesOf = ({ transcripts, view }: Loaded, ask: (text: string) => void): ReadonlyArray<HTMLElement> => {
-  if (transcripts.size === 0) return [h("p", { class: "muted" }, NO_SPEECH)]
-  const gather = (label: string): HTMLElement => h("button", { type: "button", class: "end", click: () => { ask(GATHER) } }, label)
-  const { timeline } = view
-  if (timeline.state !== "ready") {
-    return timeline.state === "none"
-      ? [h("p", { class: "muted" }, NO_BLOCKS), gather("Собрать блоки")]
-      : [h("p", { class: "error" }, "Блоки не прочитались. Попросите студию собрать их заново."), gather("Собрать блоки заново")]
-  }
-  const dropped = timeline.dropped === 0 ? [] : [h("p", { class: "muted" },
-    `Студия пропустила дубли, которые не нашла в видео: ${timeline.dropped}. Попросите в чате собрать блоки заново.`)]
-  return [...dropped, ...looksNote(view.looks)]
-}
-
-const summaryOf = (placed: ReadonlyArray<Placed>): string => {
-  if (placed.length === 0) return "Все блоки удалены. Верните нужные ниже."
-  const pauses = placed.flatMap((one) => one.pauses.filter((pause) => !pause.removed))
-  const length = formatLength(lengthOf(placed.flatMap((one) => one.spans)))
-  const kept = pauses.length === 0 ? "пауз нет" : `пауз: ${pauses.length} на ${formatLength(lengthOf(pauses))}`
-  return `Блоков: ${placed.length} · длина ${length} · ${kept}. Паузой студия считает молчание от ${formatPause(MIN_PAUSE)}.`
-}
-
-const refocus = (root: HTMLElement, key: string | undefined): void => {
-  if (key === undefined) return
-  for (const node of root.querySelectorAll<HTMLElement>("[data-key]")) {
-    if (node.dataset.key === key) node.focus({ preventScroll: true })
-  }
-}
-
-const saver = (projectId: string, problem: HTMLElement, edits: () => Edits): { readonly save: () => void; readonly busy: () => boolean } => {
-  const state = { saving: false, unsaved: false }
-  const save = (): void => {
-    if (state.saving) {
-      state.unsaved = true
-      return
-    }
-    state.saving = true
-    state.unsaved = false
-    Effect.runFork(Api.saveEdits(projectId, edits()).pipe(
-      Effect.map(() => { problem.textContent = "" }),
-      Effect.catchTag("Failed", () => Effect.sync(() => {
-        problem.textContent = NOT_SAVED
-        state.unsaved = true
-      })),
-      Effect.map(() => {
-        state.saving = false
-        if (!state.unsaved || !problem.isConnected) return
-        if (problem.textContent === "") save()
-        else globalThis.setTimeout(save, POLL_MS)
-      })
-    ))
-  }
-  return { save, busy: () => state.saving || state.unsaved }
-}
-
-const partsOf = (): Parts => ({
-  summary: h("p", { class: "muted" }),
-  play: h("button", { type: "button", disabled: true, title: "Пробел запускает и останавливает просмотр" }, PLAY),
-  strip: h("button", { type: "button", class: "secondary", hidden: true }),
-  rowHolder: h("div", { class: "blocks-holder" }),
-  map: h("ol", { class: "map" }),
-  detailHolder: h("div", { class: "details" })
-})
-
-interface Parts {
-  readonly summary: HTMLElement
-  readonly play: HTMLButtonElement
-  readonly strip: HTMLButtonElement
-  readonly rowHolder: HTMLElement
-  readonly map: HTMLElement
-  readonly detailHolder: HTMLElement
-}
-
-interface Drawn {
-  readonly loaded: Loaded
-  readonly timeline: Ready
-  readonly edits: Edits
-  readonly selected: string | undefined
-}
-
-type Actions = RowActions & DetailActions & { readonly change: (edits: Edits) => void }
-
-const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): Placed | undefined => {
-  const { edits, loaded, selected, timeline } = drawn
-  const placed = assemble(timeline.blocks, edits, loaded.transcripts)
-  const { deleted } = arrange(timeline.blocks, edits)
-  const pauses = placed.flatMap((one) => one.pauses.map((pause) => ({ video: one.take.video, after: pause.after, removed: pause.removed })))
-  const allRemoved = pauses.every((pause) => pause.removed)
-  const index = Math.max(0, placed.findIndex((one) => one.block.id === selected))
-  const open = placed[index]
-  parts.summary.textContent = summaryOf(placed)
-  parts.play.disabled = placed.length === 0
-  parts.strip.hidden = pauses.length === 0
-  parts.strip.textContent = allRemoved ? "Вернуть все паузы" : "Убрать все паузы"
-  parts.strip.onclick = () => { actions.change(withPauses(edits, pauses, !allRemoved)) }
-  const old = parts.rowHolder.firstElementChild
-  const row = blockRow(placed, open?.block.id, actions)
-  parts.rowHolder.replaceChildren(row)
-  row.scrollLeft = old?.scrollLeft ?? 0
-  row.scrollTop = old?.scrollTop ?? 0
-  parts.map.replaceChildren(...cutMap(placed, open?.block.id, actions.select))
-  parts.detailHolder.replaceChildren(
-    ...(open === undefined ? [] : [blockDetail(open.block, index + 1, chosenTake(open.block, edits), loaded.transcripts, edits, actions)]),
-    ...(deleted.length === 0 ? [] : [deletedList(deleted, actions)]))
-  return open
-}
-
-const markPlaying = (parts: Parts, clock: HTMLElement, shown: { block: string | undefined }, playing: Playing | undefined): void => {
-  parts.play.textContent = playing === undefined ? PLAY : STOP
-  clock.textContent = playing === undefined ? "" : formatLength(playing.elapsed)
-  if (shown.block === playing?.clip.block) return
-  shown.block = playing?.clip.block
-  for (const item of parts.map.querySelectorAll<HTMLElement>(".map-item")) item.classList.toggle("playing", item.dataset.id === shown.block)
-  for (const slot of parts.rowHolder.querySelectorAll<HTMLElement>(".slot")) {
-    const current = slot.dataset.id === shown.block
-    slot.classList.toggle("playing", current)
-    if (current) slot.scrollIntoView({ block: "nearest", inline: "nearest" })
-  }
-}
-
-interface Panels {
-  readonly line: HTMLElement
-  readonly map: HTMLElement
-  readonly player: HTMLElement
-  readonly takes: HTMLElement
-}
-
-const textOf = (transcripts: ReadonlyMap<string, Transcript>, take: Take): string =>
-  (transcripts.get(take.video)?.words ?? []).slice(take.from, take.to + 1).map((word) => word.text).join(" ")
-
-interface Frame {
-  readonly clock: HTMLElement
-  readonly notes: HTMLElement
-  readonly problem: HTMLElement
-  readonly hint: HTMLElement
-  readonly ready: HTMLElement
-  readonly stage: HTMLElement
-  readonly panels: Panels
-}
-
-const frameOf = (parts: Parts): Frame => {
-  const clock = h("span", { class: "muted clock" })
-  const notes = h("div", { class: "notes" })
-  const problem = h("p", { class: "error", role: "alert" })
-  const hint = h("p", { class: "muted" }, NO_TAKES)
-  const ready = h("div", { class: "timeline", hidden: true }, parts.rowHolder, problem)
-  const stage = h("div", { class: "stage" })
-  const panels: Panels = {
-    map: h("nav", { class: "card p-map", "aria-label": "Весь монтаж", hidden: true }, parts.map, h("p", { class: "muted keys" }, KEYS_HINT)),
-    line: h("section", { class: "card p-line" }, h("div", { class: "line-head" }, h("h2", {}, "Монтаж"), parts.summary), notes, ready),
-    player: h("section", { class: "card p-player", "aria-label": "Просмотр" }, stage, h("div", { class: "row" }, parts.play, parts.strip, clock)),
-    takes: h("section", { class: "card p-takes", "aria-label": "Дубли" }, hint, parts.detailHolder)
-  }
-  return { clock, notes, problem, hint, ready, stage, panels }
-}
+const PAUSE_AROUND_SECONDS = 1.5
 
 const placedOf = (loaded: Loaded | undefined, edits: Edits): ReadonlyArray<Placed> => {
   const view = loaded?.view.timeline
@@ -221,78 +43,207 @@ const clipsFrom = (clips: ReadonlyArray<Clip>, block: string): ReadonlyArray<Cli
 const aroundClips = (placed: ReadonlyArray<Placed>, own: ReadonlyArray<Clip>, block: string): ReadonlyArray<Clip> =>
   withNeighbours(clipsOf(placed), block, own, AROUND_SECONDS)
 
-export const timelineCard = (projectId: string, ask: (text: string) => void): { readonly panels: Panels; readonly refresh: () => void } => {
-  const parts = partsOf()
-  const { clock, notes, problem, hint, ready, stage, panels } = frameOf(parts)
-  const shown: { block: string | undefined } = { block: undefined }
-  const player = montage(projectId, (playing) => { markPlaying(parts, clock, shown, playing) })
-  stage.append(player.node)
-  const state: { loaded: Loaded | undefined; edits: Edits; selected: string | undefined; open: Placed | undefined; seen: string; timer: number } =
-    { loaded: undefined, edits: NO_EDITS, selected: undefined, open: undefined, seen: "", timer: 0 }
-  const saving = saver(projectId, problem, () => state.edits)
+interface State {
+  loaded: Loaded | undefined
+  edits: Edits
+  history: Array<Edits>
+  selected: string | undefined
+  open: Placed | undefined
+  base: number | undefined
+  playing: Playing | undefined
+  seen: string
+}
+
+const display = (parts: Parts, state: State) => {
   const placedNow = (): ReadonlyArray<Placed> => placedOf(state.loaded, state.edits)
 
-  const draw = (): void => {
-    const loaded = state.loaded
-    if (loaded === undefined) return
-    const active = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.key : undefined
-    const { timeline } = loaded.view
-    const isReady = timeline.state === "ready" && loaded.transcripts.size > 0
-    ready.hidden = !isReady
-    parts.summary.hidden = !isReady
-    panels.map.hidden = !isReady
-    notes.replaceChildren(...notesOf(loaded, ask))
-    const open = timeline.state === "ready" && isReady
-      ? drawReady(parts, { loaded, timeline, edits: state.edits, selected: state.selected }, actions)
-      : undefined
-    state.open = open
-    hint.hidden = open !== undefined
-    const first = open?.spans[0]
-    if (open !== undefined && first !== undefined) player.show({ ...first, video: open.take.video, block: open.block.id })
-    refocus(panels.map, active)
-    refocus(panels.line, active)
-    refocus(panels.takes, active)
+  const showTag = (block: string | undefined): void => {
+    const placed = placedNow()
+    const index = placed.findIndex((one) => one.block.id === block)
+    const one = placed[index]
+    parts.tag.hidden = one === undefined
+    if (one !== undefined) parts.tag.replaceChildren(h("b", {}, String(index + 1)), one.block.title)
   }
 
-  const change = (edits: Edits): void => {
+  const showClock = (): void => {
+    const placed = placedNow()
+    const total = formatLength(lengthOf(placed.flatMap((one) => one.spans)))
+    const playing = state.playing
+    if (playing === undefined) {
+      const index = placed.findIndex((one) => one.block.id === state.open?.block.id)
+      parts.clock.textContent = placed.length === 0 ? "" : `${formatLength(startOf(placed, Math.max(0, index)))} / ${total}`
+    } else {
+      parts.clock.textContent = state.base === undefined ? formatLength(playing.elapsed) : `${formatLength(state.base + playing.elapsed)} / ${total}`
+    }
+  }
+
+  const markPlaying = (playing: Playing | undefined): void => {
+    const before = state.playing?.clip.block
+    state.playing = playing
+    parts.play.textContent = playing === undefined ? PLAY : STOP
+    parts.go.textContent = playing === undefined ? "▶" : "■"
+    parts.go.setAttribute("aria-label", playing === undefined ? "Смотреть с этого блока" : STOP)
+    showClock()
+    const now = playing?.clip.block
+    if (before === now) return
+    showTag(now ?? state.open?.block.id)
+    for (const item of parts.map.querySelectorAll<HTMLElement>(".map-item")) item.classList.toggle("playing", item.dataset.id === now)
+    for (const slot of parts.rowHolder.querySelectorAll<HTMLElement>(".slot")) {
+      const current = slot.dataset.id === now
+      slot.classList.toggle("playing", current)
+      if (current) slot.scrollIntoView({ block: "nearest", inline: "nearest" })
+    }
+  }
+
+  return { placedNow, showTag, showClock, markPlaying }
+}
+
+interface Desk {
+  readonly parts: Parts
+  readonly ui: Frame
+  readonly state: State
+  readonly view: ReturnType<typeof display>
+  readonly player: ReturnType<typeof montage>
+  readonly hooks: Hooks
+}
+
+const redraw = ({ hooks, parts, player, state, ui, view }: Desk, actions: Actions): void => {
+  const loaded = state.loaded
+  if (loaded === undefined) return
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.key : undefined
+  const { timeline } = loaded.view
+  const isReady = timeline.state === "ready" && loaded.transcripts.size > 0
+  ui.ready.hidden = !isReady
+  ui.overview.hidden = !isReady
+  ui.empty.hidden = isReady
+  ui.noPauses.hidden = isReady
+  parts.pauseHolder.hidden = !isReady
+  parts.detailHolder.hidden = !isReady
+  ui.notes.replaceChildren(...notesOf(loaded, hooks.ask))
+  const drawn = timeline.state === "ready" && isReady
+    ? drawReady(parts, { loaded, timeline, edits: state.edits, selected: state.selected }, actions)
+    : undefined
+  const open = drawn?.open
+  state.open = open
+  for (const button of [parts.play, parts.go, parts.around]) button.disabled = open === undefined
+  if (open === undefined) for (const button of [parts.strip, parts.prev, parts.next]) button.disabled = true
+  parts.undo.disabled = state.history.length === 0
+  if (!isReady) parts.summary.textContent = ""
+  const first = open?.spans[0]
+  if (open !== undefined && first !== undefined) player.show({ ...first, video: open.take.video, block: open.block.id })
+  view.showTag(open?.block.id)
+  view.showClock()
+  hooks.status({
+    heard: loaded.transcripts.size,
+    blocks: drawn === undefined ? undefined : view.placedNow().length,
+    pauses: drawn?.status ?? { removed: 0, total: 0 }
+  })
+  refocus([ui.panels.tracks, ui.panels.takes, ui.panels.pauses], active)
+}
+
+const loader = (projectId: string, anchor: HTMLElement, show: (loaded: Loaded) => void): () => void => {
+  const state = { timer: 0 }
+  const later = (): void => {
+    globalThis.clearTimeout(state.timer)
+    state.timer = Number(globalThis.setTimeout(refresh, POLL_MS))
+  }
+  function refresh(): void {
+    globalThis.clearTimeout(state.timer)
+    if (!anchor.isConnected) return
+    Effect.runFork(Effect.all([Api.getVideos(projectId), Api.getTimeline(projectId)], { concurrency: 2 }).pipe(
+      Effect.map(([{ videos }, view]) => {
+        const heard = videos.flatMap((video) => video.state === "ready" ? [[video.name, video.transcript] as const] : [])
+        show({ transcripts: new Map(heard), view })
+        if (videos.some((video) => video.state === "waiting") || view.looks.some((look) => look.state === "waiting")) later()
+      }),
+      Effect.catchTag("Failed", () => Effect.sync(later))
+    ))
+  }
+  return refresh
+}
+
+export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels: Panels; readonly refresh: () => void } => {
+  const parts = partsOf()
+  const ui = frameOf(parts)
+  const state: State =
+    { loaded: undefined, edits: NO_EDITS, history: [], selected: undefined, open: undefined, base: undefined, playing: undefined, seen: "" }
+  const view = display(parts, state)
+  const player = montage(projectId, view.markPlaying)
+  ui.frame.prepend(player.node)
+  const saving = saver(projectId, ui.problem, () => state.edits)
+  const draw = (): void => { redraw({ parts, ui, state, view, player, hooks }, actions) }
+
+  const hear = (clips: ReadonlyArray<Clip>): void => {
+    state.base = undefined
+    player.play(clips)
+  }
+
+  const watch = (from: string | undefined): void => {
+    const clips = clipsOf(view.placedNow())
+    const cut = from === undefined ? clips : clipsFrom(clips, from)
+    state.base = lengthOf(clips) - lengthOf(cut)
+    player.play(cut)
+  }
+
+  const apply = (edits: Edits): void => {
     player.stop()
     state.edits = edits
     draw()
     saving.save()
   }
 
+  const change = (edits: Edits): void => {
+    state.history.push(state.edits)
+    apply(edits)
+  }
+
+  const undo = (): void => {
+    const before = state.history.pop()
+    if (before !== undefined) apply(before)
+  }
+
+  const select = (block: string): void => {
+    player.stop()
+    state.selected = block
+    draw()
+    parts.rowHolder.querySelector(".clip.selected")?.scrollIntoView({ block: "nearest", inline: "nearest" })
+  }
+
   const actions: Actions = {
     change,
     textOf: (take) => textOf(state.loaded?.transcripts ?? new Map(), take),
     select: (block) => {
-      player.stop()
-      state.selected = block
-      draw()
-      parts.rowHolder.querySelector(".block.selected")?.scrollIntoView({ block: "nearest", inline: "nearest" })
+      select(block)
+      hooks.openTakes()
     },
     reorder: (blocks) => { change({ ...state.edits, order: [...blocks] }) },
     setPause: (video, after, removed) => { change(withPauses(state.edits, [{ video, after }], removed)) },
     choose: (block, take) => { change(withChoice(state.edits, block, take)) },
-    hear: (block, take) => { player.play(takeClips(state.loaded, state.edits, block, take)) },
-    hearAround: (block, take) => { player.play(aroundClips(placedNow(), takeClips(state.loaded, state.edits, block, take), block)) },
-    playFrom: (block) => { player.play(clipsFrom(clipsOf(placedNow()), block)) },
+    hear: (block, take) => { hear(takeClips(state.loaded, state.edits, block, take)) },
+    hearAround: (block, take) => { hear(aroundClips(view.placedNow(), takeClips(state.loaded, state.edits, block, take), block)) },
+    hearPause: (one, pause) => {
+      const window = { start: pause.start - PAUSE_AROUND_SECONDS, end: pause.end + PAUSE_AROUND_SECONDS }
+      hear(within(takeClips(state.loaded, state.edits, one.block.id, one.take), window))
+    },
     setDeleted: (block, deleted) => {
-      if (deleted && block === state.open?.block.id) state.selected = neighbourOf(placedNow(), block)
+      state.selected = deleted && block === state.open?.block.id ? neighbourOf(view.placedNow(), block) : state.selected
       change(withDeleted(state.edits, block, deleted))
     }
   }
 
-  const toggle = (): void => {
-    if (parts.play.textContent === STOP) player.stop()
-    else if (!parts.play.disabled) player.play(clipsOf(placedNow()))
+  const toggle = (from: string | undefined): void => {
+    if (state.playing !== undefined) player.stop()
+    else if (state.open !== undefined) watch(from)
   }
-  parts.play.addEventListener("click", toggle)
-  onKeys(panels.line, () => ({ placed: placedNow(), open: state.open }), { ...actions, toggle })
-
-  const later = (): void => {
-    globalThis.clearTimeout(state.timer)
-    state.timer = Number(globalThis.setTimeout(refresh, POLL_MS))
-  }
+  parts.play.addEventListener("click", () => { toggle(undefined) })
+  parts.go.addEventListener("click", () => { toggle(state.open?.block.id) })
+  parts.undo.addEventListener("click", undo)
+  parts.around.addEventListener("click", () => {
+    const open = state.open
+    if (open !== undefined) actions.hearAround(open.block.id, open.take)
+  })
+  onKeys(ui.panels.tracks, () => ({ placed: view.placedNow(), open: state.open }),
+    { choose: actions.choose, setDeleted: actions.setDeleted, step: select, toggle: () => { toggle(state.open?.block.id) }, undo })
 
   const show = (loaded: Loaded): void => {
     const seen = JSON.stringify([loaded.view, [...loaded.transcripts.keys()]])
@@ -304,18 +255,5 @@ export const timelineCard = (projectId: string, ask: (text: string) => void): { 
     draw()
   }
 
-  function refresh(): void {
-    globalThis.clearTimeout(state.timer)
-    if (!panels.line.isConnected) return
-    Effect.runFork(Effect.all([Api.getVideos(projectId), Api.getTimeline(projectId)], { concurrency: 2 }).pipe(
-      Effect.map(([{ videos }, view]) => {
-        const heard = videos.flatMap((video) => video.state === "ready" ? [[video.name, video.transcript] as const] : [])
-        show({ transcripts: new Map(heard), view })
-        if (videos.some((video) => video.state === "waiting") || view.looks.some((look) => look.state === "waiting")) later()
-      }),
-      Effect.catchTag("Failed", () => Effect.sync(later))
-    ))
-  }
-
-  return { panels, refresh }
+  return { panels: ui.panels, refresh: loader(projectId, ui.panels.tracks, show) }
 }

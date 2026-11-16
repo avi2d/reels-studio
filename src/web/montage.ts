@@ -1,5 +1,5 @@
 import { Data, Effect } from "effect"
-import type { Clip } from "../shared/timeline.ts"
+import { fadeGain, type Clip } from "../shared/timeline.ts"
 import * as Api from "./api.ts"
 import { h } from "./dom.ts"
 
@@ -26,6 +26,7 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
   const stop = (): void => {
     state.clips = []
     node.pause()
+    node.volume = 1
     onChange(undefined)
   }
   const start = (): void => {
@@ -60,7 +61,10 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
     }
     if (!state.loading && !node.seeking) {
       if (node.ended || node.currentTime >= clip.end) cue(state.index + 1)
-      else onChange({ clip, elapsed: state.before + Math.max(0, node.currentTime - clip.start) })
+      else {
+        node.volume = fadeGain(clip, node.currentTime)
+        onChange({ clip, elapsed: state.before + Math.max(0, node.currentTime - clip.start) })
+      }
     }
     requestAnimationFrame(watch)
   }
