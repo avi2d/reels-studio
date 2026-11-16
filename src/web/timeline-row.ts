@@ -1,10 +1,11 @@
-import type { Pause, Placed } from "../shared/timeline.ts"
+import type { Pause, Placed, Take } from "../shared/timeline.ts"
 import { lengthOf } from "../shared/plan.ts"
 import { h } from "./dom.ts"
 import { formatLength, formatPause } from "./format.ts"
 
 export interface RowActions {
   readonly select: (block: string) => void
+  readonly textOf: (take: Take) => string
   readonly reorder: (blocks: ReadonlyArray<string>) => void
   readonly setPause: (video: string, after: number, removed: boolean) => void
 }
@@ -22,21 +23,41 @@ const pauseChip = (video: string, pause: Pause, actions: RowActions): HTMLElemen
   }, h("span", {}, `пауза ${length}`), h("span", { "aria-hidden": "true" }, pause.removed ? "↺" : "✕"))
 }
 
-const centre = (node: Element): number => {
-  const box = node.getBoundingClientRect()
-  return box.left + box.width / 2
-}
-
 const EDGE = 48
 const EDGE_STEP = 14
 
+interface Point {
+  readonly x: number
+  readonly y: number
+}
+
+const holds = (node: Element, point: Point): boolean => {
+  const box = node.getBoundingClientRect()
+  return point.x >= box.left && point.x <= box.right && point.y >= box.top && point.y <= box.bottom
+}
+
+interface Drag {
+  dragging: boolean
+  crossed: Element | undefined
+}
+
+// The row is a strip, a column or a grid, so the slot under the pointer decides the place, not one axis.
 // The dragged slot never leaves the document: a node that is re-inserted loses its pointer capture.
-const follow = (row: HTMLElement, slot: HTMLElement, x: number): void => {
+const follow = (row: HTMLElement, slot: HTMLElement, point: Point, drag: Drag): void => {
   const box = row.getBoundingClientRect()
-  if (x > box.right - EDGE) row.scrollLeft += EDGE_STEP
-  if (x < box.left + EDGE) row.scrollLeft -= EDGE_STEP
-  for (let next = slot.nextElementSibling; next !== null && x > centre(next); next = slot.nextElementSibling) slot.before(next)
-  for (let before = slot.previousElementSibling; before !== null && x < centre(before); before = slot.previousElementSibling) slot.after(before)
+  if (point.x > box.right - EDGE) row.scrollLeft += EDGE_STEP
+  if (point.x < box.left + EDGE) row.scrollLeft -= EDGE_STEP
+  if (point.y > box.bottom - EDGE) row.scrollTop += EDGE_STEP
+  if (point.y < box.top + EDGE) row.scrollTop -= EDGE_STEP
+  const under = [...row.children].find((other) => holds(other, point))
+  if (under === undefined || under === slot) {
+    drag.crossed = undefined
+    return
+  }
+  if (under === drag.crossed) return
+  drag.crossed = under
+  if ((slot.compareDocumentPosition(under) & Node.DOCUMENT_POSITION_FOLLOWING) === 0) under.before(slot)
+  else under.after(slot)
 }
 
 const idsOf = (row: HTMLElement): ReadonlyArray<string> =>
@@ -52,7 +73,7 @@ const dragHandle = (row: HTMLElement, slot: HTMLElement, title: string, id: stri
     title: "Перетащите блок на новое место",
     "data-key": `handle:${id}`
   }, "⠿")
-  const state = { dragging: false }
+  const state: Drag = { dragging: false, crossed: undefined }
   const drop = (): void => {
     if (!state.dragging) return
     state.dragging = false
@@ -65,7 +86,7 @@ const dragHandle = (row: HTMLElement, slot: HTMLElement, title: string, id: stri
     state.dragging = true
     slot.classList.add("dragging")
   })
-  handle.addEventListener("pointermove", (event) => { if (state.dragging) follow(row, slot, event.clientX) })
+  handle.addEventListener("pointermove", (event) => { if (state.dragging) follow(row, slot, { x: event.clientX, y: event.clientY }, state) })
   handle.addEventListener("pointerup", drop)
   handle.addEventListener("pointercancel", drop)
   handle.addEventListener("keydown", (event) => {
@@ -85,7 +106,7 @@ const dragHandle = (row: HTMLElement, slot: HTMLElement, title: string, id: stri
 const slotOf = (row: HTMLElement, one: Placed, index: number, selected: string | undefined, actions: RowActions): HTMLElement => {
   const { block, take } = one
   const rank = block.takes.indexOf(take) + 1
-  const slot = h("li", { class: "slot", "data-id": block.id })
+  const slot = h("li", { class: "slot", "data-id": block.id, style: `--len: ${lengthOf(one.spans).toFixed(1)}` })
   const pick = h("button", {
     type: "button",
     class: "pick",
@@ -99,7 +120,8 @@ const slotOf = (row: HTMLElement, one: Placed, index: number, selected: string |
   const after = one.pauses.filter((pause) => pause.after === take.to).map((pause) => pauseChip(take.video, pause, actions))
   slot.append(
     h("div", { class: block.id === selected ? "block selected" : "block" },
-      h("div", { class: "block-head" }, dragHandle(row, slot, block.title, block.id, actions), pick), ...inner),
+      h("div", { class: "block-head" }, dragHandle(row, slot, block.title, block.id, actions), pick),
+      h("span", { class: "said" }, actions.textOf(take)), ...inner),
     ...after)
   return slot
 }

@@ -11,6 +11,7 @@ export interface Playing {
 export interface Montage {
   readonly node: HTMLVideoElement
   readonly play: (clips: ReadonlyArray<Clip>) => void
+  readonly show: (clip: Clip) => void
   readonly stop: () => void
 }
 
@@ -19,7 +20,7 @@ class Refused extends Data.TaggedError("Refused")<{ readonly byBrowser: boolean 
 const SEEK_SLACK = 0.05
 
 export const montage = (projectId: string, onChange: (playing: Playing | undefined) => void): Montage => {
-  const node = h("video", { class: "player", playsinline: true, preload: "metadata", hidden: true })
+  const node = h("video", { class: "player", playsinline: true, preload: "metadata" })
   const state: { clips: ReadonlyArray<Clip>; index: number; before: number; loading: boolean; watching: boolean } =
     { clips: [], index: 0, before: 0, loading: false, watching: false }
   const stop = (): void => {
@@ -73,11 +74,19 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
     state.clips = clips
     state.index = 0
     state.before = 0
-    node.hidden = false
     cue(0)
     if (state.watching) return
     state.watching = true
     requestAnimationFrame(watch)
   }
-  return { node, play, stop }
+  const show = (clip: Clip): void => {
+    if (state.clips.length > 0) return
+    if (node.dataset.video === clip.video) {
+      if (Math.abs(node.currentTime - clip.start) > SEEK_SLACK) node.currentTime = clip.start
+      return
+    }
+    node.dataset.video = clip.video
+    node.src = `${Api.previewUrl(projectId, clip.video)}#t=${clip.start}`
+  }
+  return { node, play, show, stop }
 }

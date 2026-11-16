@@ -200,7 +200,7 @@ const chatCard = (
   messages: ReadonlyArray<Api.Message>,
   models: ReadonlyArray<string>,
   onReply: () => void
-): { readonly node: HTMLElement; readonly ask: (message: string) => void } => {
+): { readonly node: HTMLElement; readonly ask: (message: string) => void; readonly scrollToEnd: () => void } => {
   const empty = h("p", { class: "muted" }, "Напишите, что оставить в ролике и что убрать. Студия слышит загруженные видео и сначала покажет план.")
   const log = h("div", { class: "chat" }, ...(messages.length === 0 ? [empty] : messages.map(bubble)))
   const text = h("textarea", { name: "text", rows: "3", required: true })
@@ -269,14 +269,44 @@ const chatCard = (
     h("p", { class: "muted" }, CHOICE_HINT), button, problem)
   form.className = "chat"
   const node = h("section", { class: "card" }, h("h2", {}, "Чат"), log, form)
+  const scrollToEnd = (): void => { log.scrollTop = log.scrollHeight }
   const ask = (message: string): void => {
-    node.scrollIntoView({ block: "end" })
     if (button.disabled) return
     text.value = message
     form.requestSubmit()
+    scrollToEnd()
   }
-  return { node, ask }
+  return { node, ask, scrollToEnd }
 }
+
+const TABS = [["chat", "Чат"], ["videos", "Видео"], ["text", "Текст видео"]] as const
+type Tab = typeof TABS[number][0]
+
+const sidePanel = (panes: Readonly<Record<Tab, HTMLElement>>): { readonly node: HTMLElement; readonly open: (tab: Tab) => void } => {
+  const node = h("section", { class: "side", "data-tab": "chat" })
+  const buttons = TABS.map(([tab, label]) => {
+    const button = h("button", { type: "button", class: "tab", "aria-pressed": String(tab === "chat"), click: () => { open(tab) } }, label)
+    panes[tab].classList.add(`tab-${tab}`)
+    return { tab, button }
+  })
+  function open(tab: Tab): void {
+    node.dataset.tab = tab
+    for (const one of buttons) one.button.setAttribute("aria-pressed", String(one.tab === tab))
+  }
+  node.append(h("div", { class: "tabs" }, ...buttons.map((one) => one.button)), panes.videos, panes.text, panes.chat)
+  return { node, open }
+}
+
+const LAYOUTS = ["a", "b", "c"] as const
+
+const layoutNow = (): typeof LAYOUTS[number] => {
+  const asked = new URLSearchParams(location.search).get("layout")
+  return LAYOUTS.find((layout) => layout === asked) ?? "a"
+}
+
+const layoutLinks = (id: string, now: string): HTMLElement =>
+  h("nav", { class: "variants", "aria-label": "Варианты экрана" }, h("span", { class: "muted" }, "Вариант"),
+    ...LAYOUTS.map((layout) => h("a", { href: `/?layout=${layout}#/p/${id}`, "aria-current": String(layout === now) }, layout.toUpperCase())))
 
 const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
   Effect.gen(function*() {
@@ -290,15 +320,22 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
       timeline.refresh()
     }
     const chat = chatCard(project, messages, models, refresh)
-    holder.ask = chat.ask
     const remove = h("button", {
       type: "button",
       class: "secondary end",
       click: () => { askToRemove(project, () => { location.hash = "#/" }) }
     }, "Удалить ролик")
-    show(h("a", { class: "back", href: "#/" }, "← Все ролики"), h("h1", {}, project.title), videoCard(project, refresh), timeline.node, videos.node, chat.node, remove)
+    const side = sidePanel({ chat: chat.node, videos: h("div", {}, videoCard(project, refresh), remove), text: videos.node })
+    holder.ask = (message) => {
+      side.open("chat")
+      chat.ask(message)
+    }
+    const layout = layoutNow()
+    show(
+      h("div", { class: "bar" }, h("a", { class: "back", href: "#/" }, "← Все ролики"), h("h1", {}, project.title), layoutLinks(project.id, layout)),
+      h("div", { class: "work", "data-layout": layout }, timeline.panels.line, timeline.panels.player, timeline.panels.takes, side.node))
     refresh()
-    if (messages.length > 0) chat.node.scrollIntoView({ block: "end" })
+    chat.scrollToEnd()
   })
 
 const route = (): void => {
