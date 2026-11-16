@@ -61,9 +61,10 @@ const section = (projectId: string, video: VideoView, retry: Retry): HTMLElement
   if (video.state === "waiting") {
     return h("div", { class: "video" }, title, h("p", { class: "muted", role: "status" }, "Студия слушает видео. Текст появится здесь сам через несколько минут."))
   }
-  const trouble = h("p", { class: "error" })
+  const trouble = h("p", { class: "error", role: "alert" })
   const again = h("button", {
     type: "button",
+    class: "end",
     click: () => {
       again.disabled = true
       trouble.textContent = ""
@@ -85,7 +86,7 @@ export const videosCard = (projectId: string): { readonly node: HTMLElement; rea
   const later = (): void => { state.timer = Number(globalThis.setTimeout(refresh, POLL_MS)) }
   const retry: Retry = (name, onFailure) => {
     Effect.runFork(Api.retryVideo(projectId, name).pipe(
-      Effect.map(() => { refresh() }),
+      Effect.map(() => { shown.delete(name); refresh() }),
       Effect.catch((error) => Effect.sync(() => { onFailure(error.message) }))
     ))
   }
