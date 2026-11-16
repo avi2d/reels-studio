@@ -1,4 +1,5 @@
 import { Data, Effect, Option, Schema } from "effect"
+import { VideoView } from "../shared/plan.ts"
 
 export class Failed extends Data.TaggedError("Failed")<{ readonly message: string }> {}
 export class Offline extends Data.TaggedError("Offline")<{}> {}
@@ -84,6 +85,14 @@ export const getProject = (id: string): Effect.Effect<typeof OneProject.Type, Fa
 
 export const getChat = (id: string): Effect.Effect<typeof Messages.Type, Failed> =>
   call(Messages, `/api/projects/${id}/chat`)
+
+const Videos = Schema.Struct({ videos: Schema.Array(VideoView) })
+
+export const getVideos = (id: string): Effect.Effect<typeof Videos.Type, Failed> =>
+  call(Videos, `/api/projects/${id}/videos`)
+
+export const previewUrl = (id: string, name: string): string =>
+  `/api/projects/${id}/videos/${encodeURIComponent(name)}/preview`
 
 export const postChat = (id: string, text: string, model: string, effort: Effort): Effect.Effect<Response, Offline> =>
   send(`/api/projects/${id}/chat`, post({ text, model, effort }))

@@ -11,7 +11,9 @@ const config = Config.all({
   port: Config.Port("REELS_PORT").pipe(Config.withDefault(8765)),
   projectsDir: Config.String("REELS_PROJECTS_DIR").pipe(Config.withDefault("projects")),
   pi: Config.String("REELS_PI").pipe(Config.withDefault("pi")),
-  models: Config.Array(Schema.String, "REELS_MODELS").pipe(Config.withDefault(DEFAULT_MODELS))
+  models: Config.Array(Schema.String, "REELS_MODELS").pipe(Config.withDefault(DEFAULT_MODELS)),
+  heavy: Config.String("REELS_HEAVY").pipe(Config.withDefault("")),
+  encoder: Config.String("REELS_ENCODER").pipe(Config.withDefault("libx264"))
 })
 
 export interface StudioSettings {
@@ -20,6 +22,8 @@ export interface StudioSettings {
   readonly projectsDir: string
   readonly pi: string
   readonly models: ReadonlyArray<string>
+  readonly heavy: ReadonlyArray<string>
+  readonly encoder: string
   readonly root: string
 }
 
@@ -30,7 +34,8 @@ export class Settings extends Context.Service<Settings, StudioSettings>()("reels
       const path = yield* Path.Path
       const values = yield* config
       const root = path.resolve(import.meta.dir, "..", "..")
-      return Settings.of({ ...values, projectsDir: path.resolve(values.projectsDir), root })
+      const heavy = values.heavy.split(" ").filter((part) => part !== "")
+      return Settings.of({ ...values, heavy, projectsDir: path.resolve(values.projectsDir), root })
     })
   )
 }

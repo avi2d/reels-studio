@@ -4,6 +4,7 @@ import { h } from "./dom.ts"
 import { formatDay, formatSize, modelName, parseEventBlock } from "./format.ts"
 import { oneAfterAnother } from "./queue.ts"
 import { upload, type Progress } from "./upload.ts"
+import { videosCard } from "./videos.ts"
 
 const app = document.querySelector("#app") ?? document.body
 
@@ -114,7 +115,7 @@ const uploadRow = (projectId: string, file: File) => {
   return { node, work }
 }
 
-const videoCard = (project: Api.ProjectView): HTMLElement => {
+const videoCard = (project: Api.ProjectView, onUploaded: () => void): HTMLElement => {
   const files = h("div", {}, fileList(project))
   const rows = h("ul", { class: "uploads" })
   if (!uploadsByProject.has(project.id)) uploadsByProject.set(project.id, [])
@@ -125,6 +126,7 @@ const videoCard = (project: Api.ProjectView): HTMLElement => {
     Effect.map(Api.getProject(project.id), (fresh) => {
       files.replaceChildren(fileList(fresh.project))
       label.textContent = PICK_MORE
+      onUploaded()
     })
   refreshByProject.set(project.id, refresh)
   const add = (chosen: ReadonlyArray<File>): void => {
@@ -180,8 +182,8 @@ const readReply = (
   return pump("")
 }
 
-const chatCard = (project: Api.ProjectView, messages: ReadonlyArray<Api.Message>, models: ReadonlyArray<string>): HTMLElement => {
-  const empty = h("p", { class: "muted" }, "Напишите, о чём ролик и что в нём оставить. Сначала студия покажет план.")
+const chatCard = (project: Api.ProjectView, messages: ReadonlyArray<Api.Message>, models: ReadonlyArray<string>, onReply: () => void): HTMLElement => {
+  const empty = h("p", { class: "muted" }, "Напишите, что оставить в ролике и что убрать. Студия слышит загруженные видео и сначала покажет план.")
   const log = h("div", { class: "chat" }, ...(messages.length === 0 ? [empty] : messages.map(bubble)))
   const text = h("textarea", { name: "text", rows: "3", required: true })
   const model = h("select", { name: "model" }, ...models.map((id) => h("option", { value: id, selected: id === project.model }, modelName(id))))
@@ -229,6 +231,7 @@ const chatCard = (project: Api.ProjectView, messages: ReadonlyArray<Api.Message>
         fail("связь оборвалась. Отправьте сообщение ещё раз.")
       }
       step.remove()
+      onReply()
     })
   const problem = h("p", { class: "error", role: "alert" })
   const form = h("form", {
@@ -254,8 +257,10 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
   Effect.gen(function*() {
     const [{ project }, { messages }, { models }] = yield* Effect.all([Api.getProject(id), Api.getChat(id), Api.getModels], { concurrency: 3 })
     document.title = `${project.title} · Студия Reels`
-    const chat = chatCard(project, messages, models)
-    show(h("a", { class: "back", href: "#/" }, "← Все ролики"), h("h1", {}, project.title), videoCard(project), chat)
+    const videos = videosCard(project.id)
+    const chat = chatCard(project, messages, models, videos.refresh)
+    show(h("a", { class: "back", href: "#/" }, "← Все ролики"), h("h1", {}, project.title), videoCard(project, videos.refresh), videos.node, chat)
+    videos.refresh()
     if (messages.length > 0) chat.scrollIntoView({ block: "end" })
   })
 

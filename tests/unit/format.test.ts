@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test"
-import { encodeMetadata, formatDay, formatSize, modelName, parseEventBlock } from "../../src/web/format.ts"
+import { encodeMetadata, formatDay, formatLength, formatSize, modelName, parseEventBlock } from "../../src/web/format.ts"
+
+test("a length is minutes and two-digit seconds, rounded to the nearest second", () => {
+  expect(formatLength(235.128)).toBe("3:55")
+  expect(formatLength(59.6)).toBe("1:00")
+  expect(formatLength(5)).toBe("0:05")
+})
 
 test("sizes use 1024 steps and a decimal comma, not a point", () => {
   expect(formatSize(0)).toBe("0 Б")
