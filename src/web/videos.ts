@@ -9,7 +9,12 @@ type Heard = Extract<VideoView, { readonly state: "ready" }>
 const POLL_MS = 4000
 
 const skipRemoved = (player: HTMLVideoElement, spans: ReadonlyArray<Span>): void => {
+  let exempt: Span | undefined
   const jump = (): void => {
+    if (exempt !== undefined) {
+      if (player.currentTime < exempt.end) return
+      exempt = undefined
+    }
     const target = skipTarget(spans, player.currentTime)
     if (target !== undefined) player.currentTime = target
   }
@@ -19,7 +24,10 @@ const skipRemoved = (player: HTMLVideoElement, spans: ReadonlyArray<Span>): void
     requestAnimationFrame(watch)
   }
   player.addEventListener("play", watch)
-  player.addEventListener("seeked", jump)
+  player.addEventListener("seeked", () => {
+    const target = skipTarget(spans, player.currentTime)
+    if (target !== undefined) exempt = spans.find((span) => player.currentTime >= span.start && player.currentTime < span.end)
+  })
 }
 
 const heardSection = (projectId: string, video: Heard): ReadonlyArray<HTMLElement> => {
