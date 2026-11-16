@@ -58,14 +58,14 @@ export const libraryPicker = (
     add.textContent = "Добавляем…"
     problem.textContent = ""
     Effect.runFork(Api.addVideos(projectId, picks).pipe(
-      Effect.flatMap(() => onAdded()),
+      Effect.andThen(onAdded()),
       Effect.map(() => {
         show(false)
         reload()
       }),
       Effect.catchTag("Failed", (error) =>
-        Effect.zipRight(
-          Effect.ignore(onAdded()),
+        Effect.andThen(
+          Effect.catchTag(onAdded(), "Failed", () => Effect.void),
           Effect.sync(() => {
             problem.textContent = error.message
             reload()
