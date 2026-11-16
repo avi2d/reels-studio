@@ -53,13 +53,29 @@ const heardSection = (projectId: string, video: Heard): ReadonlyArray<HTMLElemen
   return [player, h("p", { class: "muted" }, summary), text, h("p", { class: "muted" }, "Нажмите на слово, и видео перейдёт к нему.")]
 }
 
-const section = (projectId: string, video: VideoView): HTMLElement => {
+type Retry = (name: string, onFailure: (message: string) => void) => void
+
+const section = (projectId: string, video: VideoView, retry: Retry): HTMLElement => {
   const title = h("h3", {}, video.name)
   if (video.state === "ready") return h("div", { class: "video" }, title, ...heardSection(projectId, video))
-  const note = video.state === "waiting"
-    ? h("p", { class: "muted", role: "status" }, "Студия слушает видео. Текст появится здесь сам через несколько минут.")
-    : h("p", { class: "error", role: "alert" }, "Студия не расслышала это видео. Попробует ещё раз после перезапуска студии.")
-  return h("div", { class: "video" }, title, note)
+  if (video.state === "waiting") {
+    return h("div", { class: "video" }, title, h("p", { class: "muted", role: "status" }, "Студия слушает видео. Текст появится здесь сам через несколько минут."))
+  }
+  const trouble = h("p", { class: "error", role: "alert" })
+  const again = h("button", {
+    type: "button",
+    class: "end",
+    click: () => {
+      again.disabled = true
+      trouble.textContent = ""
+      retry(video.name, (message) => {
+        again.disabled = false
+        trouble.textContent = message
+      })
+    }
+  }, "Попробовать ещё раз")
+  const note = h("p", { class: "error", role: "alert" }, "Студия не расслышала это видео. Нажмите «Попробовать ещё раз», чтобы она послушала его снова.")
+  return h("div", { class: "video" }, title, note, again, trouble)
 }
 
 export const videosCard = (projectId: string): { readonly node: HTMLElement; readonly refresh: () => void } => {
@@ -68,13 +84,19 @@ export const videosCard = (projectId: string): { readonly node: HTMLElement; rea
   const shown = new Map<string, { readonly seen: string; readonly node: HTMLElement }>()
   const state = { timer: 0 }
   const later = (): void => { state.timer = Number(globalThis.setTimeout(refresh, POLL_MS)) }
+  const retry: Retry = (name, onFailure) => {
+    Effect.runFork(Api.retryVideo(projectId, name).pipe(
+      Effect.map(() => { const old = shown.get(name); if (old !== undefined) shown.set(name, { seen: "", node: old.node }); refresh() }),
+      Effect.catch((error) => Effect.sync(() => { onFailure(error.message) }))
+    ))
+  }
   const render = (videos: ReadonlyArray<VideoView>): void => {
     node.hidden = videos.length === 0
     for (const video of videos) {
       const seen = JSON.stringify(video)
       const old = shown.get(video.name)
       if (old?.seen === seen) continue
-      const fresh = section(projectId, video)
+      const fresh = section(projectId, video, retry)
       shown.set(video.name, { seen, node: fresh })
       if (old === undefined) body.append(fresh)
       else old.node.replaceWith(fresh)

@@ -92,6 +92,9 @@ const Videos = Schema.Struct({ videos: Schema.Array(VideoView) })
 export const getVideos = (id: string): Effect.Effect<typeof Videos.Type, Failed> =>
   call(Videos, `/api/projects/${id}/videos`)
 
+export const retryVideo = (id: string, name: string): Effect.Effect<void, Failed> =>
+  call(Schema.Struct({ video: VideoView }), `/api/projects/${id}/videos/${encodeURIComponent(name)}/retry`, { method: "POST" }).pipe(Effect.asVoid)
+
 export const previewUrl = (id: string, name: string): string =>
   `/api/projects/${id}/videos/${encodeURIComponent(name)}/preview`
 

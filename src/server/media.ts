@@ -79,6 +79,7 @@ const view = Effect.fnUntraced(function*(unheard: Unheard, job: Job) {
 export class Media extends Context.Service<Media, {
   readonly videos: (id: string) => Effect.Effect<ReadonlyArray<VideoView>, ApiError>
   readonly preview: (id: string, name: string) => Effect.Effect<string, ApiError>
+  readonly retry: (id: string, name: string) => Effect.Effect<VideoView, ApiError>
   readonly library: (id: string) => Effect.Effect<ReadonlyArray<LibraryVideo>, ApiError>
   readonly reuse: (id: string, picks: ReadonlyArray<Pick>) => Effect.Effect<void, ApiError>
   readonly withoutWork: <A, E, R>(dir: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
@@ -113,6 +114,15 @@ export class Media extends Context.Service<Media, {
         const target = places({ dir, name }).preview
         if (!(yield* fs.exists(target))) return yield* notFound("Этот файл ещё не готов")
         return target
+      }, orBroken, Effect.provideContext(context))
+
+      const retry = Effect.fn("Media.retry")(function*(id: string, name: string) {
+        const dir = yield* projects.folder(id)
+        const names = yield* sourceNames(dir)
+        if (!names.includes(name)) return yield* notFound("Такого видео в ролике нет")
+        const job: Job = { dir, name }
+        yield* Ref.update(unheard, (set) => new Set([...set].filter((key) => key !== keyOf(job))))
+        return yield* view(unheard, job)
       }, orBroken, Effect.provideContext(context))
 
       const library = Effect.fn("Media.library")(function*(id: string) {
@@ -150,7 +160,7 @@ export class Media extends Context.Service<Media, {
           () => Ref.update(work, (state) => ({ ...state, closed: new Set([...state.closed].filter((other) => other !== dir)) }))
         )
 
-      return Media.of({ videos, preview, library, reuse, withoutWork })
+      return Media.of({ videos, preview, retry, library, reuse, withoutWork })
     })
   )
 }
