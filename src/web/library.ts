@@ -41,7 +41,7 @@ export const libraryPicker = (
     state.chosen = new Map(made.map(({ box, video }) => [box, video]))
     list.replaceChildren(...made.map(({ node }) => node))
     open.hidden = videos.length === 0
-    if (videos.length === 0) show(false)
+    if (videos.length === 0 && problem.textContent === "") show(false)
     recount()
   }
   const reload = (): void => {
