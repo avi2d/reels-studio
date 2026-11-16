@@ -1,6 +1,6 @@
 import { Data, Effect, FileSystem, Option, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/process"
-import { Plan, Transcript, type VideoPlan } from "../shared/plan.ts"
+import { Plan, Transcript } from "../shared/plan.ts"
 import { isHdr, prepareArgs, probeArgs, transcriptText } from "./media-commands.ts"
 import { Settings } from "./settings.ts"
 
@@ -48,10 +48,13 @@ export const readTranscript = Effect.fnUntraced(function*(job: Job) {
 export const readPlan = Effect.fnUntraced(function*(job: Job) {
   const fs = yield* FileSystem.FileSystem
   const file = `${job.dir}/plan.json`
-  const none: VideoPlan = { video: job.name, remove: [] }
-  if (!(yield* fs.exists(file))) return none
+  if (!(yield* fs.exists(file))) return undefined
   const plan = Option.getOrUndefined(decodePlan(yield* fs.readFileString(file)))
-  return plan?.videos.find((video) => video.video === job.name) ?? none
+  if (plan === undefined) {
+    yield* Effect.logError("the plan is unreadable", file)
+    return undefined
+  }
+  return plan.videos.find((video) => video.video === job.name)
 })
 
 export const listen = Effect.fn("Media.listen")(function*(job: Job) {

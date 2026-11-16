@@ -24,14 +24,15 @@ const skipRemoved = (player: HTMLVideoElement, spans: ReadonlyArray<Span>): void
 
 const heardSection = (projectId: string, video: Heard): ReadonlyArray<HTMLElement> => {
   const { duration, words } = video.transcript
-  const spans = removedSpans(video.transcript, video.plan)
-  const removed = removedWords(words.length, video.plan)
+  const spans = video.plan === undefined ? [] : removedSpans(video.transcript, video.plan)
+  const removed = video.plan === undefined ? words.map(() => false) : removedWords(words.length, video.plan)
   const player = h("video", { class: "player", controls: true, playsinline: true, preload: "metadata", src: Api.previewUrl(projectId, video.name) })
   skipRemoved(player, spans)
   if (words.length === 0) return [player, h("p", { class: "muted" }, `Длина ${formatLength(duration)}. Студия не услышала в этом видео слов.`)]
-  const summary = spans.length === 0
-    ? `Длина ${formatLength(duration)}. Плана пока нет: напишите в чате, что убрать.`
-    : `Длина ${formatLength(duration)}, без зачёркнутого ${formatLength(duration - lengthOf(spans))}. Зачёркнутое плеер пропускает.`
+  let summary: string
+  if (video.plan === undefined) summary = `Длина ${formatLength(duration)}. Плана пока нет: напишите в чате, что убрать.`
+  else if (spans.length === 0) summary = `Длина ${formatLength(duration)}. По плану видео остаётся целым.`
+  else summary = `Длина ${formatLength(duration)}, без зачёркнутого ${formatLength(duration - lengthOf(spans))}. Зачёркнутое плеер пропускает.`
   const text = h("p", { class: "transcript" }, ...words.flatMap((word, index) => {
     const node = h("span", { class: "word", click: () => { player.currentTime = word.start } }, word.text)
     return [removed[index] === true ? h("del", {}, node) : node, " "]

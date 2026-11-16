@@ -1,6 +1,5 @@
 [Unit]
 Description=Reels studio
-After=network-online.target
 
 [Service]
 WorkingDirectory=%h/Projects/reels-studio

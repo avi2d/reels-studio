@@ -8,7 +8,9 @@ import { pageRoutes } from "./server/page.ts"
 import { Projects } from "./server/projects.ts"
 import { Settings } from "./server/settings.ts"
 
-const services = Layer.mergeAll(Chat.layer, Media.layer).pipe(Layer.provideMerge(Projects.layer), Layer.provideMerge(Settings.layer))
+const mediaLive = Media.layer
+const chatLive = Chat.layer.pipe(Layer.provideMerge(mediaLive))
+const services = Layer.mergeAll(chatLive, mediaLive).pipe(Layer.provideMerge(Projects.layer), Layer.provideMerge(Settings.layer))
 
 const server = Layer.unwrap(Effect.gen(function*() {
   const settings = yield* Settings

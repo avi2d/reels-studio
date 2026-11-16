@@ -51,7 +51,10 @@ const view = Effect.fnUntraced(function*(unheard: Unheard, job: Job) {
   const unready = (state: "failed" | "waiting"): VideoView => ({ name: job.name, state })
   if ((yield* Ref.get(unheard)).has(keyOf(job))) return unready("failed")
   if (!(yield* fs.exists(places(job).transcript))) return unready("waiting")
-  const ready: VideoView = { name: job.name, state: "ready", transcript: yield* readTranscript(job), plan: yield* readPlan(job) }
+  const transcript = yield* readTranscript(job)
+  const plan = yield* readPlan(job)
+  if (plan === undefined) return { name: job.name, state: "ready", transcript }
+  const ready: VideoView = { name: job.name, state: "ready", transcript, plan }
   return ready
 })
 
