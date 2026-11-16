@@ -27,7 +27,7 @@ const videoLine = (video: { readonly name: string; readonly state: "ready" | "wa
   video.state === "ready"
     ? `- source/${video.name}: heard, its words are in transcripts/${video.name}.txt`
     : video.state === "failed"
-      ? `- source/${video.name}: the studio could not hear it, ask the person to upload it again`
+      ? `- source/${video.name}: the studio could not hear it and will try it again after the studio restarts`
       : `- source/${video.name}: the studio is still listening to it, no transcript yet`
 
 const inPlainWords = (event: ChatEvent): Effect.Effect<ChatEvent> =>

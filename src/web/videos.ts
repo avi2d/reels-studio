@@ -31,7 +31,7 @@ const heardSection = (projectId: string, video: Heard): ReadonlyArray<HTMLElemen
   if (words.length === 0) return [player, h("p", { class: "muted" }, `Длина ${formatLength(duration)}. Студия не услышала в этом видео слов.`)]
   let summary: string
   if (video.plan === undefined) summary = `Длина ${formatLength(duration)}. Плана пока нет: напишите в чате, что убрать.`
-  else if (spans.length === 0) summary = `Длина ${formatLength(duration)}. По плану видео остаётся целым.`
+  else if (!removed.some((struck) => struck)) summary = `Длина ${formatLength(duration)}. По плану видео остаётся целым.`
   else summary = `Длина ${formatLength(duration)}, без зачёркнутого ${formatLength(duration - lengthOf(spans))}. Зачёркнутое плеер пропускает.`
   const text = h("p", { class: "transcript" }, ...words.flatMap((word, index) => {
     const node = h("span", { class: "word", click: () => { player.currentTime = word.start } }, word.text)
@@ -45,7 +45,7 @@ const section = (projectId: string, video: VideoView): HTMLElement => {
   if (video.state === "ready") return h("div", { class: "video" }, title, ...heardSection(projectId, video))
   const note = video.state === "waiting"
     ? h("p", { class: "muted", role: "status" }, "Студия слушает видео. Текст появится здесь сам через несколько минут.")
-    : h("p", { class: "error", role: "alert" }, "Студия не расслышала это видео. Загрузите его ещё раз.")
+    : h("p", { class: "error", role: "alert" }, "Студия не расслышала это видео. Попробует ещё раз после перезапуска студии.")
   return h("div", { class: "video" }, title, note)
 }
 

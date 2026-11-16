@@ -18,7 +18,7 @@ The original in `source/` is never changed, renamed or deleted.
 1. Look at what the project holds: list `source/` and `transcripts/`, and read `plan.md` and `plan.json` when they exist.
 2. When `source/` is empty, ask the person to upload the video on this page and stop.
 3. When a video has no transcript yet, say that the studio is still listening to it and ask the person to write again in a few minutes.
-When a video is listed as the studio could not hear it, ask the person to upload it again.
+When a video is listed as the studio could not hear it, say that the studio will try it again after the studio restarts.
 4. Read the transcript of every video before you say anything about its content.
    Never ask the person to retype or retell what is said in a video.
 5. Ask what must stay in the video, when the person has not said.

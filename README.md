@@ -123,7 +123,7 @@ The page opens on the computer itself and not from another device until the owne
 
 ffmpeg or the recognizer failed, and the studio log holds what it printed.
 Run `journalctl --user -u reels-studio.service` to read the log.
-The studio tries the video again after a restart.
+The studio tries the video again after a restart of the studio.
 
 ### The chat answers «Ответ не дошёл»
 
