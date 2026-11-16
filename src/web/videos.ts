@@ -86,7 +86,7 @@ export const videosCard = (projectId: string): { readonly node: HTMLElement; rea
   const later = (): void => { state.timer = Number(globalThis.setTimeout(refresh, POLL_MS)) }
   const retry: Retry = (name, onFailure) => {
     Effect.runFork(Api.retryVideo(projectId, name).pipe(
-      Effect.map(() => { shown.delete(name); refresh() }),
+      Effect.map(() => { const old = shown.get(name); if (old !== undefined) shown.set(name, { seen: "", node: old.node }); refresh() }),
       Effect.catch((error) => Effect.sync(() => { onFailure(error.message) }))
     ))
   }
