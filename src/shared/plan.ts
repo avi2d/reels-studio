@@ -17,7 +17,7 @@ export const Plan = Schema.Struct({ videos: Schema.Array(VideoPlan) })
 
 export const VideoView = Schema.Union([
   Schema.Struct({ name: Schema.String, state: Schema.Literals(["waiting", "failed"]) }),
-  Schema.Struct({ name: Schema.String, state: Schema.Literal("ready"), transcript: Transcript, plan: Schema.optionalKey(VideoPlan) })
+  Schema.Struct({ name: Schema.String, state: Schema.Literal("ready"), transcript: Transcript, plan: Schema.optionalKey(Schema.Union([VideoPlan, Schema.Literal("unreadable")])) })
 ])
 export type VideoView = typeof VideoView.Type
 

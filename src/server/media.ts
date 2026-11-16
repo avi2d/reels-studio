@@ -53,7 +53,7 @@ const view = Effect.fnUntraced(function*(unheard: Unheard, job: Job) {
   if (!(yield* fs.exists(places(job).transcript))) return unready("waiting")
   const transcript = yield* readTranscript(job)
   const plan = yield* readPlan(job)
-  if (plan === undefined) return { name: job.name, state: "ready", transcript }
+  if (plan === undefined) { const ready: VideoView = { name: job.name, state: "ready", transcript }; return ready }
   const ready: VideoView = { name: job.name, state: "ready", transcript, plan }
   return ready
 })

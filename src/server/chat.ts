@@ -2,6 +2,7 @@ import { Array as Arr, Context, Effect, Fiber, FileSystem, Layer, Path, Ref, Sch
 import { ChildProcess, type ChildProcessSpawner } from "effect/process"
 import { ApiError, badRequest, orUnavailable } from "./api-error.ts"
 import { Media } from "./media.ts"
+import type { VideoView } from "../shared/plan.ts"
 import { toChatEvents, type ChatEvent } from "./pi-events.ts"
 import { Projects, type Effort } from "./projects.ts"
 import { Settings } from "./settings.ts"
@@ -23,8 +24,10 @@ const MODEL_FAILED = "модель не ответила. Выберите др�
 const UNAVAILABLE = "Чат недоступен. Отправьте сообщение ещё раз."
 const INTERRUPTED = "студия остановилась раньше, чем ответила. Отправьте сообщение ещё раз."
 
-const videoLine = (video: { readonly name: string; readonly state: "ready" | "waiting" | "failed" }): string =>
-  video.state === "ready"
+const videoLine = (video: VideoView): string =>
+  video.state === "ready" && video.plan === "unreadable"
+    ? `- source/${video.name}: heard, its words are in transcripts/${video.name}.txt, but plan.json is not valid and must be rewritten in the format the skill gives`
+    : video.state === "ready"
     ? `- source/${video.name}: heard, its words are in transcripts/${video.name}.txt`
     : video.state === "failed"
       ? `- source/${video.name}: the studio could not hear it and will try it again after the studio restarts`

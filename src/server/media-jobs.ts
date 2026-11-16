@@ -52,7 +52,7 @@ export const readPlan = Effect.fnUntraced(function*(job: Job) {
   const plan = Option.getOrUndefined(decodePlan(yield* fs.readFileString(file)))
   if (plan === undefined) {
     yield* Effect.logError("the plan is unreadable", file)
-    return undefined
+    return "unreadable" as const
   }
   return plan.videos.find((video) => video.video === job.name)
 })
