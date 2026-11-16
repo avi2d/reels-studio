@@ -118,6 +118,10 @@ const videos = Layer.mergeAll(
     const media = yield* Media
     const target = yield* media.preview(yield* param("id"), yield* param("name"))
     return yield* sendFile(target, "video/mp4", request.headers["range"])
+  }))),
+  HttpRouter.add("POST", "/api/projects/:id/videos/:name/retry", reply(Effect.gen(function*() {
+    const media = yield* Media
+    return json({ video: yield* media.retry(yield* param("id"), yield* param("name")) })
   })))
 )
 

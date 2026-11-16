@@ -61,6 +61,7 @@ const view = Effect.fnUntraced(function*(unheard: Unheard, job: Job) {
 export class Media extends Context.Service<Media, {
   readonly videos: (id: string) => Effect.Effect<ReadonlyArray<VideoView>, ApiError>
   readonly preview: (id: string, name: string) => Effect.Effect<string, ApiError>
+  readonly retry: (id: string, name: string) => Effect.Effect<VideoView, ApiError>
 }>()("reels-studio/Media") {
   static readonly layer = Layer.effect(
     Media,
@@ -93,7 +94,16 @@ export class Media extends Context.Service<Media, {
         return target
       }, orBroken, Effect.provideContext(context))
 
-      return Media.of({ videos, preview })
+      const retry = Effect.fn("Media.retry")(function*(id: string, name: string) {
+        const dir = yield* projects.folder(id)
+        const names = yield* sourceNames(dir)
+        if (!names.includes(name)) return yield* notFound("Такого видео в ролике нет")
+        const job: Job = { dir, name }
+        yield* Ref.update(unheard, (set) => new Set([...set].filter((key) => key !== keyOf(job))))
+        return yield* view(unheard, job)
+      }, orBroken, Effect.provideContext(context))
+
+      return Media.of({ videos, preview, retry })
     })
   )
 }
