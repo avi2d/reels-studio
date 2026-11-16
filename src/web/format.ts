@@ -9,6 +9,11 @@ export const formatSize = (bytes: number): string => {
   return `${value.toFixed(digits).replace(".", ",")} ${UNITS[power] ?? "Б"}`
 }
 
+export const formatLength = (seconds: number): string => {
+  const whole = Math.round(seconds)
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`
+}
+
 export const formatDay = (iso: string): string =>
   new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric" }).format(new Date(iso))
 

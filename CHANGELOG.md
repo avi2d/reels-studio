@@ -8,4 +8,4 @@ Released 2026-11-15.
 
 ### Features
 
-- serve the studio page with chat, upload and three skills
+- serve the studio page with chat, upload and three skills [#1](https://github.com/avi2d/reels-studio/pull/1)

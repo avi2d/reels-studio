@@ -1,6 +1,8 @@
 import { Array as Arr, Context, Effect, Fiber, FileSystem, Layer, Path, Ref, Schema, Stream } from "effect"
 import { ChildProcess, type ChildProcessSpawner } from "effect/process"
 import { ApiError, badRequest, orUnavailable } from "./api-error.ts"
+import { Media } from "./media.ts"
+import type { VideoView } from "../shared/plan.ts"
 import { toChatEvents, type ChatEvent } from "./pi-events.ts"
 import { Projects, type Effort } from "./projects.ts"
 import { Settings } from "./settings.ts"
@@ -21,6 +23,15 @@ const STOPPED = "чат не запустился. Отправьте сообщ
 const MODEL_FAILED = "модель не ответила. Выберите другую модель или отправьте сообщение ещё раз."
 const UNAVAILABLE = "Чат недоступен. Отправьте сообщение ещё раз."
 const INTERRUPTED = "студия остановилась раньше, чем ответила. Отправьте сообщение ещё раз."
+
+const videoLine = (video: VideoView): string =>
+  video.state === "ready" && video.plan === "unreadable"
+    ? `- source/${video.name}: heard, its words are in transcripts/${video.name}.txt, but plan.json is not valid and must be rewritten in the format the skill gives`
+    : video.state === "ready"
+    ? `- source/${video.name}: heard, its words are in transcripts/${video.name}.txt`
+    : video.state === "failed"
+      ? `- source/${video.name}: the studio could not hear it and will try it again after the studio restarts`
+      : `- source/${video.name}: the studio is still listening to it, no transcript yet`
 
 const inPlainWords = (event: ChatEvent): Effect.Effect<ChatEvent> =>
   event.type === "error"
@@ -175,6 +186,7 @@ export class Chat extends Context.Service<Chat, {
       const path = yield* Path.Path
       const settings = yield* Settings
       const projects = yield* Projects
+      const media = yield* Media
       const context = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>()
       const busy = yield* Ref.make<ReadonlySet<string>>(new Set())
       const systemPrompt = yield* fs.readFileString(path.join(settings.root, "prompts", "studio.md")).pipe(orBroken)
@@ -189,7 +201,12 @@ export class Chat extends Context.Service<Chat, {
         const text = yield* fs.readFileString(file).pipe(orBroken)
         return Arr.getSomes(text.split("\n").map((line) => decodeLine(line)))
       })
-      const command = (dir: string, text: string, model: string, effort: Effort) => {
+      const heardVideos = Effect.fn("Chat.heardVideos")(function*(id: string) {
+        const videos = yield* media.videos(id)
+        const lines = videos.map(videoLine)
+        return lines.length === 0 ? "No video is uploaded yet." : lines.join("\n")
+      }, orBroken)
+      const command = (dir: string, text: string, model: string, effort: Effort, videos: string) => {
         const prompt = JSON.stringify({ id: "prompt", type: "prompt", message: text })
         return ChildProcess.make(settings.pi, [
           "--mode", "rpc",
@@ -205,20 +222,20 @@ export class Chat extends Context.Service<Chat, {
           "--no-context-files",
           "--no-prompt-templates",
           "--extension", path.join(settings.root, "src", "pi", "project-guard.ts"),
-          "--system-prompt", systemPrompt
+          "--system-prompt", `${systemPrompt}\nThe uploaded videos:\n${videos}\n`
         ], {
           cwd: dir,
           stdin: Stream.concat(Stream.make(new TextEncoder().encode(prompt + "\n")), Stream.never),
         })
       }
-      const run = (dir: string, text: string, model: string, effort: Effort): Stream.Stream<ChatEvent, ApiError> =>
+      const run = (id: string, dir: string, text: string, model: string, effort: Effort): Stream.Stream<ChatEvent, ApiError> =>
         Stream.unwrap(Effect.gen(function*() {
           const state = yield* Ref.make<RunState>({ text: "", base: "", pending: undefined, failed: undefined, settled: false })
           yield* Effect.addFinalizer(() =>
             Ref.get(state).pipe(Effect.flatMap((last) => append(dir, lastWords(last))),
               Effect.catchTag("ApiError", (error) => Effect.logError("the reply was not saved", error.message))
             ))
-          const handle = yield* command(dir, text, model, effort).pipe(orBroken)
+          const handle = yield* command(dir, text, model, effort, yield* heardVideos(id)).pipe(orBroken)
           const complaints = yield* handle.stderr.pipe(Stream.decodeText(), Stream.mkString, Effect.forkScoped)
           return piStream(handle.stdout, makeExpand(state), stoppedStream(state, complaints))
         })).pipe(brokenStream, Stream.provideContext(context))
@@ -235,7 +252,7 @@ export class Chat extends Context.Service<Chat, {
           yield* projects.setChoice(id, model, effort)
           yield* append(dir, { role: "user", text: trimmed })
         }).pipe(Effect.onError(() => release))
-        return run(dir, trimmed, model, effort).pipe(Stream.ensuring(release))
+        return run(id, dir, trimmed, model, effort).pipe(Stream.ensuring(release))
       })
       return Chat.of({ history, send })
     })
