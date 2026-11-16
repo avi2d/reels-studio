@@ -160,6 +160,18 @@ export interface Clip extends Span {
 export const clipsOf = (placed: ReadonlyArray<Placed>): ReadonlyArray<Clip> =>
   placed.flatMap((one) => one.spans.map((span) => ({ ...span, video: one.take.video, block: one.block.id })))
 
+export const withNeighbours = (cut: ReadonlyArray<Clip>, block: string, own: ReadonlyArray<Clip>, seconds: number): ReadonlyArray<Clip> => {
+  const blocks = cut.map((clip) => clip.block)
+  const first = blocks.indexOf(block)
+  const before = first > 0 ? cut[first - 1] : undefined
+  const after = first === -1 ? undefined : cut[blocks.lastIndexOf(block) + 1]
+  return [
+    ...(before === undefined ? [] : [{ ...before, start: Math.max(before.start, before.end - seconds) }]),
+    ...own,
+    ...(after === undefined ? [] : [{ ...after, end: Math.min(after.end, after.start + seconds) }])
+  ]
+}
+
 export const withChoice = (edits: Edits, block: string, take: Take): Edits => ({
   ...edits,
   chosen: [...edits.chosen.filter((chosen) => chosen.block !== block), { block, video: take.video, from: take.from }]

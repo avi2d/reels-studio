@@ -71,6 +71,7 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
   })
   node.addEventListener("error", () => { if (state.clips.length > 0) stop() })
   const play = (clips: ReadonlyArray<Clip>): void => {
+    if (clips.length === 0) return
     state.clips = clips
     state.index = 0
     state.before = 0

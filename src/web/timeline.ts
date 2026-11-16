@@ -1,17 +1,20 @@
 import { Effect } from "effect"
 import { lengthOf, type Transcript } from "../shared/plan.ts"
 import {
-  arrange, assemble, chosenTake, clipsOf, MIN_PAUSE, NO_EDITS, playedSpans, withChoice, withDeleted, withPauses,
-  type Edits, type Placed, type Take, type TimelineView
+  arrange, assemble, chosenTake, clipsOf, MIN_PAUSE, NO_EDITS, playedSpans, withChoice, withDeleted, withNeighbours, withPauses,
+  type Clip, type Edits, type Placed, type Take, type TimelineView
 } from "../shared/timeline.ts"
 import * as Api from "./api.ts"
 import { h } from "./dom.ts"
 import { formatLength, formatPause } from "./format.ts"
 import { montage, type Playing } from "./montage.ts"
 import { blockDetail, deletedList, type DetailActions } from "./timeline-detail.ts"
+import { KEYS_HINT, onKeys } from "./timeline-keys.ts"
+import { cutMap } from "./timeline-map.ts"
 import { blockRow, type RowActions } from "./timeline-row.ts"
 
 const POLL_MS = 4000
+const AROUND_SECONDS = 2
 const PLAY = "Смотреть монтаж"
 const STOP = "Остановить"
 const GATHER = "Собери блоки из всех видео и расставь дубли от лучшего к худшему."
@@ -99,6 +102,7 @@ const partsOf = (): Parts => ({
   play: h("button", { type: "button", disabled: true, title: "Пробел запускает и останавливает просмотр" }, PLAY),
   strip: h("button", { type: "button", class: "secondary", hidden: true }),
   rowHolder: h("div", { class: "blocks-holder" }),
+  map: h("ol", { class: "map" }),
   detailHolder: h("div", { class: "details" })
 })
 
@@ -107,6 +111,7 @@ interface Parts {
   readonly play: HTMLButtonElement
   readonly strip: HTMLButtonElement
   readonly rowHolder: HTMLElement
+  readonly map: HTMLElement
   readonly detailHolder: HTMLElement
 }
 
@@ -137,6 +142,7 @@ const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): Placed | undef
   parts.rowHolder.replaceChildren(row)
   row.scrollLeft = old?.scrollLeft ?? 0
   row.scrollTop = old?.scrollTop ?? 0
+  parts.map.replaceChildren(...cutMap(placed, open?.block.id, actions.select))
   parts.detailHolder.replaceChildren(
     ...(open === undefined ? [] : [blockDetail(open.block, index + 1, chosenTake(open.block, edits), loaded.transcripts, edits, actions)]),
     ...(deleted.length === 0 ? [] : [deletedList(deleted, actions)]))
@@ -148,6 +154,7 @@ const markPlaying = (parts: Parts, clock: HTMLElement, shown: { block: string | 
   clock.textContent = playing === undefined ? "" : formatLength(playing.elapsed)
   if (shown.block === playing?.clip.block) return
   shown.block = playing?.clip.block
+  for (const item of parts.map.querySelectorAll<HTMLElement>(".map-item")) item.classList.toggle("playing", item.dataset.id === shown.block)
   for (const slot of parts.rowHolder.querySelectorAll<HTMLElement>(".slot")) {
     const current = slot.dataset.id === shown.block
     slot.classList.toggle("playing", current)
@@ -155,23 +162,9 @@ const markPlaying = (parts: Parts, clock: HTMLElement, shown: { block: string | 
   }
 }
 
-const TYPING = "input, textarea, select, button, a, video, dialog"
-
-const onSpace = (anchor: HTMLElement, press: () => void): void => {
-  const listen = (event: KeyboardEvent): void => {
-    if (!anchor.isConnected) {
-      document.removeEventListener("keydown", listen)
-      return
-    }
-    if (event.code !== "Space" || (event.target instanceof Element && event.target.closest(TYPING) !== null)) return
-    event.preventDefault()
-    press()
-  }
-  document.addEventListener("keydown", listen)
-}
-
 interface Panels {
   readonly line: HTMLElement
+  readonly map: HTMLElement
   readonly player: HTMLElement
   readonly takes: HTMLElement
 }
@@ -197,6 +190,7 @@ const frameOf = (parts: Parts): Frame => {
   const ready = h("div", { class: "timeline", hidden: true }, parts.rowHolder, problem)
   const stage = h("div", { class: "stage" })
   const panels: Panels = {
+    map: h("nav", { class: "card p-map", "aria-label": "Весь монтаж", hidden: true }, parts.map, h("p", { class: "muted keys" }, KEYS_HINT)),
     line: h("section", { class: "card p-line" }, h("div", { class: "line-head" }, h("h2", {}, "Монтаж"), parts.summary), notes, ready),
     player: h("section", { class: "card p-player", "aria-label": "Просмотр" }, stage, h("div", { class: "row" }, parts.play, parts.strip, clock)),
     takes: h("section", { class: "card p-takes", "aria-label": "Дубли" }, hint, parts.detailHolder)
@@ -209,14 +203,32 @@ const placedOf = (loaded: Loaded | undefined, edits: Edits): ReadonlyArray<Place
   return loaded === undefined || view?.state !== "ready" ? [] : assemble(view.blocks, edits, loaded.transcripts)
 }
 
+const takeClips = (loaded: Loaded | undefined, edits: Edits, block: string, take: Take): ReadonlyArray<Clip> => {
+  const transcript = loaded?.transcripts.get(take.video)
+  return transcript === undefined ? [] : playedSpans(transcript, take, edits).map((span) => ({ ...span, video: take.video, block }))
+}
+
+const neighbourOf = (placed: ReadonlyArray<Placed>, block: string): string | undefined => {
+  const at = placed.findIndex((one) => one.block.id === block)
+  return (placed[at + 1] ?? placed[at - 1])?.block.id
+}
+
+const clipsFrom = (clips: ReadonlyArray<Clip>, block: string): ReadonlyArray<Clip> => {
+  const first = clips.findIndex((clip) => clip.block === block)
+  return first === -1 ? [] : clips.slice(first)
+}
+
+const aroundClips = (placed: ReadonlyArray<Placed>, own: ReadonlyArray<Clip>, block: string): ReadonlyArray<Clip> =>
+  withNeighbours(clipsOf(placed), block, own, AROUND_SECONDS)
+
 export const timelineCard = (projectId: string, ask: (text: string) => void): { readonly panels: Panels; readonly refresh: () => void } => {
   const parts = partsOf()
   const { clock, notes, problem, hint, ready, stage, panels } = frameOf(parts)
   const shown: { block: string | undefined } = { block: undefined }
   const player = montage(projectId, (playing) => { markPlaying(parts, clock, shown, playing) })
   stage.append(player.node)
-  const state: { loaded: Loaded | undefined; edits: Edits; selected: string | undefined; seen: string; timer: number } =
-    { loaded: undefined, edits: NO_EDITS, selected: undefined, seen: "", timer: 0 }
+  const state: { loaded: Loaded | undefined; edits: Edits; selected: string | undefined; open: Placed | undefined; seen: string; timer: number } =
+    { loaded: undefined, edits: NO_EDITS, selected: undefined, open: undefined, seen: "", timer: 0 }
   const saving = saver(projectId, problem, () => state.edits)
   const placedNow = (): ReadonlyArray<Placed> => placedOf(state.loaded, state.edits)
 
@@ -228,13 +240,16 @@ export const timelineCard = (projectId: string, ask: (text: string) => void): { 
     const isReady = timeline.state === "ready" && loaded.transcripts.size > 0
     ready.hidden = !isReady
     parts.summary.hidden = !isReady
+    panels.map.hidden = !isReady
     notes.replaceChildren(...notesOf(loaded, ask))
     const open = timeline.state === "ready" && isReady
       ? drawReady(parts, { loaded, timeline, edits: state.edits, selected: state.selected }, actions)
       : undefined
+    state.open = open
     hint.hidden = open !== undefined
     const first = open?.spans[0]
     if (open !== undefined && first !== undefined) player.show({ ...first, video: open.take.video, block: open.block.id })
+    refocus(panels.map, active)
     refocus(panels.line, active)
     refocus(panels.takes, active)
   }
@@ -253,21 +268,18 @@ export const timelineCard = (projectId: string, ask: (text: string) => void): { 
       player.stop()
       state.selected = block
       draw()
+      parts.rowHolder.querySelector(".block.selected")?.scrollIntoView({ block: "nearest", inline: "nearest" })
     },
     reorder: (blocks) => { change({ ...state.edits, order: [...blocks] }) },
     setPause: (video, after, removed) => { change(withPauses(state.edits, [{ video, after }], removed)) },
     choose: (block, take) => { change(withChoice(state.edits, block, take)) },
-    hear: (block, take) => {
-      const transcript = state.loaded?.transcripts.get(take.video)
-      if (transcript === undefined) return
-      player.play(playedSpans(transcript, take, state.edits).map((span) => ({ ...span, video: take.video, block })))
-    },
-    playFrom: (block) => {
-      const clips = clipsOf(placedNow())
-      const first = clips.findIndex((clip) => clip.block === block)
-      if (first !== -1) player.play(clips.slice(first))
-    },
-    setDeleted: (block, deleted) => { change(withDeleted(state.edits, block, deleted)) }
+    hear: (block, take) => { player.play(takeClips(state.loaded, state.edits, block, take)) },
+    hearAround: (block, take) => { player.play(aroundClips(placedNow(), takeClips(state.loaded, state.edits, block, take), block)) },
+    playFrom: (block) => { player.play(clipsFrom(clipsOf(placedNow()), block)) },
+    setDeleted: (block, deleted) => {
+      if (deleted && block === state.open?.block.id) state.selected = neighbourOf(placedNow(), block)
+      change(withDeleted(state.edits, block, deleted))
+    }
   }
 
   const toggle = (): void => {
@@ -275,7 +287,7 @@ export const timelineCard = (projectId: string, ask: (text: string) => void): { 
     else if (!parts.play.disabled) player.play(clipsOf(placedNow()))
   }
   parts.play.addEventListener("click", toggle)
-  onSpace(panels.line, toggle)
+  onKeys(panels.line, () => ({ placed: placedNow(), open: state.open }), { ...actions, toggle })
 
   const later = (): void => {
     globalThis.clearTimeout(state.timer)

@@ -7,6 +7,7 @@ import { formatLength, formatPause } from "./format.ts"
 export interface DetailActions {
   readonly choose: (block: string, take: Take) => void
   readonly hear: (block: string, take: Take) => void
+  readonly hearAround: (block: string, take: Take) => void
   readonly playFrom: (block: string) => void
   readonly setDeleted: (block: string, deleted: boolean) => void
 }
@@ -41,13 +42,22 @@ const takeItem = (block: Block, take: Take, chosen: Take, transcript: Transcript
       h("span", {}, ...takeText(transcript, take, edits)),
       h("span", { class: "muted" }, take.reason),
       h("span", { class: "muted" }, facts.join(" · ")))),
-    h("button", {
-      type: "button",
-      class: "secondary",
-      "aria-label": `Послушать дубль ${rank}`,
-      "data-key": `hear:${block.id}:${take.video}:${take.from}`,
-      click: () => { actions.hear(block.id, take) }
-    }, "Послушать"))
+    h("div", { class: "take-acts" },
+      h("button", {
+        type: "button",
+        class: "secondary",
+        "aria-label": `Послушать дубль ${rank}`,
+        "data-key": `hear:${block.id}:${take.video}:${take.from}`,
+        click: () => { actions.hear(block.id, take) }
+      }, "Послушать"),
+      h("button", {
+        type: "button",
+        class: "secondary",
+        "aria-label": `Послушать дубль ${rank} с соседними блоками`,
+        title: "Конец блока до него, этот дубль и начало блока после",
+        "data-key": `around:${block.id}:${take.video}:${take.from}`,
+        click: () => { actions.hearAround(block.id, take) }
+      }, "С соседями")))
 }
 
 export const blockDetail = (

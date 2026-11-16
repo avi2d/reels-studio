@@ -333,7 +333,7 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
     const layout = layoutNow()
     show(
       h("div", { class: "bar" }, h("a", { class: "back", href: "#/" }, "← Все ролики"), h("h1", {}, project.title), layoutLinks(project.id, layout)),
-      h("div", { class: "work", "data-layout": layout }, timeline.panels.line, timeline.panels.player, timeline.panels.takes, side.node))
+      h("div", { class: "work", "data-layout": layout }, timeline.panels.line, timeline.panels.map, timeline.panels.player, timeline.panels.takes, side.node))
     refresh()
     chat.scrollToEnd()
   })

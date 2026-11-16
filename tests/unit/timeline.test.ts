@@ -3,7 +3,7 @@ import { videoLines } from "../../src/server/chat.ts"
 import { gazeText } from "../../src/server/media-commands.ts"
 import type { Transcript } from "../../src/shared/plan.ts"
 import {
-  arrange, assemble, cameraShare, chosenTake, clipsOf, NO_EDITS, pausesOf, playedSpans, soundBlocks, withChoice, withDeleted, withPauses,
+  arrange, assemble, cameraShare, chosenTake, clipsOf, NO_EDITS, pausesOf, playedSpans, soundBlocks, withChoice, withDeleted, withNeighbours, withPauses,
   type Block, type Gaze
 } from "../../src/shared/timeline.ts"
 
@@ -82,6 +82,22 @@ test("the montage plays the chosen take of each block in row order across videos
     { video: "a", block: "advance", start: 1, end: 6 },
     { video: "b", block: "thanks", start: 3, end: 5 }
   ])
+})
+
+test("a take heard with its neighbours gets only the last seconds of the block before and the first seconds of the block after, not the whole blocks", () => {
+  const cut = [
+    { video: "a", block: "deposit", start: 6, end: 12 },
+    { video: "a", block: "advance", start: 1, end: 6 },
+    { video: "b", block: "thanks", start: 3, end: 5 }
+  ]
+  const own = [{ video: "b", block: "advance", start: 0.5, end: 1.5 }]
+  expect(withNeighbours(cut, "advance", own, 1)).toEqual([
+    { video: "a", block: "deposit", start: 11, end: 12 },
+    { video: "b", block: "advance", start: 0.5, end: 1.5 },
+    { video: "b", block: "thanks", start: 3, end: 4 }
+  ])
+  expect(withNeighbours(cut, "deposit", [], 4)).toEqual([{ video: "a", block: "advance", start: 1, end: 5 }])
+  expect(withNeighbours(cut, "thanks", [], 4)).toEqual([{ video: "a", block: "advance", start: 2, end: 6 }])
 })
 
 const gaze: Gaze = { step: 0.5, samples: ["away", "away", "camera", "camera", "camera", "away", "hidden", "camera"] }

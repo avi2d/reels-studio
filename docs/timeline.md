@@ -26,7 +26,21 @@ The person chooses a take, drags and deletes blocks, and removes pauses on the p
 The studio keeps these choices in `timeline.json`, which the chat model cannot write.
 A deleted block and a removed pause stay listed on the page, and one tap returns each.
 The play button plays the chosen takes in the order of the row, from the previews, and skips the removed pauses.
+«С соседями» plays a take with the last 2 s of the block before it and the first 2 s of the block after it.
+A strip of numbered blocks shows the whole cut, each as wide as its length, and a click opens that block.
 The studio writes no video file from the row.
+
+## Keys
+
+| Key | What it does |
+| --- | --- |
+| Space | Starts and stops the cut |
+| Left and Right arrows | Open the block before or after |
+| 1 to 9 | Choose that take of the open block |
+| Enter | Plays the cut from the open block |
+| Delete | Deletes the open block |
+
+The keys do nothing while the person types in a field.
 
 ## Where the speaker looks
 

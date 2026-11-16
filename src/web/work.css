@@ -8,19 +8,21 @@
 
   .work { flex: 1; min-height: 0; display: grid; gap: 12px; }
   .work > .card, .side { min-width: 0; min-height: 0; padding: 12px; gap: 10px; overflow: hidden; }
+  .work > .p-map { grid-area: map; padding: 8px 12px; gap: 4px; }
+  .p-map .keys { display: block; }
   .p-player { grid-area: player; }
   .p-line { grid-area: line; }
   .p-takes { grid-area: takes; overflow-y: auto; overscroll-behavior: contain; }
   .side { grid-area: side; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; }
 
   .work[data-layout="a"] {
-    grid-template: "takes player side" minmax(0, 1fr) "line line line" auto / minmax(0, 1fr) clamp(372px, 26vw, 440px) minmax(0, 1fr);
+    grid-template: "takes player side" minmax(0, 1fr) "map map map" auto "line line line" auto / minmax(0, 1fr) clamp(372px, 26vw, 440px) minmax(0, 1fr);
   }
   .work[data-layout="b"] {
-    grid-template: "line player takes" minmax(0, 1.1fr) "line player side" minmax(0, 1fr) / minmax(0, 1.15fr) clamp(320px, 27vw, 480px) minmax(0, 1fr);
+    grid-template: "map map map" auto "line player takes" minmax(0, 1.1fr) "line player side" minmax(0, 1fr) / minmax(0, 1.15fr) clamp(320px, 27vw, 480px) minmax(0, 1fr);
   }
   .work[data-layout="c"] {
-    grid-template: "line line player" minmax(0, 1.1fr) "takes side player" minmax(0, 1fr) / minmax(0, 1fr) minmax(0, 1fr) clamp(320px, 27vw, 480px);
+    grid-template: "line line player" minmax(0, 1.25fr) "takes side player" minmax(0, 1fr) "map map map" auto / minmax(0, 1fr) minmax(0, 1fr) clamp(320px, 27vw, 480px);
   }
 
   .p-player .stage { flex: 1; }
@@ -36,8 +38,8 @@
   .work .pause { min-height: 28px; padding: 0 10px; font-size: 0.8rem; }
 
   .work[data-layout="a"] .blocks { padding-bottom: 6px; }
-  .work[data-layout="a"] .block { width: clamp(170px, calc(var(--len) * 16px), 360px); gap: 4px; }
-  .work[data-layout="a"] .said { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; font-size: 0.85rem; }
+  .work[data-layout="a"] .block { width: clamp(210px, calc(var(--len) * 16px), 360px); gap: 4px; }
+  .work[data-layout="a"] .said { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 0.85rem; }
   .work[data-layout="a"] .block > .pause { display: none; }
   .p-player .row { flex-wrap: nowrap; gap: 8px; }
   .p-player .row button { padding: 0 10px; white-space: nowrap; }
@@ -69,6 +71,7 @@
   .p-takes .take { flex-direction: row; align-items: flex-start; gap: 10px; }
   .p-takes .take + .take { padding-top: 8px; }
   .p-takes .take .choice { flex: 1; min-width: 0; font-size: 0.95rem; }
+  .p-takes .take-acts { flex: none; flex-direction: column; align-items: stretch; }
   .p-takes .detail { gap: 8px; }
 
   .tabs { display: flex; gap: 6px; }
