@@ -1,4 +1,5 @@
 import { Data, Effect, Option, Schema } from "effect"
+import { LibraryVideo, type Pick } from "../shared/library.ts"
 import { VideoView } from "../shared/plan.ts"
 
 export class Failed extends Data.TaggedError("Failed")<{ readonly message: string }> {}
@@ -96,6 +97,17 @@ export const retryVideo = (id: string, name: string): Effect.Effect<void, Failed
 
 export const previewUrl = (id: string, name: string): string =>
   `/api/projects/${id}/videos/${encodeURIComponent(name)}/preview`
+
+const Library = Schema.Struct({ videos: Schema.Array(LibraryVideo) })
+
+export const getLibrary = (id: string): Effect.Effect<typeof Library.Type, Failed> =>
+  call(Library, `/api/projects/${id}/library`)
+
+export const addVideos = (id: string, videos: ReadonlyArray<Pick>): Effect.Effect<typeof OneProject.Type, Failed> =>
+  call(OneProject, `/api/projects/${id}/videos`, post({ videos }))
+
+export const removeProject = (id: string): Effect.Effect<{ readonly removed: string }, Failed> =>
+  call(Schema.Struct({ removed: Schema.String }), `/api/projects/${id}`, { method: "DELETE" })
 
 export const postChat = (id: string, text: string, model: string, effort: Effort): Effect.Effect<Response, Offline> =>
   send(`/api/projects/${id}/chat`, post({ text, model, effort }))

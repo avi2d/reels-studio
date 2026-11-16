@@ -2,7 +2,9 @@ import { Effect, Option, Schema } from "effect"
 import * as Api from "./api.ts"
 import { h } from "./dom.ts"
 import { formatDay, formatSize, modelName, parseEventBlock } from "./format.ts"
+import { libraryPicker } from "./library.ts"
 import { oneAfterAnother } from "./queue.ts"
+import { askToRemove } from "./remove.ts"
 import { upload, type Progress } from "./upload.ts"
 import { videosCard } from "./videos.ts"
 
@@ -25,10 +27,17 @@ const CHOICE_HINT = "Выбранная модель делает в чате в
   + "Средняя глубина подходит для обычной нарезки, высокая нужна для трудных случаев."
 
 const projectItem = (project: Api.ProjectView): HTMLElement =>
-  h("li", {},
+  h("li", { class: "entry" },
     h("a", { class: "item", href: `#/p/${project.id}` },
-      h("div", {}, h("strong", {}, project.title), h("span", { class: "muted" }, formatDay(project.createdAt))),
-      h("span", { class: project.stage === "uploaded" ? "badge ready" : "badge" }, STAGES[project.stage])))
+      h("strong", {}, project.title),
+      h("span", { class: "muted" }, formatDay(project.createdAt)),
+      h("span", { class: project.stage === "uploaded" ? "badge ready" : "badge" }, STAGES[project.stage])),
+    h("button", {
+      type: "button",
+      class: "secondary",
+      "aria-label": `Удалить ролик «${project.title}»`,
+      click: () => { askToRemove(project, route) }
+    }, "Удалить"))
 
 const listView = (projects: ReadonlyArray<Api.ProjectView>): void => {
   const title = h("input", { type: "text", name: "title", maxlength: "120", required: true, autocomplete: "off", placeholder: "Например: нотариальный осмотр сайта" })
@@ -129,6 +138,8 @@ const videoCard = (project: Api.ProjectView, onUploaded: () => void): HTMLElemen
       onUploaded()
     })
   refreshByProject.set(project.id, refresh)
+  const picker = libraryPicker(project.id, refresh)
+  picker.reload()
   const add = (chosen: ReadonlyArray<File>): void => {
     const made: Array<{ node: HTMLElement; work: Effect.Effect<void> }> = []
     for (const file of chosen) {
@@ -149,7 +160,8 @@ const videoCard = (project: Api.ProjectView, onUploaded: () => void): HTMLElemen
     add([...(input.files ?? [])])
     input.value = ""
   })
-  return h("section", { class: "card" }, h("h2", {}, "Видео"), files, rows, h("label", { class: "button" }, label, input),
+  return h("section", { class: "card" }, h("h2", {}, "Видео"), files, rows,
+    h("div", { class: "row" }, h("label", { class: "button" }, label, input), picker.open), picker.panel,
     h("p", { class: "muted" }, "Можно выбрать сразу несколько видео: они загрузятся по очереди. Не закрывайте страницу, пока идёт загрузка. Исходные видео студия не меняет."))
 }
 
@@ -259,7 +271,12 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
     document.title = `${project.title} · Студия Reels`
     const videos = videosCard(project.id)
     const chat = chatCard(project, messages, models, videos.refresh)
-    show(h("a", { class: "back", href: "#/" }, "← Все ролики"), h("h1", {}, project.title), videoCard(project, videos.refresh), videos.node, chat)
+    const remove = h("button", {
+      type: "button",
+      class: "secondary end",
+      click: () => { askToRemove(project, () => { location.hash = "#/" }) }
+    }, "Удалить ролик")
+    show(h("a", { class: "back", href: "#/" }, "← Все ролики"), h("h1", {}, project.title), videoCard(project, videos.refresh), videos.node, chat, remove)
     videos.refresh()
     if (messages.length > 0) chat.scrollIntoView({ block: "end" })
   })

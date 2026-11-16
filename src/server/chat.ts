@@ -1,4 +1,4 @@
-import { Array as Arr, Context, Effect, Fiber, FileSystem, Layer, Path, Ref, Schema, Stream } from "effect"
+import { Array as Arr, Context, Deferred, Effect, Fiber, FileSystem, Layer, Path, Ref, Schema, Stream } from "effect"
 import { ChildProcess, type ChildProcessSpawner } from "effect/process"
 import { ApiError, badRequest, orUnavailable } from "./api-error.ts"
 import { Media } from "./media.ts"
@@ -45,6 +45,41 @@ const brokenStream = <A, E, R>(stream: Stream.Stream<A, E, R>): Stream.Stream<A,
     Stream.tapError((cause) => Effect.logError("the chat failed", cause)),
     Stream.mapError(() => new ApiError({ status: 500, message: UNAVAILABLE }))
   )
+
+interface Turn {
+  readonly stop: Deferred.Deferred<void>
+  readonly finished: Deferred.Deferred<void>
+}
+
+const makeTurn = Effect.all({ stop: Deferred.make<void>(), finished: Deferred.make<void>() })
+
+const makeTurns = Effect.gen(function*() {
+  const turns = yield* Ref.make<ReadonlyMap<string, Turn>>(new Map())
+  const claim = (id: string, turn: Turn): Effect.Effect<Turn | undefined> =>
+    Ref.modify(turns, (map) => {
+      const held = map.get(id)
+      return held === undefined ? [undefined, new Map([...map, [id, turn]])] : [held, map]
+    })
+  const release = (id: string, turn: Turn): Effect.Effect<void> =>
+    Ref.update(turns, (map) => new Map([...map].filter(([other, held]) => other !== id || held !== turn))).pipe(
+      Effect.andThen(Deferred.succeed(turn.finished, undefined))
+    )
+  const takeOver = (id: string, turn: Turn): Effect.Effect<void> =>
+    Effect.gen(function*() {
+      const held = yield* claim(id, turn)
+      if (held === undefined) return
+      yield* Deferred.succeed(held.stop, undefined)
+      yield* Deferred.await(held.finished)
+      yield* takeOver(id, turn)
+    })
+  const withoutTurn = <A, E, R>(id: string, use: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.acquireUseRelease(
+      Effect.tap(makeTurn, (turn) => takeOver(id, turn)),
+      () => use,
+      (turn) => release(id, turn)
+    )
+  return { claim, release, withoutTurn }
+})
 
 interface RunState {
   readonly text: string
@@ -178,6 +213,7 @@ export class Chat extends Context.Service<Chat, {
     model: string,
     effort: Effort
   ) => Effect.Effect<Stream.Stream<ChatEvent, ApiError>, ApiError>
+  readonly withoutTurn: <A, E, R>(id: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }>()("reels-studio/Chat") {
   static readonly layer = Layer.effect(
     Chat,
@@ -188,7 +224,7 @@ export class Chat extends Context.Service<Chat, {
       const projects = yield* Projects
       const media = yield* Media
       const context = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>()
-      const busy = yield* Ref.make<ReadonlySet<string>>(new Set())
+      const { claim, release, withoutTurn } = yield* makeTurns
       const systemPrompt = yield* fs.readFileString(path.join(settings.root, "prompts", "studio.md")).pipe(orBroken)
       const append = Effect.fn("Chat.append")(function*(dir: string, message: Message) {
         const line = yield* encodeLine(message).pipe(orBroken)
@@ -244,17 +280,21 @@ export class Chat extends Context.Service<Chat, {
         if (trimmed === "") return yield* badRequest("Напишите сообщение")
         if (!settings.models.includes(model)) return yield* badRequest("Такой модели в студии нет")
         const dir = yield* projects.folder(id)
-        const taken = yield* Ref.modify(busy, (set) => [set.has(id), new Set([...set, id])])
-        if (taken) return yield* new ApiError({ status: 409, message: "Дождитесь ответа на прошлое сообщение" })
-        const release = Ref.update(busy, (set) => new Set([...set].filter((other) => other !== id)))
+        const turn = yield* makeTurn
+        if ((yield* claim(id, turn)) !== undefined) {
+          return yield* new ApiError({ status: 409, message: "Дождитесь ответа на прошлое сообщение" })
+        }
         yield* Effect.gen(function*() {
           yield* fs.makeDirectory(path.join(dir, "chat"), { recursive: true }).pipe(orBroken)
           yield* projects.setChoice(id, model, effort)
           yield* append(dir, { role: "user", text: trimmed })
-        }).pipe(Effect.onError(() => release))
-        return run(id, dir, trimmed, model, effort).pipe(Stream.ensuring(release))
+        }).pipe(Effect.onError(() => release(id, turn)))
+        return run(id, dir, trimmed, model, effort).pipe(
+          Stream.interruptWhen(Deferred.await(turn.stop)),
+          Stream.ensuring(release(id, turn))
+        )
       })
-      return Chat.of({ history, send })
+      return Chat.of({ history, send, withoutTurn })
     })
   )
 }

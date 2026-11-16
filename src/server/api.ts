@@ -1,4 +1,5 @@
 import { Effect, FileSystem, Layer, Option, Schema, Stream } from "effect"
+import { Pick } from "../shared/library.ts"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { ApiError, badRequest } from "./api-error.ts"
 import { Chat } from "./chat.ts"
@@ -40,6 +41,15 @@ const projects = Layer.mergeAll(
   HttpRouter.add("GET", "/api/projects/:id", reply(Effect.gen(function*() {
     const store = yield* Projects
     return json({ project: yield* store.get(yield* param("id")) })
+  }))),
+  HttpRouter.add("DELETE", "/api/projects/:id", reply(Effect.gen(function*() {
+    const store = yield* Projects
+    const talk = yield* Chat
+    const media = yield* Media
+    const id = yield* param("id")
+    const dir = yield* store.folder(id)
+    yield* talk.withoutTurn(id, media.withoutWork(dir, store.remove(id)))
+    return json({ removed: id })
   })))
 )
 
@@ -109,10 +119,24 @@ const sendFile = Effect.fnUntraced(function*(target: string, contentType: string
   })
 }, Effect.mapError((cause) => cause instanceof ApiError ? cause : UNREADABLE))
 
+const NewVideos = Schema.Struct({ videos: Schema.Array(Pick).check(Schema.isMinLength(1)) })
+
 const videos = Layer.mergeAll(
   HttpRouter.add("GET", "/api/projects/:id/videos", reply(Effect.gen(function*() {
     const media = yield* Media
     return json({ videos: yield* media.videos(yield* param("id")) })
+  }))),
+  HttpRouter.add("POST", "/api/projects/:id/videos", reply(Effect.gen(function*() {
+    const media = yield* Media
+    const store = yield* Projects
+    const id = yield* param("id")
+    const input = yield* body(NewVideos)
+    yield* media.reuse(id, input.videos)
+    return json({ project: yield* store.get(id) })
+  }))),
+  HttpRouter.add("GET", "/api/projects/:id/library", reply(Effect.gen(function*() {
+    const media = yield* Media
+    return json({ videos: yield* media.library(yield* param("id")) })
   }))),
   HttpRouter.add("GET", "/api/projects/:id/videos/:name/preview", (request) => reply(Effect.gen(function*() {
     const media = yield* Media
