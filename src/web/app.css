@@ -96,33 +96,47 @@ button, .button {
   touch-action: manipulation;
 }
 
+button.secondary { background: transparent; color: var(--wine); border: 1px solid var(--rose); }
+button.danger { background: #a01220; }
+button.end { align-self: flex-start; }
+
 button:disabled, .button[aria-disabled="true"] { background: var(--rose); color: var(--roast); cursor: default; }
 :is(button, .button, input, textarea, select, a):focus-visible { outline: 3px solid var(--rose); outline-offset: 2px; }
 
 @media (hover: hover) {
   button:not(:disabled):hover, .button:hover { background: var(--roast); }
-  .item:hover { border-color: var(--ruby); }
+  .entry:has(.item:hover) { border-color: var(--ruby); }
+  button.secondary:not(:disabled):hover { background: var(--line); }
+  button.danger:not(:disabled):hover { background: #6e0c16; }
 }
 
 .file-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
 
 .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-
-.item {
+.entry {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: 8px;
+  padding-right: 12px;
   background: var(--paper);
   border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px 16px;
   border-radius: 14px;
   color: inherit;
   text-decoration: none;
 }
 
-.item > div { min-width: 0; }
-.item strong { display: block; overflow-wrap: anywhere; }
+.item strong { overflow-wrap: anywhere; }
 
 .badge {
   flex: none;
@@ -151,7 +165,19 @@ button:disabled, .button[aria-disabled="true"] { background: var(--rose); color:
 
 progress { width: 100%; height: 12px; accent-color: var(--wine); }
 
-[hidden] { display: none; }
+[hidden] { display: none !important; }
+
+.picker { border: 1px solid var(--line); border-radius: 10px; margin: 0; padding: 12px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.picker legend { font-weight: 600; padding: 0 4px; }
+.choices { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.choice { flex-direction: row; align-items: flex-start; gap: 10px; font-weight: 400; font-size: 1rem; cursor: pointer; }
+.choice input { flex: none; width: 22px; height: 22px; margin: 2px 0 0; accent-color: var(--wine); }
+.choice > span { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.choice .name { font-weight: 600; }
+
+.confirm { width: min(440px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 14px; padding: 20px; background: var(--paper); color: inherit; }
+.confirm[open] { display: flex; flex-direction: column; gap: 12px; }
+.confirm::backdrop { background: rgb(40 8 15 / 0.55); }
 
 .videos { display: flex; flex-direction: column; gap: 24px; }
 .video { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
