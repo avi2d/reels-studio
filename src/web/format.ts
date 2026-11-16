@@ -14,6 +14,11 @@ export const formatLength = (seconds: number): string => {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`
 }
 
+export const fromProjects = (titles: ReadonlyArray<string>): string =>
+  `${titles.length === 1 ? "из ролика" : "из роликов"} ${titles.map((title) => `«${title}»`).join(", ")}`
+
+export const addLabel = (count: number): string => count === 0 ? "Добавить видео" : `Добавить ${count} видео`
+
 export const formatDay = (iso: string): string =>
   new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric" }).format(new Date(iso))
 

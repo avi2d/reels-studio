@@ -1,4 +1,4 @@
-import { Array as Arr, Context, Crypto, DateTime, Effect, FileSystem, Layer, Path, Schema } from "effect"
+import { Array as Arr, Context, Crypto, DateTime, Effect, FileSystem, Layer, Path, Ref, Schema } from "effect"
 import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
 import { Settings } from "./settings.ts"
 
@@ -38,6 +38,7 @@ export class Projects extends Context.Service<Projects, {
   readonly get: (id: string) => Effect.Effect<ProjectView, ApiError>
   readonly folder: (id: string) => Effect.Effect<string, ApiError>
   readonly setChoice: (id: string, model: string, effort: Effort) => Effect.Effect<void, ApiError>
+  readonly remove: (id: string) => Effect.Effect<void, ApiError>
 }>()("reels-studio/Projects") {
   static readonly layer = Layer.effect(
     Projects,
@@ -46,9 +47,11 @@ export class Projects extends Context.Service<Projects, {
       const path = yield* Path.Path
       const crypto = yield* Crypto.Crypto
       const settings = yield* Settings
+      const removing = yield* Ref.make<ReadonlySet<string>>(new Set())
 
       const folder = Effect.fn("Projects.folder")(function*(id: string) {
         const valid = yield* decodeId(id).pipe(Effect.mapError(() => notFound("Такого ролика нет")))
+        if ((yield* Ref.get(removing)).has(valid)) return yield* notFound("Такого ролика нет")
         const dir = path.join(settings.projectsDir, valid)
         const exists = yield* fs.exists(path.join(dir, "project.json")).pipe(orBroken)
         if (!exists) return yield* notFound("Такого ролика нет")
@@ -108,7 +111,16 @@ export class Projects extends Context.Service<Projects, {
         yield* write(dir, { ...project, model, effort })
       })
 
-      return Projects.of({ list, create, get, folder, setChoice })
+      const remove = Effect.fn("Projects.remove")(function*(id: string) {
+        const dir = yield* folder(id)
+        yield* Ref.update(removing, (set) => new Set([...set, id]))
+        yield* fs.remove(dir, { recursive: true }).pipe(
+          orUnavailable("the project was not removed", "Не получилось удалить ролик. Попробуйте ещё раз."),
+          Effect.ensuring(Ref.update(removing, (set) => new Set([...set].filter((other) => other !== id))))
+        )
+      })
+
+      return Projects.of({ list, create, get, folder, setChoice, remove })
     })
   )
 }

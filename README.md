@@ -87,6 +87,18 @@ Each video folder holds these, named after the video:
 
 The player on the page skips each run of removed words, from the start of its first word to the end of its last.
 
+## Reuse a video and delete a video folder
+
+The «Видео» card offers the videos the studio has already heard in other video folders.
+A picked video joins the folder at once with its text and preview, without a second upload or transcription.
+The studio adds a hard link to the original and to the preview, so the bytes of a video stay on disk once.
+It copies the two transcript files, which are small.
+Two uploads of one recording count as one video, matched by size and the SHA-256 of the first megabyte.
+
+Deleting a video folder first stops the chat turn and the transcription running for it, then removes the folder.
+A video that another folder links to stays there, because removing one hard link leaves the others.
+The studio never touches the files on the person's devices.
+
 ## Run the checks
 
 To run the checks:
@@ -102,6 +114,7 @@ To run the checks:
 | `src/index.ts` | The entry that starts the server |
 | `src/server/` | The routes, the video folders, the resumable upload, the chat and the transcription job |
 | `src/shared/plan.ts` | The transcript and plan formats and the spans the player skips, used by the server and the page |
+| `src/shared/library.ts` | The format of a video offered from another folder and of a pick, used by the server and the page |
 | `tools/transcribe/` | The speech recognizer, a Python script that uv runs |
 | `deploy/reels-studio.service` | The systemd user unit that keeps the studio running |
 | `src/pi/` | The pi extension that keeps the chat model inside one video folder |
