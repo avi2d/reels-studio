@@ -43,15 +43,29 @@ const clipsFrom = (clips: ReadonlyArray<Clip>, block: string): ReadonlyArray<Cli
 const aroundClips = (placed: ReadonlyArray<Placed>, own: ReadonlyArray<Clip>, block: string): ReadonlyArray<Clip> =>
   withNeighbours(clipsOf(placed), block, own, AROUND_SECONDS)
 
+const editKey = (edits: Edits): string => JSON.stringify([
+  edits.order,
+  edits.deleted,
+  edits.chosen.map((one) => [one.block, one.video, one.from]),
+  edits.pauses.map((one) => [one.video, one.after])
+])
+
+export const adoptServer = (local: Edits, acked: Edits, server: Edits): boolean =>
+  editKey(server) === editKey(local) || editKey(local) === editKey(acked)
+
+export const playedKey = (loaded: Loaded, edits: Edits): string =>
+  JSON.stringify(placedOf(loaded, edits))
+
 interface State {
   loaded: Loaded | undefined
   edits: Edits
+  acked: Edits
   history: Array<Edits>
   selected: string | undefined
   open: Placed | undefined
   base: number | undefined
   playing: Playing | undefined
-  seen: string
+  content: string
 }
 
 const display = (parts: Parts, state: State) => {
@@ -166,7 +180,7 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
   const parts = partsOf()
   const ui = frameOf(parts)
   const state: State =
-    { loaded: undefined, edits: NO_EDITS, history: [], selected: undefined, open: undefined, base: undefined, playing: undefined, seen: "" }
+    { loaded: undefined, edits: NO_EDITS, acked: NO_EDITS, history: [], selected: undefined, open: undefined, base: undefined, playing: undefined, content: "" }
   const view = display(parts, state)
   const player = montage(projectId, view.markPlaying)
   ui.frame.prepend(player.node)
@@ -246,12 +260,16 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
     { choose: actions.choose, setDeleted: actions.setDeleted, step: select, toggle: () => { toggle(state.open?.block.id) }, undo })
 
   const show = (loaded: Loaded): void => {
-    const seen = JSON.stringify([loaded.view, [...loaded.transcripts.keys()]])
-    if (seen === state.seen) return
-    state.seen = seen
+    const timeline = loaded.view.timeline
+    if (timeline.state === "ready" && !saving.busy() && adoptServer(state.edits, state.acked, timeline.edits)) {
+      state.edits = timeline.edits
+      state.acked = timeline.edits
+    }
     state.loaded = loaded
-    if (loaded.view.timeline.state === "ready" && !saving.busy()) state.edits = loaded.view.timeline.edits
-    player.stop()
+    const content = playedKey(loaded, state.edits)
+    const changed = content !== state.content
+    state.content = content
+    if (changed) player.stop()
     draw()
   }
 
