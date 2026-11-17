@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
-import { NO_EDITS, withChoice, withPauses, type Block, type Edits } from "../../src/shared/timeline.ts"
+import { NO_EDITS, soundBlocks, withChoice, withPauses, type Block, type Blocks, type Edits } from "../../src/shared/timeline.ts"
 import type { Transcript } from "../../src/shared/plan.ts"
-import { adoptServer, playedKey, type Loaded } from "../../src/web/timeline.ts"
+import { playedKey, takeServer, type Loaded } from "../../src/web/timeline.ts"
 
 const wordsA = [
   { start: 0, end: 1, text: "раз" },
@@ -33,24 +33,35 @@ const removedPause: Edits = withPauses(NO_EDITS, [{ video: "a", after: 1 }], tru
 const chosenB: Edits = withChoice(removedPause, "first", takeB)
 
 test("a poll answer that echoes the saved edits is taken, a newer server change while idle is taken", () => {
-  expect(adoptServer(removedPause, NO_EDITS, removedPause)).toBe(true)
-  expect(adoptServer(NO_EDITS, NO_EDITS, removedPause)).toBe(true)
+  expect(takeServer(removedPause, NO_EDITS, removedPause, 5, 5, false)).toBe(true)
+  expect(takeServer(NO_EDITS, NO_EDITS, removedPause, 5, 5, false)).toBe(true)
 })
 
 test("a poll answer older than the edits on the page is kept out", () => {
-  expect(adoptServer(chosenB, removedPause, removedPause)).toBe(false)
-  expect(adoptServer(chosenB, removedPause, NO_EDITS)).toBe(false)
+  expect(takeServer(chosenB, removedPause, removedPause, 5, 5, false)).toBe(false)
+  expect(takeServer(chosenB, removedPause, NO_EDITS, 5, 5, false)).toBe(false)
+})
+
+test("a poll answer that arrives while a save is running is kept out", () => {
+  expect(takeServer(NO_EDITS, NO_EDITS, removedPause, 5, 5, true)).toBe(false)
+})
+
+test("a poll answer that started before an undo is kept out", () => {
+  expect(takeServer(NO_EDITS, NO_EDITS, removedPause, 5, 6, false)).toBe(false)
 })
 
 test("the edits check does not depend on the order of the fields", () => {
   const reordered = { pauses: [], chosen: [], deleted: [], order: [] }
-  expect(adoptServer(NO_EDITS, NO_EDITS, reordered)).toBe(true)
+  expect(takeServer(NO_EDITS, NO_EDITS, reordered, 5, 5, false)).toBe(true)
 })
 
-test("the played content is the same when only the gaze answers arrive", () => {
-  const before = loaded([first], ["a", "b"], "waiting")
-  const after = loaded([first], ["a", "b"], "measured")
-  expect(playedKey(after, NO_EDITS)).toBe(playedKey(before, NO_EDITS))
+test("a measured gaze does not change the played clips", () => {
+  const written: Blocks = { blocks: [{ id: "first", title: "Первый", takes: [{ video: "a", from: 0, to: 2, reason: "clean" }] }] }
+  const transcripts = new Map<string, Transcript>([["a", transcriptA]])
+  const before = soundBlocks(written, transcripts, new Map()).blocks
+  const after = soundBlocks(written, transcripts, new Map([["a", { step: 5, samples: ["camera"] }]])).blocks
+  expect(after[0]?.takes[0]).toEqual({ video: "a", from: 0, to: 2, reason: "clean", camera: 1 })
+  expect(playedKey(loaded(after, ["a"], "measured"), NO_EDITS)).toBe(playedKey(loaded(before, ["a"], "waiting"), NO_EDITS))
 })
 
 test("the played content moves when a pause is removed, a take is chosen, or a video is heard", () => {

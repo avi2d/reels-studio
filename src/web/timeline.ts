@@ -53,18 +53,23 @@ const editKey = (edits: Edits): string => JSON.stringify([
 export const adoptServer = (local: Edits, acked: Edits, server: Edits): boolean =>
   editKey(server) === editKey(local) || editKey(local) === editKey(acked)
 
+export const takeServer = (local: Edits, acked: Edits, server: Edits, issued: number, changes: number, busy: boolean): boolean =>
+  !busy && issued === changes && adoptServer(local, acked, server)
+
 export const playedKey = (loaded: Loaded, edits: Edits): string =>
-  JSON.stringify(placedOf(loaded, edits))
+  JSON.stringify(clipsOf(placedOf(loaded, edits)))
 
 interface State {
   loaded: Loaded | undefined
   edits: Edits
   acked: Edits
+  changes: number
   history: Array<Edits>
   selected: string | undefined
   open: Placed | undefined
   base: number | undefined
   playing: Playing | undefined
+  drawn: string
   content: string
 }
 
@@ -155,7 +160,7 @@ const redraw = ({ hooks, parts, player, state, ui, view }: Desk, actions: Action
   refocus([ui.panels.tracks, ui.panels.takes, ui.panels.pauses], active)
 }
 
-const loader = (projectId: string, anchor: HTMLElement, show: (loaded: Loaded) => void): () => void => {
+const loader = (projectId: string, anchor: HTMLElement, show: (loaded: Loaded, issued: number) => void, issued: () => number): () => void => {
   const state = { timer: 0 }
   const later = (): void => {
     globalThis.clearTimeout(state.timer)
@@ -164,10 +169,11 @@ const loader = (projectId: string, anchor: HTMLElement, show: (loaded: Loaded) =
   function refresh(): void {
     globalThis.clearTimeout(state.timer)
     if (!anchor.isConnected) return
+    const ticket = issued()
     Effect.runFork(Effect.all([Api.getVideos(projectId), Api.getTimeline(projectId)], { concurrency: 2 }).pipe(
       Effect.map(([{ videos }, view]) => {
         const heard = videos.flatMap((video) => video.state === "ready" ? [[video.name, video.transcript] as const] : [])
-        show({ transcripts: new Map(heard), view })
+        show({ transcripts: new Map(heard), view }, ticket)
         if (videos.some((video) => video.state === "waiting") || view.looks.some((look) => look.state === "waiting")) later()
       }),
       Effect.catchTag("Failed", () => Effect.sync(later))
@@ -180,7 +186,7 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
   const parts = partsOf()
   const ui = frameOf(parts)
   const state: State =
-    { loaded: undefined, edits: NO_EDITS, acked: NO_EDITS, history: [], selected: undefined, open: undefined, base: undefined, playing: undefined, content: "" }
+    { loaded: undefined, edits: NO_EDITS, acked: NO_EDITS, changes: 0, history: [], selected: undefined, open: undefined, base: undefined, playing: undefined, drawn: "", content: "" }
   const view = display(parts, state)
   const player = montage(projectId, view.markPlaying)
   ui.frame.prepend(player.node)
@@ -202,6 +208,7 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
   const apply = (edits: Edits): void => {
     player.stop()
     state.edits = edits
+    state.changes += 1
     draw()
     saving.save()
   }
@@ -259,13 +266,16 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
   onKeys(ui.panels.tracks, () => ({ placed: view.placedNow(), open: state.open }),
     { choose: actions.choose, setDeleted: actions.setDeleted, step: select, toggle: () => { toggle(state.open?.block.id) }, undo })
 
-  const show = (loaded: Loaded): void => {
+  const show = (loaded: Loaded, issued: number): void => {
     const timeline = loaded.view.timeline
-    if (timeline.state === "ready" && !saving.busy() && adoptServer(state.edits, state.acked, timeline.edits)) {
+    if (timeline.state === "ready" && takeServer(state.edits, state.acked, timeline.edits, issued, state.changes, saving.busy())) {
       state.edits = timeline.edits
       state.acked = timeline.edits
     }
     state.loaded = loaded
+    const drawn = JSON.stringify([loaded.view, [...loaded.transcripts.keys()], state.edits])
+    if (drawn === state.drawn) return
+    state.drawn = drawn
     const content = playedKey(loaded, state.edits)
     const changed = content !== state.content
     state.content = content
@@ -273,5 +283,5 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
     draw()
   }
 
-  return { panels: ui.panels, refresh: loader(projectId, ui.panels.tracks, show) }
+  return { panels: ui.panels, refresh: loader(projectId, ui.panels.tracks, show, () => state.changes) }
 }
