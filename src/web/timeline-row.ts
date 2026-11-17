@@ -78,6 +78,9 @@ const idsOf = (row: HTMLElement): ReadonlyArray<string> =>
 
 const KEY_STEPS: Readonly<Record<string, number>> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -1, ArrowDown: 1 }
 
+let held = 0
+export const rowDragging = (): boolean => held > 0
+
 const dragHandle = (row: HTMLElement, slot: HTMLElement, title: string, id: string, selected: string | undefined, actions: RowActions): HTMLElement => {
   const handle = h("button", {
     type: "button",
@@ -92,6 +95,7 @@ const dragHandle = (row: HTMLElement, slot: HTMLElement, title: string, id: stri
     if (from === undefined) return
     state.from = undefined
     state.crossed = undefined
+    held -= 1
     slot.classList.remove("dragging")
     const ids = idsOf(row)
     if (ids.some((one, index) => one !== from[index])) actions.reorder(ids)
@@ -101,6 +105,7 @@ const dragHandle = (row: HTMLElement, slot: HTMLElement, title: string, id: stri
     if (event.button !== 0) return
     handle.setPointerCapture(event.pointerId)
     state.from = idsOf(row)
+    held += 1
     slot.classList.add("dragging")
   })
   handle.addEventListener("pointermove", (event) => { if (state.from !== undefined) follow(row, slot, { x: event.clientX, y: event.clientY }, state) })

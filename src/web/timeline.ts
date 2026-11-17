@@ -14,6 +14,7 @@ import {
 } from "./timeline-draw.ts"
 import { onKeys } from "./timeline-keys.ts"
 import { POLL_MS, saver } from "./timeline-save.ts"
+import { rowDragging } from "./timeline-row.ts"
 
 export type { Status } from "./timeline-draw.ts"
 
@@ -53,8 +54,10 @@ const editKey = (edits: Edits): string => JSON.stringify([
 export const adoptServer = (local: Edits, acked: Edits, server: Edits): boolean =>
   editKey(server) === editKey(local) || editKey(local) === editKey(acked)
 
-export const takeServer = (local: Edits, acked: Edits, server: Edits, issued: number, changes: number, busy: boolean): boolean =>
-  !busy && issued === changes && adoptServer(local, acked, server)
+export interface Ticket { readonly changes: number; readonly busy: boolean }
+
+export const takeServer = (local: Edits, acked: Edits, server: Edits, ticket: Ticket, changes: number, busy: boolean): boolean =>
+  !busy && !ticket.busy && ticket.changes === changes && adoptServer(local, acked, server)
 
 export const playedKey = (loaded: Loaded, edits: Edits): string =>
   JSON.stringify(clipsOf(placedOf(loaded, edits)))
@@ -96,6 +99,13 @@ const display = (parts: Parts, state: State) => {
     }
   }
 
+  const paintPlaying = (): void => {
+    const now = state.playing?.clip.block
+    showTag(now ?? state.open?.block.id)
+    for (const item of parts.map.querySelectorAll<HTMLElement>(".map-item")) item.classList.toggle("playing", item.dataset.id === now)
+    for (const slot of parts.rowHolder.querySelectorAll<HTMLElement>(".slot")) slot.classList.toggle("playing", slot.dataset.id === now)
+  }
+
   const markPlaying = (playing: Playing | undefined): void => {
     const before = state.playing?.clip.block
     state.playing = playing
@@ -105,16 +115,11 @@ const display = (parts: Parts, state: State) => {
     showClock()
     const now = playing?.clip.block
     if (before === now) return
-    showTag(now ?? state.open?.block.id)
-    for (const item of parts.map.querySelectorAll<HTMLElement>(".map-item")) item.classList.toggle("playing", item.dataset.id === now)
-    for (const slot of parts.rowHolder.querySelectorAll<HTMLElement>(".slot")) {
-      const current = slot.dataset.id === now
-      slot.classList.toggle("playing", current)
-      if (current) slot.scrollIntoView({ block: "nearest", inline: "nearest" })
-    }
+    paintPlaying()
+    parts.rowHolder.querySelector<HTMLElement>(".slot.playing")?.scrollIntoView({ block: "nearest", inline: "nearest" })
   }
 
-  return { placedNow, showTag, showClock, markPlaying }
+  return { placedNow, showTag, showClock, markPlaying, paintPlaying }
 }
 
 interface Desk {
@@ -150,7 +155,8 @@ const redraw = ({ hooks, parts, player, state, ui, view }: Desk, actions: Action
   if (!isReady) parts.summary.textContent = ""
   const first = open?.spans[0]
   if (open !== undefined && first !== undefined) player.show({ ...first, video: open.take.video, block: open.block.id })
-  view.showTag(open?.block.id)
+  if (state.playing === undefined) view.showTag(open?.block.id)
+  else view.paintPlaying()
   view.showClock()
   hooks.status({
     heard: loaded.transcripts.size,
@@ -160,7 +166,7 @@ const redraw = ({ hooks, parts, player, state, ui, view }: Desk, actions: Action
   refocus([ui.panels.tracks, ui.panels.takes, ui.panels.pauses], active)
 }
 
-const loader = (projectId: string, anchor: HTMLElement, show: (loaded: Loaded, issued: number) => void, issued: () => number): () => void => {
+const loader = (projectId: string, anchor: HTMLElement, show: (loaded: Loaded, ticket: Ticket) => void, stamp: () => Ticket): () => void => {
   const state = { timer: 0 }
   const later = (): void => {
     globalThis.clearTimeout(state.timer)
@@ -169,7 +175,7 @@ const loader = (projectId: string, anchor: HTMLElement, show: (loaded: Loaded, i
   function refresh(): void {
     globalThis.clearTimeout(state.timer)
     if (!anchor.isConnected) return
-    const ticket = issued()
+    const ticket = stamp()
     Effect.runFork(Effect.all([Api.getVideos(projectId), Api.getTimeline(projectId)], { concurrency: 2 }).pipe(
       Effect.map(([{ videos }, view]) => {
         const heard = videos.flatMap((video) => video.state === "ready" ? [[video.name, video.transcript] as const] : [])
@@ -209,6 +215,7 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
     player.stop()
     state.edits = edits
     state.changes += 1
+    if (state.loaded !== undefined) state.content = playedKey(state.loaded, edits)
     draw()
     saving.save()
   }
@@ -266,9 +273,13 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
   onKeys(ui.panels.tracks, () => ({ placed: view.placedNow(), open: state.open }),
     { choose: actions.choose, setDeleted: actions.setDeleted, step: select, toggle: () => { toggle(state.open?.block.id) }, undo })
 
-  const show = (loaded: Loaded, issued: number): void => {
+  const show = (loaded: Loaded, ticket: Ticket): void => {
+    if (rowDragging()) {
+      state.loaded = loaded
+      return
+    }
     const timeline = loaded.view.timeline
-    if (timeline.state === "ready" && takeServer(state.edits, state.acked, timeline.edits, issued, state.changes, saving.busy())) {
+    if (timeline.state === "ready" && takeServer(state.edits, state.acked, timeline.edits, ticket, state.changes, saving.busy())) {
       state.edits = timeline.edits
       state.acked = timeline.edits
     }
@@ -283,5 +294,5 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
     draw()
   }
 
-  return { panels: ui.panels, refresh: loader(projectId, ui.panels.tracks, show, () => state.changes) }
+  return { panels: ui.panels, refresh: loader(projectId, ui.panels.tracks, show, () => ({ changes: state.changes, busy: saving.busy() })) }
 }

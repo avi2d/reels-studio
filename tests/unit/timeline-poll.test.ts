@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test"
 import { NO_EDITS, soundBlocks, withChoice, withPauses, type Block, type Blocks, type Edits } from "../../src/shared/timeline.ts"
 import type { Transcript } from "../../src/shared/plan.ts"
-import { playedKey, takeServer, type Loaded } from "../../src/web/timeline.ts"
+import { playedKey, takeServer, type Loaded, type Ticket } from "../../src/web/timeline.ts"
+
+const idle: Ticket = { changes: 5, busy: false }
 
 const wordsA = [
   { start: 0, end: 1, text: "раз" },
@@ -33,26 +35,30 @@ const removedPause: Edits = withPauses(NO_EDITS, [{ video: "a", after: 1 }], tru
 const chosenB: Edits = withChoice(removedPause, "first", takeB)
 
 test("a poll answer that echoes the saved edits is taken, a newer server change while idle is taken", () => {
-  expect(takeServer(removedPause, NO_EDITS, removedPause, 5, 5, false)).toBe(true)
-  expect(takeServer(NO_EDITS, NO_EDITS, removedPause, 5, 5, false)).toBe(true)
+  expect(takeServer(removedPause, NO_EDITS, removedPause, idle, 5, false)).toBe(true)
+  expect(takeServer(NO_EDITS, NO_EDITS, removedPause, idle, 5, false)).toBe(true)
 })
 
 test("a poll answer older than the edits on the page is kept out", () => {
-  expect(takeServer(chosenB, removedPause, removedPause, 5, 5, false)).toBe(false)
-  expect(takeServer(chosenB, removedPause, NO_EDITS, 5, 5, false)).toBe(false)
+  expect(takeServer(chosenB, removedPause, removedPause, idle, 5, false)).toBe(false)
+  expect(takeServer(chosenB, removedPause, NO_EDITS, idle, 5, false)).toBe(false)
 })
 
 test("a poll answer that arrives while a save is running is kept out", () => {
-  expect(takeServer(NO_EDITS, NO_EDITS, removedPause, 5, 5, true)).toBe(false)
+  expect(takeServer(NO_EDITS, NO_EDITS, removedPause, idle, 5, true)).toBe(false)
+})
+
+test("a poll answer whose request started during a save is kept out", () => {
+  expect(takeServer(NO_EDITS, NO_EDITS, removedPause, { changes: 5, busy: true }, 5, false)).toBe(false)
 })
 
 test("a poll answer that started before an undo is kept out", () => {
-  expect(takeServer(NO_EDITS, NO_EDITS, removedPause, 5, 6, false)).toBe(false)
+  expect(takeServer(NO_EDITS, NO_EDITS, removedPause, idle, 6, false)).toBe(false)
 })
 
 test("the edits check does not depend on the order of the fields", () => {
   const reordered = { pauses: [], chosen: [], deleted: [], order: [] }
-  expect(takeServer(NO_EDITS, NO_EDITS, reordered, 5, 5, false)).toBe(true)
+  expect(takeServer(NO_EDITS, NO_EDITS, reordered, idle, 5, false)).toBe(true)
 })
 
 test("a measured gaze does not change the played clips", () => {
