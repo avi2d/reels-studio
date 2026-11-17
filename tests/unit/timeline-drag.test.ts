@@ -37,7 +37,7 @@ class FakeEl {
   src = ""
   private attrs: Record<string, string> = {}
   private classes = new Set<string>()
-  private listeners = new Map<string, Array<Handler>>()
+  private readonly listeners = new Map<string, Array<Handler>>()
   constructor(tag: string) {
     this.tag = tag
   }
@@ -111,12 +111,7 @@ class FakeEl {
     return selector.slice(1).split(".").every((one) => this.classes.has(one))
   }
   closest(selector: string): FakeEl | null {
-    let node: FakeEl | undefined = this
-    while (node !== undefined) {
-      if (selector.split(",").some((part) => node !== undefined && node.matches(part.trim()))) return node
-      node = node.parent
-    }
-    return null
+    return closestAbove(this, selector)
   }
   querySelectorAll(selector: string): Array<FakeEl> {
     const found: Array<FakeEl> = []
@@ -132,14 +127,12 @@ class FakeEl {
   querySelector(selector: string): FakeEl | null {
     return this.querySelectorAll(selector)[0] ?? null
   }
+  fire(name: string, event: FakeEvent): void {
+    for (const fn of this.listeners.get(name) ?? []) fn(event)
+  }
   dispatch(name: string, event: FakeEvent): void {
     if (event.target === undefined) event.target = this
-    let node: FakeEl | undefined = this
-    while (node !== undefined) {
-      for (const fn of node.listeners.get(name) ?? []) fn(event)
-      node = node.parent
-    }
-    for (const fn of docListeners.get(name) ?? []) fn(event)
+    bubble(this, name, event)
   }
   readonly classList = {
     add: (name: string): void => {
@@ -159,7 +152,7 @@ class FakeEl {
   }
 }
 
-const moveNodes = (slot: FakeEl, nodes: Array<FakeEl>, side: "before" | "after"): void => {
+const moveNodes = (slot: FakeEl, nodes: ReadonlyArray<FakeEl>, side: "before" | "after"): void => {
   const siblings = slot.parent?.children
   if (siblings === undefined) return
   for (const node of nodes) {
@@ -171,6 +164,21 @@ const moveNodes = (slot: FakeEl, nodes: Array<FakeEl>, side: "before" | "after")
 }
 
 const docListeners = new Map<string, Array<Handler>>()
+
+const closestAbove = (node: FakeEl | undefined, selector: string): FakeEl | null => {
+  if (node === undefined) return null
+  const hit = selector.split(",").some((part) => node.matches(part.trim()))
+  return hit ? node : closestAbove(node.parent, selector)
+}
+
+const bubble = (node: FakeEl | undefined, name: string, event: FakeEvent): void => {
+  if (node === undefined) {
+    for (const fn of docListeners.get(name) ?? []) fn(event)
+    return
+  }
+  node.fire(name, event)
+  bubble(node.parent, name, event)
+}
 
 interface Put {
   readonly url: string
@@ -243,7 +251,7 @@ const setup = (blocks: number): { readonly card: ReturnType<typeof timelineCard>
 }
 
 const rowHolderOf = (card: ReturnType<typeof timelineCard>): FakeEl => {
-  const tracks = card.panels.tracks
+  const tracks: unknown = card.panels.tracks
   if (!(tracks instanceof FakeEl)) throw new Error("no tracks")
   const holder = tracks.querySelector(".blocks-holder")
   if (holder === null) throw new Error("no row holder")
@@ -257,7 +265,7 @@ const rowIds = (card: ReturnType<typeof timelineCard>): Array<string> => {
 }
 
 const findKey = (card: ReturnType<typeof timelineCard>, key: string): FakeEl => {
-  const tracks = card.panels.tracks
+  const tracks: unknown = card.panels.tracks
   if (!(tracks instanceof FakeEl)) throw new Error("no tracks")
   const node = tracks.querySelectorAll("[data-key]").find((one) => one.dataset["key"] === key)
   if (node === undefined) throw new Error("no key " + key)

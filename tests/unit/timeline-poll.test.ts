@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test"
 import { NO_EDITS, soundBlocks, withChoice, withPauses, type Block, type Blocks, type Edits } from "../../src/shared/timeline.ts"
 import type { Transcript } from "../../src/shared/plan.ts"
-import { playedKey, takeServer, type Loaded, type Ticket } from "../../src/web/timeline.ts"
+import { playedKey, takeServer, type Ticket } from "../../src/web/timeline.ts"
+import type { Loaded } from "../../src/web/timeline-draw.ts"
 
 const idle: Ticket = { changes: 5, busy: false }
 

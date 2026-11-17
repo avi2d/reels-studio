@@ -11,7 +11,7 @@ class FakeVideo {
   isConnected = true
   srcSets = 0
   private innerSrc = ""
-  private listeners = new Map<string, Array<() => void>>()
+  private readonly listeners = new Map<string, Array<() => void>>()
   get src(): string {
     return this.innerSrc
   }
@@ -47,7 +47,7 @@ const setup = (): { player: ReturnType<typeof montage>; node: FakeVideo } => {
   return { player, node }
 }
 
-const clip = (video: string, start: number): Clip => ({ video, start, end: start + 5 })
+const clip = (video: string, start: number): Clip => ({ video, start, end: start + 5, block: "a" })
 
 test("a preview that fails mid-montage loads from the server again on the next play", () => {
   const { player, node } = setup()

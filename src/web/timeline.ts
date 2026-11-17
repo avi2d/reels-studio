@@ -50,7 +50,7 @@ const editKey = (edits: Edits): string => JSON.stringify([
   edits.pauses.map((one) => [one.video, one.after])
 ])
 
-export const adoptServer = (local: Edits, acked: Edits, server: Edits): boolean =>
+const adoptServer = (local: Edits, acked: Edits, server: Edits): boolean =>
   editKey(server) === editKey(local) || editKey(local) === editKey(acked)
 
 export interface Ticket { readonly changes: number; readonly busy: boolean }
@@ -188,6 +188,69 @@ const loader = (projectId: string, anchor: HTMLElement, show: (loaded: Loaded, t
   return refresh
 }
 
+interface Card {
+  readonly parts: Parts
+  readonly ui: Frame
+  readonly state: State
+  readonly view: ReturnType<typeof display>
+  readonly player: ReturnType<typeof montage>
+  readonly saving: ReturnType<typeof saver>
+  readonly hooks: Hooks
+}
+
+const actionsOf = (
+  card: Card,
+  change: (edits: Edits) => void,
+  hear: (clips: ReadonlyArray<Clip>) => void,
+  select: (block: string) => void
+): Actions => {
+  const { hooks, state, view } = card
+  return {
+    change,
+    textOf: (take) => textOf(state.loaded?.transcripts ?? new Map(), take),
+    select: (block) => {
+      select(block)
+      hooks.openTakes()
+    },
+    reorder: (blocks) => { change({ ...state.edits, order: [...blocks] }) },
+    setPause: (video, after, removed) => { change(withPauses(state.edits, [{ video, after }], removed)) },
+    choose: (block, take) => { change(withChoice(state.edits, block, take)) },
+    hear: (block, take) => { hear(takeClips(state.loaded, state.edits, block, take)) },
+    hearAround: (block, take) => { hear(aroundClips(view.placedNow(), takeClips(state.loaded, state.edits, block, take), block)) },
+    hearPause: (one, pause) => {
+      const window = { start: pause.start - PAUSE_AROUND_SECONDS, end: pause.end + PAUSE_AROUND_SECONDS }
+      hear(within(takeClips(state.loaded, state.edits, one.block.id, one.take), window))
+    },
+    setDeleted: (block, deleted) => {
+      state.selected = deleted && block === state.open?.block.id ? neighbourOf(view.placedNow(), block) : state.selected
+      change(withDeleted(state.edits, block, deleted))
+    }
+  }
+}
+
+const showLoaded = (card: Card, draw: () => void, loaded: Loaded, ticket: Ticket): void => {
+  const { parts, player, saving, state } = card
+  if (parts.rowHolder.querySelector(".slot.dragging") !== null) {
+    state.pending = { loaded, ticket }
+    state.loaded = loaded
+    return
+  }
+  const timeline = loaded.view.timeline
+  if (timeline.state === "ready" && takeServer(state.edits, state.acked, timeline.edits, ticket, state.changes, saving.busy())) {
+    state.edits = timeline.edits
+    state.acked = timeline.edits
+  }
+  state.loaded = loaded
+  const drawn = JSON.stringify([loaded.view, [...loaded.transcripts.keys()], state.edits])
+  if (drawn === state.drawn) return
+  state.drawn = drawn
+  const content = playedKey(loaded, state.edits)
+  const changed = content !== state.content
+  state.content = content
+  if (changed) player.stop()
+  draw()
+}
+
 export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels: Panels; readonly refresh: () => void } => {
   const parts = partsOf()
   const ui = frameOf(parts)
@@ -197,6 +260,7 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
   const player = montage(projectId, view.markPlaying)
   ui.frame.prepend(player.node)
   const saving = saver(projectId, ui.problem, () => state.edits)
+  const card: Card = { parts, ui, state, view, player, saving, hooks }
   const draw = (): void => {
     redraw({ parts, ui, state, view, player, hooks }, actions)
     const deferred = state.pending
@@ -243,27 +307,7 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
     parts.rowHolder.querySelector(".clip.selected")?.scrollIntoView({ block: "nearest", inline: "nearest" })
   }
 
-  const actions: Actions = {
-    change,
-    textOf: (take) => textOf(state.loaded?.transcripts ?? new Map(), take),
-    select: (block) => {
-      select(block)
-      hooks.openTakes()
-    },
-    reorder: (blocks) => { change({ ...state.edits, order: [...blocks] }) },
-    setPause: (video, after, removed) => { change(withPauses(state.edits, [{ video, after }], removed)) },
-    choose: (block, take) => { change(withChoice(state.edits, block, take)) },
-    hear: (block, take) => { hear(takeClips(state.loaded, state.edits, block, take)) },
-    hearAround: (block, take) => { hear(aroundClips(view.placedNow(), takeClips(state.loaded, state.edits, block, take), block)) },
-    hearPause: (one, pause) => {
-      const window = { start: pause.start - PAUSE_AROUND_SECONDS, end: pause.end + PAUSE_AROUND_SECONDS }
-      hear(within(takeClips(state.loaded, state.edits, one.block.id, one.take), window))
-    },
-    setDeleted: (block, deleted) => {
-      state.selected = deleted && block === state.open?.block.id ? neighbourOf(view.placedNow(), block) : state.selected
-      change(withDeleted(state.edits, block, deleted))
-    }
-  }
+  const actions: Actions = actionsOf(card, change, hear, select)
 
   const toggle = (from: string | undefined): void => {
     if (state.playing !== undefined) player.stop()
@@ -280,25 +324,7 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
     { choose: actions.choose, setDeleted: actions.setDeleted, step: select, toggle: () => { toggle(state.open?.block.id) }, undo })
 
   const show = (loaded: Loaded, ticket: Ticket): void => {
-    if (parts.rowHolder.querySelector(".slot.dragging") !== null) {
-      state.pending = { loaded, ticket }
-      state.loaded = loaded
-      return
-    }
-    const timeline = loaded.view.timeline
-    if (timeline.state === "ready" && takeServer(state.edits, state.acked, timeline.edits, ticket, state.changes, saving.busy())) {
-      state.edits = timeline.edits
-      state.acked = timeline.edits
-    }
-    state.loaded = loaded
-    const drawn = JSON.stringify([loaded.view, [...loaded.transcripts.keys()], state.edits])
-    if (drawn === state.drawn) return
-    state.drawn = drawn
-    const content = playedKey(loaded, state.edits)
-    const changed = content !== state.content
-    state.content = content
-    if (changed) player.stop()
-    draw()
+    showLoaded(card, draw, loaded, ticket)
   }
 
   return { panels: ui.panels, refresh: loader(projectId, ui.panels.tracks, show, () => ({ changes: state.changes, busy: saving.busy() })) }
