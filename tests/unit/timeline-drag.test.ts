@@ -1,21 +1,64 @@
 import { expect, test } from "bun:test"
-import { blockRow, rowDragging, type RowActions } from "../../src/web/timeline-row.ts"
-import type { Placed } from "../../src/shared/timeline.ts"
+import { timelineCard } from "../../src/web/timeline.ts"
 
-type Handler = (event: { readonly button?: number; readonly pointerId?: number }) => void
+interface FakeEvent {
+  readonly button?: number
+  readonly pointerId?: number
+  readonly clientX?: number
+  readonly clientY?: number
+  readonly key?: string
+  readonly code?: string
+  target?: FakeEl
+  preventDefault: () => void
+}
+
+type Handler = (event: FakeEvent) => void
+
+const fakeEvent = (init: { readonly button?: number; readonly pointerId?: number; readonly clientX?: number; readonly clientY?: number; readonly key?: string; readonly code?: string; readonly target?: FakeEl }): FakeEvent => ({
+  ...init,
+  preventDefault: () => {}
+})
 
 class FakeEl {
   readonly tag: string
   readonly dataset: Record<string, string> = {}
   readonly children: Array<FakeEl> = []
-  readonly listeners = new Map<string, Array<Handler>>()
-  private readonly classes = new Set<string>()
+  rect = { left: 0, top: 0, right: 0, bottom: 0 }
   parent: FakeEl | undefined = undefined
+  hidden = false
+  disabled = false
+  textContent = ""
+  title = ""
+  scrollLeft = 0
+  currentTime = 0
+  volume = 1
+  ended = false
+  seeking = false
+  src = ""
+  private attrs: Record<string, string> = {}
+  private classes = new Set<string>()
+  private listeners = new Map<string, Array<Handler>>()
   constructor(tag: string) {
     this.tag = tag
   }
+  get isConnected(): boolean {
+    return true
+  }
+  get firstElementChild(): FakeEl | null {
+    return this.children[0] ?? null
+  }
   setAttribute(name: string, value: string): void {
-    if (name.startsWith("data-")) this.dataset[name.slice("data-".length)] = value
+    this.attrs[name] = value
+    if (name === "class") this.classes = new Set(value.split(" ").filter((one) => one !== ""))
+    if (name.startsWith("data-")) this.dataset[name.slice(5)] = value
+  }
+  getAttribute(name: string): string | null {
+    return this.attrs[name] ?? null
+  }
+  removeAttribute(name: string): void {
+    delete this.attrs[name]
+    if (name === "class") this.classes = new Set()
+    if (name.startsWith("data-")) delete this.dataset[name.slice(5)]
   }
   append(...kids: Array<FakeEl | string>): void {
     for (const kid of kids) {
@@ -24,118 +67,252 @@ class FakeEl {
       this.children.push(kid)
     }
   }
-  before(...nodes: Array<FakeEl>): void {
-    const siblings = this.parent?.children
-    if (siblings === undefined) return
-    for (const node of nodes) {
-      const at = siblings.indexOf(node)
-      if (at !== -1) siblings.splice(at, 1)
-      siblings.splice(siblings.indexOf(this), 0, node)
-      node.parent = this.parent
+  prepend(...kids: Array<FakeEl | string>): void {
+    const kept: Array<FakeEl> = []
+    for (const kid of kids) {
+      if (typeof kid === "string") continue
+      kid.parent = this
+      kept.push(kid)
     }
+    this.children.unshift(...kept)
+  }
+  replaceChildren(...kids: Array<FakeEl | string>): void {
+    for (const kid of this.children) kid.parent = undefined
+    this.children.length = 0
+    this.append(...kids)
+  }
+  before(...nodes: Array<FakeEl>): void {
+    moveNodes(this, nodes, "before")
   }
   after(...nodes: Array<FakeEl>): void {
-    const siblings = this.parent?.children
-    if (siblings === undefined) return
-    for (const node of nodes) {
-      const at = siblings.indexOf(node)
-      if (at !== -1) siblings.splice(at, 1)
-      siblings.splice(siblings.indexOf(this) + 1, 0, node)
-      node.parent = this.parent
-    }
+    moveNodes(this, nodes, "after")
   }
   addEventListener(name: string, fn: Handler): void {
     const known = this.listeners.get(name) ?? []
     known.push(fn)
     this.listeners.set(name, known)
   }
-  removeEventListener(): void {}
+  removeEventListener(name: string, fn: Handler): void {
+    this.listeners.set(name, (this.listeners.get(name) ?? []).filter((one) => one !== fn))
+  }
+  focus(): void {}
+  scrollIntoView(): void {}
   setPointerCapture(): void {}
+  play(): Promise<void> {
+    return Promise.resolve()
+  }
+  pause(): void {}
+  getBoundingClientRect(): { readonly left: number; readonly top: number; readonly right: number; readonly bottom: number; readonly width: number; readonly height: number } {
+    return { ...this.rect, width: this.rect.right - this.rect.left, height: this.rect.bottom - this.rect.top }
+  }
+  matches(selector: string): boolean {
+    if (selector === "[data-key]") return this.dataset["key"] !== undefined
+    if (!selector.startsWith(".")) return this.tag === selector
+    return selector.slice(1).split(".").every((one) => this.classes.has(one))
+  }
+  closest(selector: string): FakeEl | null {
+    let node: FakeEl | undefined = this
+    while (node !== undefined) {
+      if (selector.split(",").some((part) => node !== undefined && node.matches(part.trim()))) return node
+      node = node.parent
+    }
+    return null
+  }
+  querySelectorAll(selector: string): Array<FakeEl> {
+    const found: Array<FakeEl> = []
+    const walk = (node: FakeEl): void => {
+      for (const kid of node.children) {
+        if (kid.matches(selector)) found.push(kid)
+        walk(kid)
+      }
+    }
+    walk(this)
+    return found
+  }
+  querySelector(selector: string): FakeEl | null {
+    return this.querySelectorAll(selector)[0] ?? null
+  }
+  dispatch(name: string, event: FakeEvent): void {
+    if (event.target === undefined) event.target = this
+    let node: FakeEl | undefined = this
+    while (node !== undefined) {
+      for (const fn of node.listeners.get(name) ?? []) fn(event)
+      node = node.parent
+    }
+    for (const fn of docListeners.get(name) ?? []) fn(event)
+  }
   readonly classList = {
     add: (name: string): void => {
       this.classes.add(name)
     },
     remove: (name: string): void => {
       this.classes.delete(name)
-    }
-  }
-  dispatch(name: string, event: { readonly button?: number; readonly pointerId?: number }): void {
-    for (const fn of this.listeners.get(name) ?? []) fn(event)
+    },
+    toggle: (name: string, force?: boolean): void => {
+      if (force === undefined) {
+        if (this.classes.has(name)) this.classes.delete(name)
+        else this.classes.add(name)
+      } else if (force) this.classes.add(name)
+      else this.classes.delete(name)
+    },
+    contains: (name: string): boolean => this.classes.has(name)
   }
 }
 
-const placed = (id: string): Placed => ({
-  block: { id, title: id, takes: [{ video: "a", from: 0, to: 0, reason: "clean" }] },
-  take: { video: "a", from: 0, to: 0, reason: "clean" },
-  pauses: [],
-  spans: [{ start: 0, end: 1 }]
-})
-
-interface Calls {
-  reorder: Array<ReadonlyArray<string>>
-  select: Array<string>
+const moveNodes = (slot: FakeEl, nodes: Array<FakeEl>, side: "before" | "after"): void => {
+  const siblings = slot.parent?.children
+  if (siblings === undefined) return
+  for (const node of nodes) {
+    const at = siblings.indexOf(node)
+    if (at !== -1) siblings.splice(at, 1)
+    siblings.splice(siblings.indexOf(slot) + (side === "after" ? 1 : 0), 0, node)
+    node.parent = slot.parent
+  }
 }
 
-const setup = (): { row: FakeEl; handle: (id: string) => FakeEl; calls: Calls } => {
+const docListeners = new Map<string, Array<Handler>>()
+
+interface Put {
+  readonly url: string
+  readonly body: unknown
+}
+
+const orderOf = (put: Put | undefined): ReadonlyArray<string> => {
+  if (put === undefined) throw new Error("no saved order")
+  if (typeof put.body !== "object" || put.body === null) throw new Error("bad saved body")
+  const order: unknown = Object.getOwnPropertyDescriptor(put.body, "order")?.value
+  if (!Array.isArray(order) || !order.every((one: unknown): one is string => typeof one === "string")) throw new Error("bad saved order")
+  return order
+}
+
+const words = [
+  { start: 0, end: 1, text: "раз" },
+  { start: 3, end: 4, text: "два" },
+  { start: 6, end: 7, text: "три" },
+  { start: 9, end: 10, text: "четыре" },
+  { start: 12, end: 13, text: "пять" },
+  { start: 15, end: 16, text: "шесть" }
+]
+
+const takeOf = (from: number, to: number): { readonly video: string; readonly from: number; readonly to: number; readonly reason: string } =>
+  ({ video: "a", from, to, reason: "чисто" })
+
+const blocksOf = (count: number): Array<{ readonly id: string; readonly title: string; readonly takes: Array<ReturnType<typeof takeOf>> }> => {
+  const titles = ["Первый", "Второй", "Третий", "Четвёртый"]
+  const ranges: Array<readonly [number, number]> = [[0, 1], [2, 3], [4, 5], [0, 1]]
+  const ids = ["a", "b", "c", "d"]
+  return ids.slice(0, count).map((id, index) => ({ id, title: titles[index] ?? id, takes: [takeOf(ranges[index]?.[0] ?? 0, ranges[index]?.[1] ?? 1)] }))
+}
+
+const setup = (blocks: number): { readonly card: ReturnType<typeof timelineCard>; readonly puts: Array<Put>; readonly swapBlocks: (count: number) => void } => {
+  docListeners.clear()
+  const puts: Array<Put> = []
+  let count = blocks
+  const videos = { videos: [{ name: "a", state: "ready", transcript: { duration: 20, words } }] }
+  const timeline = (): unknown => ({
+    looks: [{ video: "a", state: "measured" }],
+    timeline: { state: "ready", blocks: blocksOf(count), dropped: 0, edits: { order: [], deleted: [], chosen: [], pauses: [] } }
+  })
   Object.assign(globalThis, {
     HTMLElement: FakeEl,
-    document: { createElement: (tag: string) => new FakeEl(tag) }
+    Element: FakeEl,
+    document: {
+      createElement: (tag: string) => new FakeEl(tag),
+      activeElement: undefined,
+      addEventListener: (name: string, fn: Handler) => {
+        const known = docListeners.get(name) ?? []
+        known.push(fn)
+        docListeners.set(name, known)
+      },
+      removeEventListener: (name: string, fn: Handler) => {
+        docListeners.set(name, (docListeners.get(name) ?? []).filter((one) => one !== fn))
+      }
+    },
+    requestAnimationFrame: () => 0,
+    fetch: (url: string, init?: { readonly method?: string; readonly body?: string }) => {
+      if (init?.method === "PUT") {
+        puts.push({ url, body: JSON.parse(init.body ?? "{}") })
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ saved: "p1" }) })
+      }
+      const body = url.endsWith("/videos") ? videos : timeline()
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) })
+    }
   })
-  const calls: Calls = { reorder: [], select: [] }
-  const actions: RowActions = {
-    select: (block: string) => {
-      calls.select.push(block)
-    },
-    textOf: () => "words",
-    reorder: (blocks: ReadonlyArray<string>) => {
-      calls.reorder.push(blocks)
-    },
-    setPause: () => {}
-  }
-  const made: unknown = blockRow([placed("a"), placed("b"), placed("c")], undefined, actions)
-  if (!(made instanceof FakeEl)) throw new Error("no row")
-  const row = made
-  const handle = (id: string): FakeEl => {
-    const want = "handle:" + id
-    const found = (node: FakeEl): FakeEl | undefined =>
-      node.dataset["key"] === want ? node : node.children.flatMap((kid) => found(kid) ?? []).at(0)
-    const node = found(row)
-    if (node === undefined) throw new Error("no handle " + id)
-    return node
-  }
-  return { row, handle, calls }
+  const card = timelineCard("p1", { ask: () => {}, openTakes: () => {}, status: () => {} })
+  return { card, puts, swapBlocks: (next: number) => { count = next } }
 }
 
-const ids = (row: FakeEl): ReadonlyArray<string> => row.children.map((slot) => slot.dataset["id"] ?? "")
+const rowHolderOf = (card: ReturnType<typeof timelineCard>): FakeEl => {
+  const tracks = card.panels.tracks
+  if (!(tracks instanceof FakeEl)) throw new Error("no tracks")
+  const holder = tracks.querySelector(".blocks-holder")
+  if (holder === null) throw new Error("no row holder")
+  return holder
+}
 
-test("a drag that crosses a poll keeps the pointer and saves the reached order", () => {
-  const { row, handle, calls } = setup()
-  expect(rowDragging()).toBe(false)
-  handle("b").dispatch("pointerdown", { button: 0, pointerId: 1 })
-  expect(rowDragging()).toBe(true)
-  const third = row.children[2]
-  const second = row.children[1]
-  if (third === undefined || second === undefined) throw new Error("no slots")
-  third.after(second)
-  expect(ids(row)).toEqual(["a", "c", "b"])
-  handle("b").dispatch("pointerup", {})
-  expect(calls.reorder).toEqual([["a", "c", "b"]])
-  expect(calls.select).toEqual(["b"])
-  expect(rowDragging()).toBe(false)
+const rowIds = (card: ReturnType<typeof timelineCard>): Array<string> => {
+  const row = rowHolderOf(card).firstElementChild
+  if (row === null) return []
+  return row.children.map((slot) => slot.dataset["id"] ?? "?")
+}
+
+const findKey = (card: ReturnType<typeof timelineCard>, key: string): FakeEl => {
+  const tracks = card.panels.tracks
+  if (!(tracks instanceof FakeEl)) throw new Error("no tracks")
+  const node = tracks.querySelectorAll("[data-key]").find((one) => one.dataset["key"] === key)
+  if (node === undefined) throw new Error("no key " + key)
+  return node
+}
+
+const dragging = (card: ReturnType<typeof timelineCard>): boolean =>
+  rowHolderOf(card).querySelector(".slot.dragging") !== null
+
+const until = async (ready: () => boolean, what: string): Promise<void> => {
+  for (let i = 0; i < 100; i++) {
+    if (ready()) return
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+  throw new Error("timed out waiting for " + what)
+}
+
+test("a poll mid-drag keeps the row while the drag saves the reached order", async () => {
+  const { card, puts } = setup(3)
+  card.refresh()
+  await until(() => rowIds(card).length === 3, "the first row")
+  const rowBefore = rowHolderOf(card).firstElementChild
+  const handle = findKey(card, "handle:b")
+  handle.dispatch("pointerdown", fakeEvent({ button: 0, pointerId: 1 }))
+  expect(dragging(card)).toBe(true)
+  card.refresh()
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  if (rowHolderOf(card).firstElementChild !== rowBefore) throw new Error("the poll rebuilt the row mid-drag")
+  expect(dragging(card)).toBe(true)
+  const slots = rowHolderOf(card).firstElementChild?.children ?? []
+  slots.forEach((slot, index) => {
+    slot.rect = { left: index * 100, top: 0, right: index * 100 + 90, bottom: 40 }
+  })
+  handle.dispatch("pointermove", fakeEvent({ clientX: 250, clientY: 20 }))
+  expect(rowIds(card)).toEqual(["a", "c", "b"])
+  handle.dispatch("pointerup", fakeEvent({}))
+  await until(() => puts.length === 1, "the saved order")
+  expect(orderOf(puts[0])).toEqual(["a", "c", "b"])
+  expect(rowIds(card)).toEqual(["a", "c", "b"])
+  expect(dragging(card)).toBe(false)
 })
 
-test("pressing a handle without moving selects its block and saves nothing", () => {
-  const { handle, calls } = setup()
-  handle("a").dispatch("pointerdown", { button: 0, pointerId: 2 })
-  expect(rowDragging()).toBe(true)
-  handle("a").dispatch("pointerup", {})
-  expect(calls.reorder).toEqual([])
-  expect(calls.select).toEqual(["a"])
-  expect(rowDragging()).toBe(false)
-})
-
-test("a press with another button starts no drag", () => {
-  const { handle } = setup()
-  handle("a").dispatch("pointerdown", { button: 2, pointerId: 3 })
-  expect(rowDragging()).toBe(false)
+test("a poll after keys rebuild the row mid-drag is processed, not deferred", async () => {
+  const { card, swapBlocks } = setup(3)
+  card.refresh()
+  await until(() => rowIds(card).length === 3, "the first row")
+  const oldRow = rowHolderOf(card).firstElementChild
+  findKey(card, "handle:b").dispatch("pointerdown", fakeEvent({ button: 0, pointerId: 1 }))
+  expect(dragging(card)).toBe(true)
+  findKey(card, "handle:b").dispatch("keydown", fakeEvent({ key: "ArrowRight", code: "ArrowRight" }))
+  await until(() => rowIds(card).join() === "a,c,b", "the keyboard move")
+  if (rowHolderOf(card).firstElementChild === oldRow) throw new Error("the keys never rebuilt the row")
+  expect(dragging(card)).toBe(false)
+  swapBlocks(4)
+  card.refresh()
+  await until(() => rowIds(card).length === 4, "the new block on screen")
+  expect(rowIds(card).join()).toContain("d")
 })

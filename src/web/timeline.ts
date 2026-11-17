@@ -14,7 +14,6 @@ import {
 } from "./timeline-draw.ts"
 import { onKeys } from "./timeline-keys.ts"
 import { POLL_MS, saver } from "./timeline-save.ts"
-import { rowDragging } from "./timeline-row.ts"
 
 export type { Status } from "./timeline-draw.ts"
 
@@ -74,6 +73,7 @@ interface State {
   playing: Playing | undefined
   drawn: string
   content: string
+  pending: { readonly loaded: Loaded; readonly ticket: Ticket } | undefined
 }
 
 const display = (parts: Parts, state: State) => {
@@ -192,12 +192,18 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
   const parts = partsOf()
   const ui = frameOf(parts)
   const state: State =
-    { loaded: undefined, edits: NO_EDITS, acked: NO_EDITS, changes: 0, history: [], selected: undefined, open: undefined, base: undefined, playing: undefined, drawn: "", content: "" }
+    { loaded: undefined, edits: NO_EDITS, acked: NO_EDITS, changes: 0, history: [], selected: undefined, open: undefined, base: undefined, playing: undefined, drawn: "", content: "", pending: undefined }
   const view = display(parts, state)
   const player = montage(projectId, view.markPlaying)
   ui.frame.prepend(player.node)
   const saving = saver(projectId, ui.problem, () => state.edits)
-  const draw = (): void => { redraw({ parts, ui, state, view, player, hooks }, actions) }
+  const draw = (): void => {
+    redraw({ parts, ui, state, view, player, hooks }, actions)
+    const deferred = state.pending
+    if (deferred === undefined) return
+    state.pending = undefined
+    show(deferred.loaded, deferred.ticket)
+  }
 
   const hear = (clips: ReadonlyArray<Clip>): void => {
     state.base = undefined
@@ -274,7 +280,8 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
     { choose: actions.choose, setDeleted: actions.setDeleted, step: select, toggle: () => { toggle(state.open?.block.id) }, undo })
 
   const show = (loaded: Loaded, ticket: Ticket): void => {
-    if (rowDragging()) {
+    if (parts.rowHolder.querySelector(".slot.dragging") !== null) {
+      state.pending = { loaded, ticket }
       state.loaded = loaded
       return
     }
