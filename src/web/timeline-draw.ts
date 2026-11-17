@@ -8,8 +8,10 @@ import { blockRow, type RowActions } from "./timeline-row.ts"
 
 export const PLAY = "Смотреть монтаж"
 export const STOP = "Остановить"
-const STRIP = "Убрать все паузы"
-const UNSTRIP = "Вернуть все паузы"
+const STRIP = { label: "Убрать все паузы", hint: "Убирает все паузы в выбранных дублях" }
+const UNSTRIP = { label: "Вернуть все паузы", hint: "Возвращает все паузы в выбранные дубли" }
+
+export const stripWords = (allRemoved: boolean): typeof STRIP => allRemoved ? UNSTRIP : STRIP
 const GATHER = "Собери блоки из всех видео и расставь дубли от лучшего к худшему."
 const NO_SPEECH = "Блоки появятся, когда студия услышит первое видео."
 const NO_BLOCKS = "Блоков пока нет. Студия соберёт их из текста всех видео: дубли с одним смыслом попадут в один блок, лучший дубль встанет первым."
@@ -103,7 +105,7 @@ export const partsOf = (): Parts => ({
   summary: h("span", { class: "sum" }),
   clock: h("span", { class: "tc", role: "timer" }),
   undo: tool("Отменить", "Отменяет последнее изменение монтажа. Клавиша Z"),
-  strip: tool(STRIP, "Убирает все паузы в выбранных дублях"),
+  strip: tool(STRIP.label, STRIP.hint),
   play: tool(PLAY, "Показывает монтаж с начала", "primary"),
   prev: h("button", { type: "button", disabled: true, "aria-label": "Блок до этого", title: "Блок до этого" }, "|◀"),
   go: h("button", { type: "button", class: "go", disabled: true, "aria-label": "Смотреть с этого блока", title: "Смотреть с этого блока. Пробел" }, "▶"),
@@ -141,7 +143,9 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { reado
   const open = placed[index]
   parts.summary.textContent = summaryOf(placed)
   parts.strip.disabled = pauses.length === 0
-  parts.strip.textContent = allRemoved ? UNSTRIP : STRIP
+  const strip = stripWords(allRemoved)
+  parts.strip.textContent = strip.label
+  parts.strip.title = strip.hint
   parts.strip.onclick = () => { actions.change(withPauses(edits, pauses, !allRemoved)) }
   parts.prev.disabled = index === 0
   parts.next.disabled = index >= placed.length - 1
