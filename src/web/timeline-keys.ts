@@ -22,7 +22,8 @@ interface Now {
 }
 
 const PRESSES = "input, textarea, select, button, a, video, dialog"
-const TYPES = "input, textarea, select, video, dialog, .handle"
+const TYPES = "input, textarea, select, video, dialog"
+const MOVES_ITSELF = ".handle"
 const STEPS: Readonly<Record<string, number>> = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }
 
 const inside = (event: KeyboardEvent, selector: string): boolean => event.target instanceof Element && event.target.closest(selector) !== null
@@ -52,7 +53,7 @@ const act = (event: KeyboardEvent, { open, placed }: Now, actions: KeyActions): 
     actions.undo()
     return true
   }
-  return open !== undefined && actOnOpen(event, open, placed, actions)
+  return !inside(event, MOVES_ITSELF) && open !== undefined && actOnOpen(event, open, placed, actions)
 }
 
 export const onKeys = (anchor: HTMLElement, now: () => Now, actions: KeyActions): void => {

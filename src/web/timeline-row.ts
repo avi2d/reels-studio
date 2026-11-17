@@ -41,11 +41,22 @@ const holds = (node: Element, point: Point): boolean => {
 }
 
 interface Drag {
-  dragging: boolean
+  from: ReadonlyArray<string> | undefined
   crossed: Element | undefined
 }
 
-// The dragged slot never leaves the document: a node that is re-inserted loses its pointer capture.
+export interface Crossing<T> {
+  readonly movers: ReadonlyArray<T>
+  readonly side: "before" | "after"
+}
+
+export const crossingOf = <T>(row: ReadonlyArray<T>, dragged: T, under: T): Crossing<T> => {
+  const from = row.indexOf(dragged)
+  const to = row.indexOf(under)
+  return to > from ? { movers: row.slice(from + 1, to + 1), side: "before" } : { movers: row.slice(to, from), side: "after" }
+}
+
+// The dragged slot is never re-inserted: a node that leaves the document loses its pointer capture, and the drop never arrives.
 const follow = (row: HTMLElement, slot: HTMLElement, point: Point, drag: Drag): void => {
   const box = row.getBoundingClientRect()
   if (point.x > box.right - EDGE) row.scrollLeft += EDGE_STEP
@@ -57,8 +68,9 @@ const follow = (row: HTMLElement, slot: HTMLElement, point: Point, drag: Drag): 
   }
   if (under === drag.crossed) return
   drag.crossed = under
-  if ((slot.compareDocumentPosition(under) & Node.DOCUMENT_POSITION_FOLLOWING) === 0) under.before(slot)
-  else under.after(slot)
+  const { movers, side } = crossingOf([...row.children], slot, under)
+  if (side === "before") slot.before(...movers)
+  else slot.after(...movers)
 }
 
 const idsOf = (row: HTMLElement): ReadonlyArray<string> =>
@@ -74,22 +86,24 @@ const dragHandle = (row: HTMLElement, slot: HTMLElement, title: string, id: stri
     title: "Перетащите блок на новое место",
     "data-key": `handle:${id}`
   }, "⠿")
-  const state: Drag = { dragging: false, crossed: undefined }
+  const state: Drag = { from: undefined, crossed: undefined }
   const drop = (): void => {
-    if (!state.dragging) return
-    state.dragging = false
+    const from = state.from
+    if (from === undefined) return
+    state.from = undefined
+    state.crossed = undefined
     slot.classList.remove("dragging")
-    actions.reorder(idsOf(row))
+    const ids = idsOf(row)
+    if (ids.some((one, index) => one !== from[index])) actions.reorder(ids)
   }
   handle.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return
     handle.setPointerCapture(event.pointerId)
-    state.dragging = true
+    state.from = idsOf(row)
     slot.classList.add("dragging")
   })
-  handle.addEventListener("pointermove", (event) => { if (state.dragging) follow(row, slot, { x: event.clientX, y: event.clientY }, state) })
-  handle.addEventListener("pointerup", drop)
-  handle.addEventListener("pointercancel", drop)
+  handle.addEventListener("pointermove", (event) => { if (state.from !== undefined) follow(row, slot, { x: event.clientX, y: event.clientY }, state) })
+  for (const end of ["pointerup", "pointercancel", "lostpointercapture"]) handle.addEventListener(end, drop)
   handle.addEventListener("keydown", (event) => {
     const step = KEY_STEPS[event.key]
     if (step === undefined) return
