@@ -35,6 +35,9 @@ The person chooses a take, drags and deletes blocks, and removes pauses on the p
 The studio keeps these choices in `timeline.json`, which the chat model cannot write.
 A deleted block and a removed pause stay listed on the page, and one tap returns each.
 «Смотреть монтаж» plays the chosen takes in the order of the row, from the previews, and skips the removed pauses.
+Each preview holds a key frame every half second.
+The studio re-encodes a preview made with the old key frame distance by itself in the background.
+The old preview stays playable until the new one is complete.
 A removed pause leaves 0.2 s of silence in its place.
 The sound fades over 0.06 s on each side of a cut.
 «Послушать» next to a pause plays 1.5 s before it and 1.5 s after it.

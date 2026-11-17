@@ -2,7 +2,7 @@ import { Crypto, Effect, FileSystem, Option, type PlatformError, Predicate } fro
 import type { LibraryVideo } from "../shared/library.ts"
 import { badRequest } from "./api-error.ts"
 import { gazeText, transcriptText } from "./media-commands.ts"
-import { places, readGaze, readTranscript, type Job } from "./media-jobs.ts"
+import { places, previewFlag, readGaze, readTranscript, type Job } from "./media-jobs.ts"
 import { numbered } from "./tus.ts"
 
 export interface Found {
@@ -111,6 +111,7 @@ export const reuse = Effect.fnUntraced(function*(from: Job, dir: string) {
   yield* existingFolder(`${dir}/preview`)
   const transcript = yield* readTranscript(from)
   yield* fs.link(source.preview, target.preview)
+  if (yield* fs.exists(previewFlag(from))) yield* fs.copyFile(previewFlag(from), previewFlag({ dir, name }))
   yield* fs.writeFileString(target.text, transcriptText(name, transcript))
   yield* fs.copyFile(source.transcript, target.transcript)
   if (yield* fs.exists(source.gaze)) {

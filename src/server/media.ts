@@ -4,7 +4,7 @@ import type { LibraryVideo, Pick } from "../shared/library.ts"
 import type { VideoView } from "../shared/plan.ts"
 import type { Edits, TimelineView } from "../shared/timeline.ts"
 import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
-import { listen, look, places, readPlan, readTranscript, type Job } from "./media-jobs.ts"
+import { listen, look, places, previewIsFresh, readPlan, readTranscript, refreshPreview, type Job } from "./media-jobs.ts"
 import { Projects } from "./projects.ts"
 import { gatherLibrary, heardIn, keysIn, reuse as reuseOne, sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
@@ -54,6 +54,16 @@ const nextUnheard = Effect.fnUntraced(function*(unheard: Unheard, jobs: Readonly
   return jobs.find((_, index) => heard[index] === false)
 })
 
+const nextStale = Effect.fnUntraced(function*(jobs: ReadonlyArray<Job>) {
+  const fs = yield* FileSystem.FileSystem
+  const stale = yield* Effect.forEach(jobs, (job) => Effect.gen(function*() {
+    if (!(yield* fs.exists(places(job).transcript))) return false
+    if (!(yield* fs.exists(places(job).preview))) return false
+    return !(yield* previewIsFresh(job))
+  }))
+  return jobs.find((_, index) => stale[index] === true)
+})
+
 const nextUnseen = Effect.fnUntraced(function*(unseen: Unheard, jobs: ReadonlyArray<Job>) {
   const fs = yield* FileSystem.FileSystem
   const failed = yield* Ref.get(unseen)
@@ -81,10 +91,27 @@ const attempt = Effect.fnUntraced(function*<E, R>(failures: Unheard, work: Ref.R
   }
 })
 
+const revive = Effect.fnUntraced(function*<E, R>(work: Ref.Ref<Work>, job: Job, task: Effect.Effect<void, E, R>) {
+  const running: Running = { dir: job.dir, stop: yield* Deferred.make<void>(), finished: yield* Deferred.make<void>() }
+  const claimed = yield* Ref.modify(work, (state) =>
+    state.closed.has(job.dir) ? [false, state] : [true, { ...state, running }])
+  if (!claimed) return
+  yield* Effect.exit(Effect.raceFirst(task, Deferred.await(running.stop))).pipe(
+    Effect.ensuring(Ref.update(work, (state) => ({ ...state, running: undefined })).pipe(
+      Effect.andThen(Deferred.succeed(running.finished, undefined))
+    )),
+    Effect.tap((outcome) => Exit.isFailure(outcome)
+      ? Effect.logError("the preview refresh failed", job.name, outcome.cause)
+      : Effect.void)
+  )
+})
+
 const step = Effect.fnUntraced(function*(failures: Failures, work: Ref.Ref<Work>) {
   const jobs = yield* openJobs((yield* Ref.get(work)).closed)
   const unheard = yield* nextUnheard(failures.unheard, jobs)
   if (unheard !== undefined) return yield* attempt(failures.unheard, work, unheard, listen(unheard))
+  const stale = yield* nextStale(jobs)
+  if (stale !== undefined) return yield* revive(work, stale, refreshPreview(stale))
   const unseen = yield* nextUnseen(failures.unseen, jobs)
   if (unseen !== undefined) return yield* attempt(failures.unseen, work, unseen, look(unseen))
   yield* Effect.sleep("3 seconds")

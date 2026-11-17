@@ -156,6 +156,32 @@ test("a time in the second played span sits after only the played seconds before
   expect(offsetIn(spans, 0)).toBe(0)
 })
 
+test("a take heard with neighbours that span a removed pause still plays two seconds from each side", () => {
+  const cut = [
+    { video: "a", block: "before", start: 10, end: 14 },
+    { video: "a", block: "before", start: 14.5, end: 15 },
+    { video: "b", block: "main", start: 30, end: 34 },
+    { video: "c", block: "after", start: 20, end: 20.5 },
+    { video: "c", block: "after", start: 21, end: 25 }
+  ]
+  const own = [{ video: "b", block: "main", start: 30, end: 34 }]
+  expect(withNeighbours(cut, "main", own, 2)).toEqual([
+    { video: "a", block: "before", start: 12.5, end: 14 },
+    { video: "a", block: "before", start: 14.5, end: 15 },
+    { video: "b", block: "main", start: 30, end: 34 },
+    { video: "c", block: "after", start: 20, end: 20.5 },
+    { video: "c", block: "after", start: 21, end: 22.5 }
+  ])
+})
+
+test("neighbours shorter than the requested seconds play whole, not padded", () => {
+  const cut = [
+    { video: "a", block: "before", start: 5, end: 5.5 },
+    { video: "b", block: "main", start: 30, end: 34 }
+  ]
+  expect(withNeighbours(cut, "main", [], 2)).toEqual([{ video: "a", block: "before", start: 5, end: 5.5 }])
+})
+
 test("a window keeps only the parts of the spans inside it, not every span it touches whole", () => {
   const spans = [{ start: 0, end: 2 }, { start: 5, end: 8 }, { start: 9, end: 10 }]
   expect(within(spans, { start: 1, end: 6 })).toEqual([{ start: 1, end: 2 }, { start: 5, end: 6 }])

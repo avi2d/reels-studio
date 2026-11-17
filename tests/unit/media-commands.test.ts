@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { isHdr, prepareArgs, transcriptText } from "../../src/server/media-commands.ts"
+import { isHdr, prepareArgs, refreshArgs, transcriptText } from "../../src/server/media-commands.ts"
 
 test("an iPhone HLG video and a PQ video count as HDR, and a plain or unknown one does not", () => {
   expect(isHdr("arib-std-b67")).toBe(true)
@@ -50,6 +50,18 @@ test("a pause under a tenth of a second keeps the line, and a pause under a seco
     words: [{ start: 0.5, end: 1, text: "да" }, { start: 1.09, end: 1.5, text: "нет" }]
   })
   expect(text.split("\n").slice(3)).toEqual(["[0.50-1.50] 0:да 1:нет", ""])
+})
+
+test("a refreshed preview encodes only the preview, with the same short key frame distance and encoder", () => {
+  expect(refreshArgs("a.mov", "a.mp4", false, "libx264")).toEqual([
+    "-hide_banner", "-loglevel", "error", "-y", "-i", "a.mov",
+    "-map", "0:v:0", "-map", "0:a:0", "-vf", "fps=30,scale=540:-2,format=yuv420p",
+    "-c:v", "libx264", "-b:v", "1500k", "-g", "15", "-c:a", "aac", "-b:a", "96k", "-ac", "1",
+    "-movflags", "+faststart", "-f", "mp4", "a.mp4"
+  ])
+  expect(refreshArgs("a.mov", "a.mp4", false, "libx264")).not.toContain("a.wav")
+  const hdrFilter = refreshArgs("a.mov", "a.mp4", true, "h264_nvenc")
+  expect(hdrFilter[hdrFilter.indexOf("-vf") + 1] ?? "").toContain("tonemap")
 })
 
 test("a seek in the preview decodes at most half a second, not the 250 frames of ffmpeg's default key frame distance", () => {

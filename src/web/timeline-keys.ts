@@ -53,10 +53,12 @@ const act = (event: KeyboardEvent, { open, placed }: Now, actions: KeyActions): 
     actions.undo()
     return true
   }
-  return !inside(event, MOVES_ITSELF) && open !== undefined && actOnOpen(event, open, placed, actions)
+  if (open === undefined) return false
+  if (inside(event, MOVES_ITSELF) && event.key in STEPS) return false
+  return actOnOpen(event, open, placed, actions)
 }
 
-export const onKeys = (anchor: HTMLElement, now: () => Now, actions: KeyActions): void => {
+export const onKeys = (anchor: { readonly isConnected: boolean }, now: () => Now, actions: KeyActions): void => {
   const listen = (event: KeyboardEvent): void => {
     if (!anchor.isConnected) {
       document.removeEventListener("keydown", listen)

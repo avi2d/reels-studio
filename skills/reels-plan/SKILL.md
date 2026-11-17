@@ -56,7 +56,7 @@ The person chooses another take, moves and deletes blocks and removes pauses on 
    - The speaker looks into the camera. The gaze file gives the share for each stretch of speech, and a higher share is better.
    A clean take with a lower share goes before a take with a stumble, and between two equally clean takes the higher share wins.
 6. Leave out speech that is not part of the reel, such as words to someone off camera, and tell the person what you left out.
-7. Tell the person in the chat how many blocks came out and which blocks have several takes, and that the «Монтаж» card on the page now shows them.
+7. Tell the person in the chat how many blocks came out and which blocks have several takes, and that the «Дубли и блоки» stage and the row of blocks on the page now show them.
 
 ```json
 {
@@ -119,7 +119,7 @@ Check every text on screen against the reels-safe-area skill before showing the 
 
 It hears every uploaded video and shows its words on the page.
 It shows the words of the plan struck through, and its player skips them, so the person hears the video as the plan leaves it.
-It gathers the blocks and takes of all videos, and the «Монтаж» card plays the chosen takes one after another on the page.
+It gathers the blocks and takes of all videos, and «Смотреть монтаж» plays the chosen takes one after another on the page.
 It cannot yet cut a video, add subtitles, titles or templates, save several videos as one file, crop a video or send a file anywhere.
 Say so in one sentence when the person asks for any of these.
 Never say that a video is cut or ready.

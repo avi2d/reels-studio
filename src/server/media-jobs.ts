@@ -2,7 +2,7 @@ import { Data, Effect, FileSystem, Option, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/process"
 import { Plan, Transcript } from "../shared/plan.ts"
 import { Gaze } from "../shared/timeline.ts"
-import { gazeText, isHdr, prepareArgs, probeArgs, transcriptText } from "./media-commands.ts"
+import { gazeText, isHdr, KEY_FRAME_EVERY, prepareArgs, probeArgs, refreshArgs, transcriptText } from "./media-commands.ts"
 import { Settings } from "./settings.ts"
 
 class ToolFailed extends Data.TaggedError("ToolFailed")<{ readonly command: string; readonly output: string }> {}
@@ -30,6 +30,20 @@ export const places = (job: Job): Readonly<Record<Place, string>> => ({
   work: `${job.dir}/work/${job.name}`,
   gaze: `${job.dir}/gaze/${job.name}.json`,
   gazeText: `${job.dir}/gaze/${job.name}.txt`
+})
+
+export const previewFlag = (job: Job): string => `${places(job).preview}.gop`
+
+export const previewIsFresh = Effect.fnUntraced(function*(job: Job) {
+  const fs = yield* FileSystem.FileSystem
+  if (!(yield* fs.exists(previewFlag(job)))) return false
+  const tag = yield* Effect.orElseSucceed(fs.readFileString(previewFlag(job)), () => "")
+  return tag.trim() === String(KEY_FRAME_EVERY)
+})
+
+const markPreviewFresh = Effect.fnUntraced(function*(job: Job) {
+  const fs = yield* FileSystem.FileSystem
+  yield* fs.writeFileString(previewFlag(job), `${KEY_FRAME_EVERY}\n`)
 })
 
 const tool = Effect.fnUntraced(function*(command: string, args: ReadonlyArray<string>, prefix: ReadonlyArray<string>) {
@@ -81,9 +95,24 @@ export const listen = Effect.fn("Media.listen")(function*(job: Job) {
   yield* tool("uv", ["run", "--project", transcriber, "python", `${transcriber}/transcribe.py`, wav, words], settings.heavy)
   const transcript = yield* decodeTranscript(yield* fs.readFileString(words))
   yield* fs.rename(preview, place.preview)
+  yield* markPreviewFresh(job)
   yield* fs.writeFileString(place.text, transcriptText(job.name, transcript))
   yield* fs.rename(words, place.transcript)
   yield* fs.remove(place.work, { recursive: true })
+})
+
+export const refreshPreview = Effect.fn("Media.refreshPreview")(function*(job: Job) {
+  const fs = yield* FileSystem.FileSystem
+  const settings = yield* Settings
+  const place = places(job)
+  const probe = yield* decodeProbe(yield* tool("ffprobe", probeArgs(place.source), []))
+  const hdr = isHdr(probe.streams[0]?.color_transfer)
+  const next = `${place.preview}.new`
+  yield* tool("ffmpeg", refreshArgs(place.source, next, hdr, settings.encoder), settings.heavy).pipe(
+    Effect.catch((error) => fs.remove(next).pipe(Effect.orElseSucceed(() => undefined), Effect.andThen(Effect.fail(error))))
+  )
+  yield* fs.rename(next, place.preview)
+  yield* markPreviewFresh(job)
 })
 
 export const look = Effect.fn("Media.look")(function*(job: Job) {
