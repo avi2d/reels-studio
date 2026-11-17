@@ -11,7 +11,7 @@ It does not cut, caption, crop, restyle or publish a video yet.
 - Bun, at the version `.bun-version` pins.
 - pi, the agent the chat runs on, signed in to at least one model provider.
 - ffmpeg and ffprobe, built with the `zscale` and `tonemap` filters, which turn iPhone HDR video into ordinary colours.
-- uv, which installs and runs the speech recognizer in `tools/transcribe/`.
+- uv, which installs and runs the speech recognizer in `tools/transcribe/` and the gaze measure in `tools/gaze/`.
 - A computer on the home network that keeps running while the studio is in use.
 
 ## Install
@@ -69,23 +69,7 @@ To serve a newer `main`:
 1. Run `git pull` and `bun install --frozen-lockfile` in `~/Projects/reels-studio`.
 1. Run `systemctl --user restart reels-studio.service`.
 
-## How the studio hears a video
-
-The studio starts on each uploaded video by itself, one video at a time.
-It writes a small preview for the page and a text of the speech, which takes a few minutes for a long video.
-GigaAM v3 recognizes the speech, and Silero VAD finds the stretches of speech first.
-
-Each video folder holds these, named after the video:
-
-| Path | What it holds |
-| --- | --- |
-| `source/` | The uploaded original, which the studio never changes |
-| `transcripts/<video>.json` | Each word with its start and end in seconds |
-| `transcripts/<video>.txt` | The same words numbered, which the chat model reads |
-| `preview/<video>.mp4` | The small copy the page plays |
-| `plan.json` | The words the chat model plans to remove, by their numbers |
-
-The player on the page skips each run of removed words, from the start of its first word to the end of its last.
+How the studio hears a video lives in [How the studio hears a video](docs/how-the-studio-hears-a-video.md).
 
 ## Reuse a video and delete a video folder
 
@@ -108,6 +92,7 @@ To run the checks:
 1. Run `bun run typecheck` to check the types and the Effect diagnostics.
 
 The project layout lives in [Project layout](docs/project-layout.md).
+The row of blocks and takes is described in [Takes and blocks](docs/timeline.md).
 
 ## Troubleshooting
 

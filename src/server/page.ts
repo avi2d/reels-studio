@@ -18,7 +18,8 @@ export const pageRoutes = Layer.unwrap(Effect.gen(function*() {
   const settings = yield* Settings
   const web = path.join(settings.root, "src", "web")
   const html = yield* fs.readFileString(path.join(web, "index.html"))
-  const css = yield* fs.readFileString(path.join(web, "app.css"))
+  const sheets = yield* Effect.forEach(["app.css", "timeline.css", "work.css"], (name) => fs.readFileString(path.join(web, name)))
+  const css = sheets.join("\n")
   const script = yield* bundle(path.join(web, "app.ts"))
   return Layer.mergeAll(
     HttpRouter.add("GET", "/", HttpServerResponse.text(html, { contentType: "text/html; charset=utf-8", headers: NO_STORE })),

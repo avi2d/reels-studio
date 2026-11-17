@@ -2,11 +2,13 @@ import { type Crypto, Context, Deferred, Effect, Exit, FileSystem, Layer, Ref } 
 import type { ChildProcessSpawner } from "effect/process"
 import type { LibraryVideo, Pick } from "../shared/library.ts"
 import type { VideoView } from "../shared/plan.ts"
+import type { Edits, TimelineView } from "../shared/timeline.ts"
 import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
-import { listen, places, readPlan, readTranscript, type Job } from "./media-jobs.ts"
+import { listen, look, places, previewIsFresh, readPlan, readTranscript, refreshPreview, type Job } from "./media-jobs.ts"
 import { Projects } from "./projects.ts"
 import { gatherLibrary, heardIn, keysIn, reuse as reuseOne, sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
+import { readTimeline, writeEdits } from "./timeline-files.ts"
 
 const UNAVAILABLE = "Видео недоступно. Попробуйте открыть страницу ещё раз."
 const orBroken = orUnavailable("the media failed", UNAVAILABLE)
@@ -14,6 +16,12 @@ const orBroken = orUnavailable("the media failed", UNAVAILABLE)
 const keyOf = (job: Job): string => places(job).source
 
 type Unheard = Ref.Ref<ReadonlySet<string>>
+
+interface Failures {
+  readonly unheard: Unheard
+  readonly unseen: Unheard
+  readonly stale: Unheard
+}
 
 interface Running {
   readonly dir: string
@@ -26,10 +34,9 @@ interface Work {
   readonly running: Running | undefined
 }
 
-const nextUnheard = Effect.fnUntraced(function*(unheard: Unheard, closed: ReadonlySet<string>) {
+const openJobs = Effect.fnUntraced(function*(closed: ReadonlySet<string>) {
   const fs = yield* FileSystem.FileSystem
   const settings = yield* Settings
-  const failed = yield* Ref.get(unheard)
   const ids = yield* fs.readDirectory(settings.projectsDir).pipe(Effect.orElseSucceed((): Array<string> => []))
   const dirs = ids.map((id) => `${settings.projectsDir}/${id}`).filter((dir) => !closed.has(dir))
   const jobs = yield* Effect.forEach(dirs, (dir) =>
@@ -37,31 +44,65 @@ const nextUnheard = Effect.fnUntraced(function*(unheard: Unheard, closed: Readon
       Effect.map((names) => names.map((name): Job => ({ dir, name }))),
       Effect.orElseSucceed((): Array<Job> => [])
     ))
-  const heard = yield* Effect.forEach(jobs.flat(), (job) =>
-    Effect.map(fs.exists(places(job).transcript), (exists) => exists || failed.has(keyOf(job))))
-  return jobs.flat().find((_, index) => heard[index] === false)
+  return jobs.flat()
 })
 
-const hear = Effect.fnUntraced(function*(unheard: Unheard, work: Ref.Ref<Work>, job: Job) {
+const nextUnheard = Effect.fnUntraced(function*(unheard: Unheard, jobs: ReadonlyArray<Job>) {
+  const fs = yield* FileSystem.FileSystem
+  const failed = yield* Ref.get(unheard)
+  const heard = yield* Effect.forEach(jobs, (job) =>
+    Effect.map(fs.exists(places(job).transcript), (exists) => exists || failed.has(keyOf(job))))
+  return jobs.find((_, index) => heard[index] === false)
+})
+
+const nextStale = Effect.fnUntraced(function*(stale: Unheard, jobs: ReadonlyArray<Job>) {
+  const fs = yield* FileSystem.FileSystem
+  const failed = yield* Ref.get(stale)
+  const old = yield* Effect.forEach(jobs, (job) => Effect.gen(function*() {
+    if (failed.has(keyOf(job))) return false
+    if (!(yield* fs.exists(places(job).transcript))) return false
+    if (!(yield* fs.exists(places(job).preview))) return false
+    return !(yield* previewIsFresh(job))
+  }))
+  return jobs.find((_, index) => old[index] === true)
+})
+
+const nextUnseen = Effect.fnUntraced(function*(unseen: Unheard, jobs: ReadonlyArray<Job>) {
+  const fs = yield* FileSystem.FileSystem
+  const failed = yield* Ref.get(unseen)
+  const waiting = yield* Effect.forEach(jobs, (job) => Effect.gen(function*() {
+    const place = places(job)
+    if (failed.has(keyOf(job)) || (yield* fs.exists(place.gaze))) return false
+    return (yield* fs.exists(place.transcript)) && (yield* fs.exists(place.preview))
+  }))
+  return jobs.find((_, index) => waiting[index] === true)
+})
+
+const attempt = Effect.fnUntraced(function*<E, R>(failures: Unheard, work: Ref.Ref<Work>, job: Job, task: Effect.Effect<void, E, R>) {
   const running: Running = { dir: job.dir, stop: yield* Deferred.make<void>(), finished: yield* Deferred.make<void>() }
   const claimed = yield* Ref.modify(work, (state) =>
     state.closed.has(job.dir) ? [false, state] : [true, { ...state, running }])
   if (!claimed) return
-  const outcome = yield* Effect.exit(Effect.raceFirst(listen(job), Deferred.await(running.stop))).pipe(
+  const outcome = yield* Effect.exit(Effect.raceFirst(task, Deferred.await(running.stop))).pipe(
     Effect.ensuring(Ref.update(work, (state) => ({ ...state, running: undefined })).pipe(
       Effect.andThen(Deferred.succeed(running.finished, undefined))
     ))
   )
   if (Exit.isFailure(outcome)) {
-    yield* Effect.logError("the transcription failed", outcome.cause)
-    yield* Ref.update(unheard, (set) => new Set([...set, keyOf(job)]))
+    yield* Effect.logError("the media job failed", job.name, outcome.cause)
+    yield* Ref.update(failures, (set) => new Set([...set, keyOf(job)]))
   }
 })
 
-const step = Effect.fnUntraced(function*(unheard: Unheard, work: Ref.Ref<Work>) {
-  const job = yield* nextUnheard(unheard, (yield* Ref.get(work)).closed)
-  if (job === undefined) return yield* Effect.sleep("3 seconds")
-  yield* hear(unheard, work, job)
+const step = Effect.fnUntraced(function*(failures: Failures, work: Ref.Ref<Work>) {
+  const jobs = yield* openJobs((yield* Ref.get(work)).closed)
+  const unheard = yield* nextUnheard(failures.unheard, jobs)
+  if (unheard !== undefined) return yield* attempt(failures.unheard, work, unheard, listen(unheard))
+  const stale = yield* nextStale(failures.stale, jobs)
+  if (stale !== undefined) return yield* attempt(failures.stale, work, stale, refreshPreview(stale))
+  const unseen = yield* nextUnseen(failures.unseen, jobs)
+  if (unseen !== undefined) return yield* attempt(failures.unseen, work, unseen, look(unseen))
+  yield* Effect.sleep("3 seconds")
 })
 
 const view = Effect.fnUntraced(function*(unheard: Unheard, job: Job) {
@@ -82,6 +123,8 @@ export class Media extends Context.Service<Media, {
   readonly retry: (id: string, name: string) => Effect.Effect<VideoView, ApiError>
   readonly library: (id: string) => Effect.Effect<ReadonlyArray<LibraryVideo>, ApiError>
   readonly reuse: (id: string, picks: ReadonlyArray<Pick>) => Effect.Effect<void, ApiError>
+  readonly timeline: (id: string) => Effect.Effect<TimelineView, ApiError>
+  readonly saveEdits: (id: string, edits: Edits) => Effect.Effect<void, ApiError>
   readonly withoutWork: <A, E, R>(dir: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }>()("reels-studio/Media") {
   static readonly layer = Layer.effect(
@@ -91,10 +134,12 @@ export class Media extends Context.Service<Media, {
       const projects = yield* Projects
       const context = yield* Effect.context<FileSystem.FileSystem | Crypto.Crypto | Settings | ChildProcessSpawner.ChildProcessSpawner>()
       const unheard: Unheard = yield* Ref.make<ReadonlySet<string>>(new Set())
+      const unseen: Unheard = yield* Ref.make<ReadonlySet<string>>(new Set())
+      const stale: Unheard = yield* Ref.make<ReadonlySet<string>>(new Set())
       const work = yield* Ref.make<Work>({ closed: new Set(), running: undefined })
 
       const guarded = Effect.gen(function*() {
-        const outcome = yield* Effect.exit(step(unheard, work))
+        const outcome = yield* Effect.exit(step({ unheard, unseen, stale }, work))
         if (Exit.isSuccess(outcome)) return
         yield* Effect.logError("the media worker failed", outcome.cause)
         yield* Effect.sleep("3 seconds")
@@ -145,6 +190,15 @@ export class Media extends Context.Service<Media, {
         }), { discard: true })
       }, orUnavailable("the reuse failed", "Не получилось добавить видео. Попробуйте ещё раз."), Effect.provideContext(context))
 
+      const timeline = Effect.fn("Media.timeline")(function*(id: string) {
+        const dir = yield* projects.folder(id)
+        return yield* readTimeline(dir, yield* sourceNames(dir), yield* Ref.get(unseen))
+      }, orBroken, Effect.provideContext(context))
+
+      const saveEdits = Effect.fn("Media.saveEdits")(function*(id: string, edits: Edits) {
+        yield* writeEdits(yield* projects.folder(id), edits)
+      }, orUnavailable("the timeline was not saved", "Не получилось сохранить монтаж. Попробуйте ещё раз."), Effect.provideContext(context))
+
       const withoutWork = <A, E, R>(dir: string, use: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
         Effect.acquireUseRelease(
           Effect.gen(function*() {
@@ -160,7 +214,7 @@ export class Media extends Context.Service<Media, {
           () => Ref.update(work, (state) => ({ ...state, closed: new Set([...state.closed].filter((other) => other !== dir)) }))
         )
 
-      return Media.of({ videos, preview, retry, library, reuse, withoutWork })
+      return Media.of({ videos, preview, retry, library, reuse, timeline, saveEdits, withoutWork })
     })
   )
 }

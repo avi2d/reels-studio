@@ -1,5 +1,6 @@
 import { Effect, FileSystem, Layer, Option, Schema, Stream } from "effect"
 import { Pick } from "../shared/library.ts"
+import { Edits } from "../shared/timeline.ts"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { ApiError, badRequest } from "./api-error.ts"
 import { Chat } from "./chat.ts"
@@ -133,6 +134,16 @@ const videos = Layer.mergeAll(
     const input = yield* body(NewVideos)
     yield* media.reuse(id, input.videos)
     return json({ project: yield* store.get(id) })
+  }))),
+  HttpRouter.add("GET", "/api/projects/:id/timeline", reply(Effect.gen(function*() {
+    const media = yield* Media
+    return json(yield* media.timeline(yield* param("id")))
+  }))),
+  HttpRouter.add("PUT", "/api/projects/:id/timeline", reply(Effect.gen(function*() {
+    const media = yield* Media
+    const id = yield* param("id")
+    yield* media.saveEdits(id, yield* body(Edits))
+    return json({ saved: id })
   }))),
   HttpRouter.add("GET", "/api/projects/:id/library", reply(Effect.gen(function*() {
     const media = yield* Media

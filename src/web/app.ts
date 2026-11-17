@@ -5,6 +5,9 @@ import { formatDay, formatSize, modelName, parseEventBlock } from "./format.ts"
 import { libraryPicker } from "./library.ts"
 import { oneAfterAnother } from "./queue.ts"
 import { askToRemove } from "./remove.ts"
+import { stageRail, type StageId, type StageNote } from "./stages.ts"
+import { KEYS } from "./timeline-keys.ts"
+import { timelineCard, type Status } from "./timeline.ts"
 import { upload, type Progress } from "./upload.ts"
 import { videosCard } from "./videos.ts"
 
@@ -194,14 +197,19 @@ const readReply = (
   return pump("")
 }
 
-const chatCard = (project: Api.ProjectView, messages: ReadonlyArray<Api.Message>, models: ReadonlyArray<string>, onReply: () => void): HTMLElement => {
+const chatCard = (
+  project: Api.ProjectView,
+  messages: ReadonlyArray<Api.Message>,
+  models: ReadonlyArray<string>,
+  onReply: () => void
+): { readonly node: HTMLElement; readonly ask: (message: string) => void; readonly scrollToEnd: () => void } => {
   const empty = h("p", { class: "muted" }, "Напишите, что оставить в ролике и что убрать. Студия слышит загруженные видео и сначала покажет план.")
   const log = h("div", { class: "chat" }, ...(messages.length === 0 ? [empty] : messages.map(bubble)))
   const text = h("textarea", { name: "text", rows: "3", required: true })
   const model = h("select", { name: "model" }, ...models.map((id) => h("option", { value: id, selected: id === project.model }, modelName(id))))
   const chosen = project.effort ?? "medium"
   const effort = h("select", { name: "effort" }, ...EFFORTS.map(([id, name]) => h("option", { value: id, selected: id === chosen }, name)))
-  const button = h("button", { type: "submit" }, "Отправить")
+  const button = h("button", { type: "submit", class: "primary" }, "Отправить")
   const talk = (message: string): Effect.Effect<void, Api.Failed> =>
     Effect.gen(function*() {
       const words = h("span")
@@ -262,23 +270,73 @@ const chatCard = (project: Api.ProjectView, messages: ReadonlyArray<Api.Message>
   }, h("label", {}, "Сообщение", text), h("div", { class: "row" }, h("label", { class: "grow" }, "Модель", model), h("label", { class: "grow" }, "Глубина размышления", effort)),
     h("p", { class: "muted" }, CHOICE_HINT), button, problem)
   form.className = "chat"
-  return h("section", { class: "card" }, h("h2", {}, "Чат"), log, form)
+  const node = h("section", { class: "card" }, h("h2", { class: "head" }, "Чат"), log, form)
+  const scrollToEnd = (): void => { log.scrollTop = log.scrollHeight }
+  const ask = (message: string): void => {
+    if (button.disabled) return
+    text.value = message
+    form.requestSubmit()
+    scrollToEnd()
+  }
+  return { node, ask, scrollToEnd }
 }
+
+const noteOf = (count: number, one: string, many: string): string => count === 0 ? "" : `${count === 1 ? one : many}: ${count}`
+
+const stageNotes = ({ blocks, heard, pauses }: Status): Readonly<Record<StageId, StageNote>> => ({
+  brief: { note: noteOf(heard, "видео", "видео"), done: heard > 0 },
+  takes: { note: noteOf(blocks ?? 0, "блок", "блоков"), done: blocks !== undefined },
+  pauses: {
+    note: pauses.total === 0 ? "" : `убрано ${pauses.removed} из ${pauses.total}`,
+    done: pauses.total > 0 && pauses.removed === pauses.total
+  }
+})
+
+const keysBar = (summary: HTMLElement): HTMLElement =>
+  h("footer", { class: "keys" }, ...KEYS.map(([key, does]) => h("span", {}, h("kbd", {}, key), does)), summary)
 
 const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
   Effect.gen(function*() {
     const [{ project }, { messages }, { models }] = yield* Effect.all([Api.getProject(id), Api.getChat(id), Api.getModels], { concurrency: 3 })
     document.title = `${project.title} · Студия Reels`
     const videos = videosCard(project.id)
-    const chat = chatCard(project, messages, models, videos.refresh)
+    const desk = h("div", { class: "desk" })
+    const seen = { first: true }
+    const timeline = timelineCard(project.id, {
+      ask: (message) => { chat.ask(message) },
+      openTakes: () => { if (stages.now() === "brief") stages.open("takes") },
+      status: (status) => {
+        const notes = stageNotes(status)
+        stages.note("brief", notes.brief)
+        stages.note("takes", notes.takes)
+        stages.note("pauses", notes.pauses)
+        desk.classList.toggle("blank", status.blocks === undefined)
+        if (seen.first && status.heard > 0) stages.open("takes")
+        seen.first = false
+      }
+    })
+    const refresh = (): void => {
+      videos.refresh()
+      timeline.refresh()
+    }
+    const chat = chatCard(project, messages, models, refresh)
     const remove = h("button", {
       type: "button",
       class: "secondary end",
       click: () => { askToRemove(project, () => { location.hash = "#/" }) }
     }, "Удалить ролик")
-    show(h("a", { class: "back", href: "#/" }, "← Все ролики"), h("h1", {}, project.title), videoCard(project, videos.refresh), videos.node, chat, remove)
-    videos.refresh()
-    if (messages.length > 0) chat.scrollIntoView({ block: "end" })
+    const { panels } = timeline
+    const stages = stageRail({ brief: h("div", { class: "pane" }, videoCard(project, refresh), videos.node, remove), takes: panels.takes, pauses: panels.pauses })
+    desk.append(
+      h("header", { class: "deskbar" },
+        h("a", { class: "back", href: "#/" }, "← Все ролики"), h("h1", {}, project.title),
+        h("div", { class: "tools" }, panels.clock, ...panels.tools)),
+      h("div", { class: "cols" }, stages.rail, stages.work, panels.viewer, h("section", { class: "panel chatcol", "aria-label": "Чат" }, chat.node)),
+      panels.tracks,
+      keysBar(panels.summary))
+    show(desk)
+    refresh()
+    chat.scrollToEnd()
   })
 
 const route = (): void => {
