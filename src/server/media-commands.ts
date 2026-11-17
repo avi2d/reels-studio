@@ -16,11 +16,14 @@ export interface PrepareFiles {
   readonly preview: string
 }
 
+// The player decodes from the last key frame on every seek, and ffmpeg's default of one per 250 frames holds each cut for seconds.
+const KEY_FRAME_EVERY = 15
+
 export const prepareArgs = (files: PrepareFiles, hdr: boolean, encoder: string): ReadonlyArray<string> => [
   "-hide_banner", "-loglevel", "error", "-y", "-i", files.source,
   "-map", "0:a:0", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", "-f", "wav", files.wav,
   "-map", "0:v:0", "-map", "0:a:0", "-vf", `fps=30,scale=540:-2,${hdr ? TO_SDR : "format=yuv420p"}`,
-  "-c:v", encoder, "-b:v", "1500k", "-c:a", "aac", "-b:a", "96k", "-ac", "1", "-movflags", "+faststart", "-f", "mp4", files.preview
+  "-c:v", encoder, "-b:v", "1500k", "-g", String(KEY_FRAME_EVERY), "-c:a", "aac", "-b:a", "96k", "-ac", "1", "-movflags", "+faststart", "-f", "mp4", files.preview
 ]
 
 const LINE_PAUSE = 0.1

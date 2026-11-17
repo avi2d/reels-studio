@@ -51,3 +51,12 @@ test("a pause under a tenth of a second keeps the line, and a pause under a seco
   })
   expect(text.split("\n").slice(3)).toEqual(["[0.50-1.50] 0:да 1:нет", ""])
 })
+
+test("a seek in the preview decodes at most half a second, not the 250 frames of ffmpeg's default key frame distance", () => {
+  const args = prepareArgs({ source: "a.mov", wav: "a.wav", preview: "a.mp4" }, false, "libx264")
+  const preview = args.slice(args.indexOf("a.wav"))
+  const frames = Number(preview[preview.indexOf("-g") + 1])
+  const rate = Number(/fps=(\d+)/.exec(preview[preview.indexOf("-vf") + 1] ?? "")?.[1])
+  expect(frames / rate).toBeGreaterThan(0)
+  expect(frames / rate).toBeLessThanOrEqual(0.5)
+})
