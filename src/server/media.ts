@@ -20,6 +20,7 @@ type Unheard = Ref.Ref<ReadonlySet<string>>
 interface Failures {
   readonly unheard: Unheard
   readonly unseen: Unheard
+  readonly stale: Unheard
 }
 
 interface Running {
@@ -54,14 +55,16 @@ const nextUnheard = Effect.fnUntraced(function*(unheard: Unheard, jobs: Readonly
   return jobs.find((_, index) => heard[index] === false)
 })
 
-const nextStale = Effect.fnUntraced(function*(jobs: ReadonlyArray<Job>) {
+const nextStale = Effect.fnUntraced(function*(stale: Unheard, jobs: ReadonlyArray<Job>) {
   const fs = yield* FileSystem.FileSystem
-  const stale = yield* Effect.forEach(jobs, (job) => Effect.gen(function*() {
+  const failed = yield* Ref.get(stale)
+  const old = yield* Effect.forEach(jobs, (job) => Effect.gen(function*() {
+    if (failed.has(keyOf(job))) return false
     if (!(yield* fs.exists(places(job).transcript))) return false
     if (!(yield* fs.exists(places(job).preview))) return false
     return !(yield* previewIsFresh(job))
   }))
-  return jobs.find((_, index) => stale[index] === true)
+  return jobs.find((_, index) => old[index] === true)
 })
 
 const nextUnseen = Effect.fnUntraced(function*(unseen: Unheard, jobs: ReadonlyArray<Job>) {
@@ -91,27 +94,12 @@ const attempt = Effect.fnUntraced(function*<E, R>(failures: Unheard, work: Ref.R
   }
 })
 
-const revive = Effect.fnUntraced(function*<E, R>(work: Ref.Ref<Work>, job: Job, task: Effect.Effect<void, E, R>) {
-  const running: Running = { dir: job.dir, stop: yield* Deferred.make<void>(), finished: yield* Deferred.make<void>() }
-  const claimed = yield* Ref.modify(work, (state) =>
-    state.closed.has(job.dir) ? [false, state] : [true, { ...state, running }])
-  if (!claimed) return
-  yield* Effect.exit(Effect.raceFirst(task, Deferred.await(running.stop))).pipe(
-    Effect.ensuring(Ref.update(work, (state) => ({ ...state, running: undefined })).pipe(
-      Effect.andThen(Deferred.succeed(running.finished, undefined))
-    )),
-    Effect.tap((outcome) => Exit.isFailure(outcome)
-      ? Effect.logError("the preview refresh failed", job.name, outcome.cause)
-      : Effect.void)
-  )
-})
-
 const step = Effect.fnUntraced(function*(failures: Failures, work: Ref.Ref<Work>) {
   const jobs = yield* openJobs((yield* Ref.get(work)).closed)
   const unheard = yield* nextUnheard(failures.unheard, jobs)
   if (unheard !== undefined) return yield* attempt(failures.unheard, work, unheard, listen(unheard))
-  const stale = yield* nextStale(jobs)
-  if (stale !== undefined) return yield* revive(work, stale, refreshPreview(stale))
+  const stale = yield* nextStale(failures.stale, jobs)
+  if (stale !== undefined) return yield* attempt(failures.stale, work, stale, refreshPreview(stale))
   const unseen = yield* nextUnseen(failures.unseen, jobs)
   if (unseen !== undefined) return yield* attempt(failures.unseen, work, unseen, look(unseen))
   yield* Effect.sleep("3 seconds")
@@ -147,10 +135,11 @@ export class Media extends Context.Service<Media, {
       const context = yield* Effect.context<FileSystem.FileSystem | Crypto.Crypto | Settings | ChildProcessSpawner.ChildProcessSpawner>()
       const unheard: Unheard = yield* Ref.make<ReadonlySet<string>>(new Set())
       const unseen: Unheard = yield* Ref.make<ReadonlySet<string>>(new Set())
+      const stale: Unheard = yield* Ref.make<ReadonlySet<string>>(new Set())
       const work = yield* Ref.make<Work>({ closed: new Set(), running: undefined })
 
       const guarded = Effect.gen(function*() {
-        const outcome = yield* Effect.exit(step({ unheard, unseen }, work))
+        const outcome = yield* Effect.exit(step({ unheard, unseen, stale }, work))
         if (Exit.isSuccess(outcome)) return
         yield* Effect.logError("the media worker failed", outcome.cause)
         yield* Effect.sleep("3 seconds")

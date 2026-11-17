@@ -28,6 +28,13 @@ const STEPS: Readonly<Record<string, number>> = { ArrowLeft: -1, ArrowUp: -1, Ar
 
 const inside = (event: KeyboardEvent, selector: string): boolean => event.target instanceof Element && event.target.closest(selector) !== null
 
+const handleOf = (event: KeyboardEvent, placed: ReadonlyArray<Placed>): Placed | undefined => {
+  const handle = event.target instanceof Element ? event.target.closest(MOVES_ITSELF) : undefined
+  const raw = handle instanceof Element ? handle.getAttribute("data-key") : undefined
+  const id = raw !== null && raw !== undefined && raw.startsWith("handle:") ? raw.slice("handle:".length) : undefined
+  return id === undefined ? undefined : placed.find((one) => one.block.id === id)
+}
+
 const actOnOpen = (event: KeyboardEvent, open: Placed, placed: ReadonlyArray<Placed>, actions: KeyActions): boolean => {
   const step = STEPS[event.key]
   if (step !== undefined) {
@@ -53,8 +60,13 @@ const act = (event: KeyboardEvent, { open, placed }: Now, actions: KeyActions): 
     actions.undo()
     return true
   }
+  if (inside(event, MOVES_ITSELF)) {
+    if (event.key in STEPS) return false
+    const handle = handleOf(event, placed)
+    if (handle === undefined) return false
+    return actOnOpen(event, handle, placed, actions)
+  }
   if (open === undefined) return false
-  if (inside(event, MOVES_ITSELF) && event.key in STEPS) return false
   return actOnOpen(event, open, placed, actions)
 }
 

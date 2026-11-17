@@ -4,11 +4,16 @@ import type { Block, Placed } from "../../src/shared/timeline.ts"
 
 class FakeElement {
   readonly selectors: ReadonlyArray<string>
-  constructor(selectors: ReadonlyArray<string> = []) {
+  readonly datakey: string | undefined
+  constructor(selectors: ReadonlyArray<string> = [], datakey?: string) {
     this.selectors = selectors
+    this.datakey = datakey
   }
-  closest(selector: string): object | null {
+  closest(selector: string): FakeElement | null {
     return this.selectors.includes(selector) ? this : null
+  }
+  getAttribute(name: string): string | null {
+    return name === "data-key" ? this.datakey ?? null : null
   }
 }
 
@@ -79,13 +84,22 @@ const setup = (): { calls: Calls; press: (target: FakeElement, code: string, eve
 
 test("arrows on a block handle move the block itself, and Delete and take numbers still delete and choose", () => {
   const { calls, press } = setup()
-  const handle = new FakeElement([".handle"])
+  const handle = new FakeElement([".handle"], "handle:advance")
   press(handle, "ArrowRight", "ArrowRight")
   expect(calls.step).toEqual([])
   press(handle, "Delete", "Delete")
   expect(calls.deleted).toEqual(["advance"])
   press(handle, "Digit1", "1")
   expect(calls.choose).toEqual(["advance"])
+})
+
+test("a key on a handle of another block acts on the handle block, not the open one", () => {
+  const { calls, press } = setup()
+  const handle = new FakeElement([".handle"], "handle:deposit")
+  press(handle, "Delete", "Delete")
+  expect(calls.deleted).toEqual(["deposit"])
+  press(handle, "Digit1", "1")
+  expect(calls.choose).toEqual(["deposit"])
 })
 
 test("arrows away from a handle open the next block", () => {

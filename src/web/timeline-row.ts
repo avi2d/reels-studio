@@ -78,7 +78,7 @@ const idsOf = (row: HTMLElement): ReadonlyArray<string> =>
 
 const KEY_STEPS: Readonly<Record<string, number>> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -1, ArrowDown: 1 }
 
-const dragHandle = (row: HTMLElement, slot: HTMLElement, title: string, id: string, actions: RowActions): HTMLElement => {
+const dragHandle = (row: HTMLElement, slot: HTMLElement, title: string, id: string, selected: string | undefined, actions: RowActions): HTMLElement => {
   const handle = h("button", {
     type: "button",
     class: "handle",
@@ -95,6 +95,7 @@ const dragHandle = (row: HTMLElement, slot: HTMLElement, title: string, id: stri
     slot.classList.remove("dragging")
     const ids = idsOf(row)
     if (ids.some((one, index) => one !== from[index])) actions.reorder(ids)
+    actions.select(id)
   }
   handle.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return
@@ -104,6 +105,9 @@ const dragHandle = (row: HTMLElement, slot: HTMLElement, title: string, id: stri
   })
   handle.addEventListener("pointermove", (event) => { if (state.from !== undefined) follow(row, slot, { x: event.clientX, y: event.clientY }, state) })
   for (const end of ["pointerup", "pointercancel", "lostpointercapture"]) handle.addEventListener(end, drop)
+  handle.addEventListener("focus", () => {
+    if (state.from === undefined && id !== selected) actions.select(id)
+  })
   handle.addEventListener("keydown", (event) => {
     const step = KEY_STEPS[event.key]
     if (step === undefined) return
@@ -142,7 +146,7 @@ const slotOf = (row: HTMLElement, one: Placed, at: At, selected: string | undefi
   slot.append(
     h("span", { class: "at" }, formatLength(at.start)),
     h("span", { class: "said", title: actions.textOf(take) }, actions.textOf(take)),
-    h("div", { class: block.id === selected ? "clip selected" : "clip" }, dragHandle(row, slot, block.title, block.id, actions), pick),
+    h("div", { class: block.id === selected ? "clip selected" : "clip" }, dragHandle(row, slot, block.title, block.id, selected, actions), pick),
     h("div", { class: "gaps" }, ...one.pauses.map((pause) => pauseMark(one, pause, length, actions))))
   return slot
 }
