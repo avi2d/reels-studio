@@ -142,7 +142,7 @@ progress::-moz-progress-bar { background: var(--wa-color-brand-fill-loud); }
 .transcript del { color: var(--wa-color-text-quiet); text-decoration-color: var(--wa-color-danger-on-quiet); text-decoration-thickness: 2px; }
 
 @media (hover: hover) and (pointer: fine) {
-  button:not(:disabled):hover { background: var(--wa-color-surface-border); }
+  :where(button):not(:disabled):hover { background: var(--wa-color-surface-border); }
   .button:hover { filter: brightness(1.08); }
   .tile > a:hover .cover { transform: translateY(-3px); }
   .tile > a:hover b, .back:hover { color: var(--wa-color-brand-fill-loud); }

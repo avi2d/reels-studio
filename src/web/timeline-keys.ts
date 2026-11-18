@@ -50,6 +50,7 @@ const actOnOpen = (event: KeyboardEvent, open: Placed, placed: ReadonlyArray<Pla
 }
 
 const act = (event: KeyboardEvent, { open, placed }: Now, actions: KeyActions): boolean => {
+  if (event.defaultPrevented) return false
   if (event.code === "Space") {
     if (inside(event, PRESSES)) return false
     actions.toggle()

@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import type { LibraryVideo } from "../shared/library.ts"
 import * as Api from "./api.ts"
 import type WaButton from "@awesome.me/webawesome/dist/components/button/button.js"
-import { button } from "./controls.ts"
+import { button, setExpanded } from "./controls.ts"
 import { h } from "./dom.ts"
 import { addLabel, formatLength, formatSize, fromProjects } from "./format.ts"
 
@@ -18,6 +18,7 @@ export const libraryPicker = (
   onAdded: () => Effect.Effect<void, Api.Failed>
 ): { readonly open: WaButton; readonly panel: HTMLElement; readonly reload: () => void } => {
   const open = button("quiet", { hidden: true, "aria-expanded": "false" }, "Взять из других роликов")
+  setExpanded(open, false)
   const list = h("ul", { class: "choices" })
   const add = button("normal", { disabled: true }, addLabel(0))
   const cancel = button("quiet", {}, "Отмена")
@@ -35,7 +36,7 @@ export const libraryPicker = (
   const show = (shown: boolean): void => {
     state.shown = shown
     panel.hidden = !shown
-    open.setAttribute("aria-expanded", String(shown))
+    setExpanded(open, shown)
     problem.textContent = ""
   }
   const fill = (videos: ReadonlyArray<LibraryVideo>): void => {

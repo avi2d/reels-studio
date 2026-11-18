@@ -42,9 +42,10 @@
 .stages wa-tab-panel { --padding: 14px 0 0; }
 .stages wa-tab em { margin-left: 6px; font-style: normal; font-weight: 600; color: var(--wa-color-brand-fill-loud); }
 .stages wa-tab em:empty, .stages .short { display: none; }
+.stages::part(nav) { position: sticky; top: 0; z-index: 3; background: var(--wa-color-surface-default); }
 .stages wa-tab.done em { color: var(--wa-color-success-on-quiet); }
 
-.work, .pane { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.pane { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .card { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 16px; border-radius: 16px; background: var(--wa-color-surface-raised); }
 
 .keys { grid-area: keys; display: none; align-items: center; gap: 16px; height: 30px; color: var(--wa-color-text-quiet); font-size: 12.5px; white-space: nowrap; overflow: hidden; }
@@ -68,7 +69,6 @@ kbd { margin-right: 5px; padding: 0 5px; border: 1px solid var(--wa-color-surfac
   .frame { border-radius: 12px; }
   .dock { padding: 0 12px 10px; }
   .board { overflow: visible; padding: 0 12px; }
-  .stages { margin-right: -12px; }
   .stages .long { display: none; }
   .stages .short { display: inline; }
   .keys { display: none; }

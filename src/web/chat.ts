@@ -2,7 +2,7 @@ import { Effect, Option, Schema } from "effect"
 import * as Api from "./api.ts"
 import type WaSelect from "@awesome.me/webawesome/dist/components/select/select.js"
 import type WaTextarea from "@awesome.me/webawesome/dist/components/textarea/textarea.js"
-import { button, iconButton, tooltip } from "./controls.ts"
+import { button, iconButton, setExpanded, tooltip } from "./controls.ts"
 import { h } from "./dom.ts"
 import { modelName, parseEventBlock } from "./format.ts"
 import { run } from "./run.ts"
@@ -98,12 +98,13 @@ const talk = (projectId: string, { effort, empty, log, model, text }: Talk, mess
 
 const drawerOf = (log: HTMLElement, form: HTMLElement, text: HTMLElement) => {
   const opener = button("normal", { "aria-expanded": "false" }, "Чат")
+  setExpanded(opener, false)
   const close = iconButton("plain", "close", "Закрыть чат")
   const node = h("aside", { class: "drawer", "aria-label": "Чат", inert: true }, h("header", {}, h("b", {}, "Чат"), close), log, form)
   const setOpen = (open: boolean): void => {
     node.classList.toggle("open", open)
     node.inert = !open
-    opener.setAttribute("aria-expanded", String(open))
+    setExpanded(opener, open)
     if (!open) {
       opener.focus()
       return
@@ -151,7 +152,7 @@ export const chatDrawer = (
   model.addEventListener("change", renameEngine)
   effort.addEventListener("change", renameEngine)
   nameEngine(firstModel, firstEffort)
-  const send = iconButton("primary", "send", "Отправить", { type: "submit", class: "send", pill: true })
+  const send = iconButton("primary", "send", "Отправить", { type: "submit", pill: true })
   const sendTip = tooltip(send, "chat-send", "Отправить")
   const problem = h("p", { class: "error", role: "alert" })
   const form = h("form", {

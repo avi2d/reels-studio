@@ -25,6 +25,16 @@ export const spoken = (visible: string, name: string): ReadonlyArray<Child> =>
 export const iconButton = (look: Look, name: IconName, label: string, props: Props = {}): WaButton =>
   button(look, props, icon(name, label))
 
+export const setExpanded = (target: WaButton, expanded: boolean): void => {
+  const value = String(expanded)
+  target.setAttribute("aria-expanded", value)
+  const sync = (): void => {
+    target.button?.setAttribute("aria-expanded", value)
+  }
+  sync()
+  void (target as unknown as { readonly updateComplete?: Promise<void> }).updateComplete?.then(sync)
+}
+
 const TOOLTIP_TRIGGER = globalThis.matchMedia("(hover: hover)").matches ? "hover focus" : "manual"
 
 export const tooltip = (target: HTMLElement, id: string, text: string): HTMLElement => {
