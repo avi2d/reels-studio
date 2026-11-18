@@ -3,6 +3,7 @@ import hashlib
 import json
 import math
 import os
+import sys
 import urllib.request
 from pathlib import Path
 
@@ -63,8 +64,9 @@ def main() -> None:
     landmarker = vision.FaceLandmarker.create_from_options(options)
     video = cv2.VideoCapture(args.video)
     rate = video.get(cv2.CAP_PROP_FPS)
-    if rate <= 0:
-        raise SystemExit("The video has no frame rate.")
+    if not video.isOpened() or rate <= 0:
+        print("The video cannot be read.", file=sys.stderr)
+        raise SystemExit(2)
     every = max(1, round(rate / SAMPLES_PER_SECOND))
     samples: list[str] = []
     number = 0
@@ -76,6 +78,12 @@ def main() -> None:
             image = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             samples.append(look_of(landmarker.detect(image)))
         number += 1
+    if not samples:
+        print("The video has no frames.", file=sys.stderr)
+        raise SystemExit(2)
+    if all(sample == "hidden" for sample in samples):
+        print("No face was found in the video.", file=sys.stderr)
+        raise SystemExit(3)
     result = {"step": every / rate, "samples": samples}
     Path(args.output).write_text(json.dumps(result), encoding="utf-8")
 

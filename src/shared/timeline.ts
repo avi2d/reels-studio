@@ -43,8 +43,16 @@ export type Edits = typeof Edits.Type
 
 export const NO_EDITS: Edits = { order: [], deleted: [], chosen: [], pauses: [] }
 
+export const GazeFailure = Schema.Literals(["no-tool", "tool-failed", "file-unreadable", "no-face"])
+export type GazeFailure = typeof GazeFailure.Type
+
+const Look = Schema.Union([
+  Schema.Struct({ video: Schema.String, state: Schema.Literals(["measured", "waiting"]) }),
+  Schema.Struct({ video: Schema.String, state: Schema.Literal("failed"), reason: GazeFailure })
+])
+
 export const TimelineView = Schema.Struct({
-  looks: Schema.Array(Schema.Struct({ video: Schema.String, state: Schema.Literals(["measured", "waiting", "failed"]) })),
+  looks: Schema.Array(Look),
   timeline: Schema.Union([
     Schema.Struct({ state: Schema.Literals(["none", "unreadable"]) }),
     Schema.Struct({ state: Schema.Literal("ready"), blocks: Schema.Array(Block), dropped: Schema.Int, edits: Edits })

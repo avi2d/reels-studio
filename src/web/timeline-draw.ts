@@ -1,5 +1,5 @@
 import { lengthOf, type Transcript } from "../shared/plan.ts"
-import { arrange, assemble, chosenTake, withPauses, type Edits, type Placed, type Take, type TimelineView } from "../shared/timeline.ts"
+import { arrange, assemble, chosenTake, withPauses, type Edits, type GazeFailure, type Placed, type Take, type TimelineView } from "../shared/timeline.ts"
 import { h } from "./dom.ts"
 import { formatLength } from "./format.ts"
 import { blockDetail, deletedList, pauseList, type DetailActions } from "./timeline-detail.ts"
@@ -37,15 +37,24 @@ export interface Hooks {
   readonly status: (status: Status) => void
 }
 
+const GAZE_CAUSE: Readonly<Record<GazeFailure, string>> = {
+  "no-tool": "Программа, которая меряет взгляд, не найдена на компьютере студии. Установите uv и перезапустите студию.",
+  "tool-failed": "Программа, которая меряет взгляд, завершилась с ошибкой. Подробности в журнале студии. Исправьте причину и перезапустите студию.",
+  "file-unreadable": "Студия не смогла открыть файл для измерения взгляда. Подробности в журнале студии.",
+  "no-face": "В видео не нашлось лица, поэтому взгляд не измерен. Если говорящий должен быть в кадре, проверьте видео."
+}
+
 const looksNote = (looks: TimelineView["looks"]): ReadonlyArray<HTMLElement> => {
-  const named = (state: "waiting" | "failed"): string => looks.filter((look) => look.state === state).map((look) => look.video).join(", ")
-  const waiting = named("waiting")
-  const failed = named("failed")
+  const waiting = looks.filter((look) => look.state === "waiting").map((look) => look.video).join(", ")
+  const failures = new Map<GazeFailure, Array<string>>()
+  for (const look of looks) {
+    if (look.state === "failed") failures.set(look.reason, [...(failures.get(look.reason) ?? []), look.video])
+  }
   return [
     ...(waiting === "" ? [] : [h("p", { class: "muted", role: "status" },
       `Студия ещё измеряет взгляд в камеру в видео: ${waiting}. Когда закончит, попросите в чате расставить дубли заново.`)]),
-    ...(failed === "" ? [] : [h("p", { class: "muted" },
-      `Взгляд в камеру не удалось измерить в видео: ${failed}. Дубли из них расставлены только по речи.`)])
+    ...[...failures].map(([reason, videos]) => h("p", { class: "muted" },
+      `Взгляд в камеру не удалось измерить в видео: ${videos.join(", ")}. Дубли из них расставлены только по речи. ${GAZE_CAUSE[reason]}`))
   ]
 }
 

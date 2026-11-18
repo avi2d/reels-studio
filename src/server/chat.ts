@@ -1,4 +1,4 @@
-import { Array as Arr, Context, Deferred, Effect, Fiber, FileSystem, Layer, Path, Ref, Schema, Stream } from "effect"
+import { Array as Arr, Context, Deferred, Effect, Fiber, FileSystem, Layer, Option, Path, type PlatformError, Ref, Schema, Stream } from "effect"
 import { ChildProcess, type ChildProcessSpawner } from "effect/process"
 import { ApiError, badRequest, orUnavailable } from "./api-error.ts"
 import { Media } from "./media.ts"
@@ -20,8 +20,16 @@ const decodeLine = Schema.decodeUnknownOption(MessageLine)
 const encodeLine = Schema.encodeEffect(MessageLine)
 
 const TOOLS = "read,grep,find,ls,write,edit"
-const STOPPED = "чат не запустился. Отправьте сообщение ещё раз или выберите другую модель."
-const MODEL_FAILED = "модель не ответила. Выберите другую модель или отправьте сообщение ещё раз."
+const NOT_STARTED = "чат не запустился. Программа pi не найдена или не запускается на компьютере студии. Установите pi, перезапустите студию и отправьте сообщение ещё раз."
+const EXITED = "чат не запустился. Программа pi завершилась с ошибкой. Подробности в журнале студии. Проверьте, что команда pi --list-models работает, и отправьте сообщение ещё раз."
+const CLOSED = "чат не запустился. Программа pi закрылась раньше ответа. Отправьте сообщение ещё раз или выберите другую модель."
+
+const modelFailed = (reason: string): string => {
+  const line = reason.split("\n")[0]?.trim() ?? ""
+  const detail = line.length > 200 ? `${line.slice(0, 200)}…` : line
+  return detail === "" ? "модель не ответила. Выберите другую модель или отправьте сообщение ещё раз."
+    : `модель не ответила: ${detail}. Выберите другую модель или отправьте сообщение ещё раз.`
+}
 const UNAVAILABLE = "Чат недоступен. Отправьте сообщение ещё раз."
 const INTERRUPTED = "студия остановилась раньше, чем ответила. Отправьте сообщение ещё раз."
 
@@ -56,11 +64,6 @@ export const videoLines = (videos: ReadonlyArray<VideoView>, view: TimelineView)
   })
   return [...lines, ...blocksLine(view.timeline)].join("\n")
 }
-
-const inPlainWords = (event: ChatEvent): Effect.Effect<ChatEvent> =>
-  event.type === "error"
-    ? Effect.as(Effect.logError("the model failed", event.message), { type: "error", message: MODEL_FAILED })
-    : Effect.succeed(event)
 
 const orBroken = orUnavailable("the chat failed", UNAVAILABLE)
 
@@ -171,7 +174,7 @@ const expandError = (state: Ref.Ref<RunState>, message: string): Effect.Effect<R
   Effect.gen(function*() {
     const current = yield* Ref.get(state)
     yield* Effect.logError("the model failed", message)
-    yield* Ref.set(state, { ...current, pending: MODEL_FAILED })
+    yield* Ref.set(state, { ...current, pending: modelFailed(message) })
     return []
   })
 
@@ -196,21 +199,28 @@ const makeExpand = (state: Ref.Ref<RunState>) => (event: ChatEvent): Effect.Effe
   return expandSettled(state, event)
 }
 
+const endedWith = (state: Ref.Ref<RunState>, message: string): Effect.Effect<Stream.Stream<ChatEvent>> =>
+  Effect.gen(function*() {
+    yield* Ref.update(state, (current) => ({
+      ...current,
+      failed: current.failed ?? current.pending ?? message,
+      pending: undefined,
+      settled: true
+    }))
+    return Stream.make<Array<ChatEvent>>({ type: "error", message }, { type: "done" })
+  })
+
 const stoppedStream = <E>(
   state: Ref.Ref<RunState>,
+  exited: Fiber.Fiber<ChildProcessSpawner.ExitCode, PlatformError.PlatformError>,
   complaints: Fiber.Fiber<string, E>
 ): Stream.Stream<ChatEvent> =>
   Stream.unwrap(Effect.gen(function*() {
     const last = yield* Ref.get(state)
     if (last.settled) return Stream.make<Array<ChatEvent>>()
-    yield* Effect.logError("pi stopped before it settled", yield* Effect.exit(Fiber.join(complaints)))
-    yield* Ref.update(state, (current) => ({
-      ...current,
-      failed: current.failed ?? current.pending ?? STOPPED,
-      pending: undefined,
-      settled: true
-    }))
-    return Stream.make<Array<ChatEvent>>({ type: "error", message: STOPPED }, { type: "done" })
+    const code = yield* Fiber.join(exited).pipe(Effect.orElseSucceed(() => undefined))
+    yield* Effect.logError("pi stopped before it settled", code, yield* Effect.exit(Fiber.join(complaints)))
+    return yield* endedWith(state, code === 0 ? CLOSED : EXITED)
   }))
 
 const piStream = <E>(
@@ -225,7 +235,6 @@ const piStream = <E>(
     Stream.mapEffect(expand),
     Stream.flatMap((events) => Stream.fromIterable(events)),
     Stream.takeUntil((event) => event.type === "done"),
-    Stream.mapEffect(inPlainWords),
     Stream.concat(stopped)
   )
 
@@ -293,9 +302,16 @@ export class Chat extends Context.Service<Chat, {
             Ref.get(state).pipe(Effect.flatMap((last) => append(dir, lastWords(last))),
               Effect.catchTag("ApiError", (error) => Effect.logError("the reply was not saved", error.message))
             ))
-          const handle = yield* command(dir, text, model, effort, yield* heardVideos(id)).pipe(orBroken)
+          const videos = yield* heardVideos(id)
+          const launched = yield* command(dir, text, model, effort, videos).pipe(
+            Effect.tapError((error) => Effect.logError("pi did not start", error)),
+            Effect.option
+          )
+          if (Option.isNone(launched)) return yield* endedWith(state, NOT_STARTED)
+          const handle = launched.value
           const complaints = yield* handle.stderr.pipe(Stream.decodeText(), Stream.mkString, Effect.forkScoped)
-          return piStream(handle.stdout, makeExpand(state), stoppedStream(state, complaints))
+          const exited = yield* handle.exitCode.pipe(Effect.forkScoped)
+          return piStream(handle.stdout, makeExpand(state), stoppedStream(state, exited, complaints))
         })).pipe(brokenStream, Stream.provideContext(context))
       const send = Effect.fn("Chat.send")(function*(id: string, text: string, model: string, effort: Effort) {
         const trimmed = text.trim()

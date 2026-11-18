@@ -1,11 +1,21 @@
-import { Data, Effect, FileSystem, Option, Schema, Stream } from "effect"
+import { Data, Effect, FileSystem, Option, Predicate, Schema, Stream, type PlatformError } from "effect"
 import { ChildProcess } from "effect/process"
 import { Plan, Transcript } from "../shared/plan.ts"
-import { Gaze } from "../shared/timeline.ts"
+import { Gaze, type GazeFailure } from "../shared/timeline.ts"
 import { gazeText, isHdr, KEY_FRAME_EVERY, prepareArgs, probeArgs, refreshArgs, transcriptText } from "./media-commands.ts"
 import { Settings } from "./settings.ts"
 
-class ToolFailed extends Data.TaggedError("ToolFailed")<{ readonly command: string; readonly output: string }> {}
+class ToolFailed extends Data.TaggedError("ToolFailed")<{ readonly command: string; readonly code: number; readonly output: string }> {}
+
+export class GazeFailed extends Data.TaggedError("GazeFailed")<{ readonly reason: GazeFailure; readonly detail: string }> {}
+
+// The exit codes of tools/gaze/gaze.py: 2 for a video it cannot read, 3 for a video with no face in it.
+const gazeReason = (code: number): GazeFailure => code === 2 ? "file-unreadable" : code === 3 ? "no-face" : "tool-failed"
+
+const gazeFailure = (error: ToolFailed | PlatformError.PlatformError): GazeFailed =>
+  error instanceof ToolFailed
+    ? new GazeFailed({ reason: gazeReason(error.code), detail: error.output })
+    : new GazeFailed({ reason: Predicate.isTagged("NotFound")(error.reason) ? "no-tool" : "tool-failed", detail: error.message })
 
 const Probe = Schema.fromJsonString(Schema.Struct({
   streams: Schema.Array(Schema.Struct({ color_transfer: Schema.optionalKey(Schema.String) }))
@@ -54,7 +64,7 @@ const tool = Effect.fnUntraced(function*(command: string, args: ReadonlyArray<st
     handle.stderr.pipe(Stream.decodeText(), Stream.mkString),
     handle.exitCode
   ], { concurrency: 3 })
-  if (code !== 0) return yield* new ToolFailed({ command, output: complaints.slice(-2000) })
+  if (code !== 0) return yield* new ToolFailed({ command, code, output: complaints.slice(-2000) })
   return output
 }, Effect.scoped)
 
@@ -122,8 +132,11 @@ export const look = Effect.fn("Media.look")(function*(job: Job) {
   yield* Effect.forEach([place.work, `${job.dir}/gaze`], (folder) => fs.makeDirectory(folder, { recursive: true }))
   const measured = `${place.work}/gaze.json`
   const looker = `${settings.root}/tools/gaze`
-  yield* tool("uv", ["run", "--project", looker, "python", `${looker}/gaze.py`, place.preview, measured], settings.heavy)
-  const gaze = yield* decodeGaze(yield* fs.readFileString(measured))
+  yield* tool("uv", ["run", "--project", looker, "python", `${looker}/gaze.py`, place.preview, measured], settings.heavy).pipe(Effect.mapError(gazeFailure))
+  const gaze = yield* fs.readFileString(measured).pipe(
+    Effect.flatMap(decodeGaze),
+    Effect.mapError(() => new GazeFailed({ reason: "file-unreadable", detail: measured }))
+  )
   yield* fs.writeFileString(place.gazeText, gazeText(job.name, yield* readTranscript(job), gaze))
   yield* fs.rename(measured, place.gaze)
   yield* fs.remove(place.work, { recursive: true })
