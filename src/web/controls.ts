@@ -45,7 +45,9 @@ export const setExpanded = (target: WaButton, expanded: boolean): void => {
   void target.updateComplete.then(sync)
 }
 
-const TOOLTIP_TRIGGER = globalThis.matchMedia("(hover: hover)").matches ? "hover focus" : "manual"
+const TOOLTIP_TRIGGER = typeof globalThis.matchMedia === "function" && globalThis.matchMedia("(hover: hover)").matches
+  ? "hover focus"
+  : "manual"
 
 export const tooltip = (target: HTMLElement, id: string, text: string): HTMLElement => {
   target.id = id
