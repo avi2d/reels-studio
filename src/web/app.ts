@@ -1,10 +1,14 @@
-import { Effect, Option, Schema } from "effect"
+import { Effect } from "effect"
 import * as Api from "./api.ts"
+import { chatDrawer } from "./chat.ts"
 import { h } from "./dom.ts"
-import { formatDay, formatSize, modelName, parseEventBlock } from "./format.ts"
+import { formatSize } from "./format.ts"
+import { homeView } from "./home.ts"
 import { libraryPicker } from "./library.ts"
+import { shrinkWhenScrolledPast } from "./mini.ts"
 import { oneAfterAnother } from "./queue.ts"
 import { askToRemove } from "./remove.ts"
+import { run } from "./run.ts"
 import { stageRail, type StageId, type StageNote } from "./stages.ts"
 import { KEYS } from "./timeline-keys.ts"
 import { timelineCard, type Status } from "./timeline.ts"
@@ -13,58 +17,10 @@ import { videosCard } from "./videos.ts"
 
 const app = document.querySelector("#app") ?? document.body
 
-const run = (effect: Effect.Effect<void, Api.Failed>, onFailure: (message: string) => void): void => {
-  Effect.runFork(effect.pipe(Effect.catch((error) => Effect.sync(() => { onFailure(error.message) }))))
-}
-
 const show = (...nodes: ReadonlyArray<Node>): void => { app.replaceChildren(...nodes) }
 
 const showFailure = (message: string): void => {
-  show(h("p", { class: "error", role: "alert" }, message), h("a", { class: "back", href: "#/" }, "← Все ролики"))
-}
-
-const STAGES = { created: "Ждёт видео", uploaded: "Видео загружено" }
-
-const EFFORTS: ReadonlyArray<readonly [Api.Effort, string]> = [["low", "Низкая"], ["medium", "Средняя"], ["high", "Высокая"]]
-const CHOICE_HINT = "Выбранная модель делает в чате всю работу: смотрит материал, планирует нарезку и запускает инструменты. "
-  + "Средняя глубина подходит для обычной нарезки, высокая нужна для трудных случаев."
-
-const projectItem = (project: Api.ProjectView): HTMLElement =>
-  h("li", { class: "entry" },
-    h("a", { class: "item", href: `#/p/${project.id}` },
-      h("strong", {}, project.title),
-      h("span", { class: "muted" }, formatDay(project.createdAt)),
-      h("span", { class: project.stage === "uploaded" ? "badge ready" : "badge" }, STAGES[project.stage])),
-    h("button", {
-      type: "button",
-      class: "secondary",
-      "aria-label": `Удалить ролик «${project.title}»`,
-      click: () => { askToRemove(project, route) }
-    }, "Удалить"))
-
-const listView = (projects: ReadonlyArray<Api.ProjectView>): void => {
-  const title = h("input", { type: "text", name: "title", maxlength: "120", required: true, autocomplete: "off", placeholder: "Например: нотариальный осмотр сайта" })
-  const problem = h("p", { class: "error", role: "alert" })
-  const button = h("button", { type: "submit" }, "Создать ролик")
-  const form = h("form", {
-    class: "card",
-    submit: (event) => {
-      event.preventDefault()
-      button.disabled = true
-      problem.textContent = ""
-      run(
-        Effect.map(Api.createProject(title.value), ({ project }) => { location.hash = `#/p/${project.id}` }),
-        (message) => {
-          problem.textContent = message
-          button.disabled = false
-        }
-      )
-    }
-  }, h("h2", {}, "Новый ролик"), h("div", { class: "row" }, h("label", { class: "grow" }, "Название", title), button), problem)
-  const list = projects.length === 0
-    ? h("p", { class: "muted" }, "Роликов пока нет. Назовите первый и нажмите «Создать ролик».")
-    : h("ul", { class: "list" }, ...projects.map(projectItem))
-  show(h("h1", {}, "Ролики"), form, list)
+  show(h("div", { class: "home" }, h("p", { class: "error", role: "alert" }, message), h("a", { class: "back", href: "#/" }, "← Все ролики")))
 }
 
 const fileList = (project: Api.ProjectView): HTMLElement =>
@@ -168,139 +124,26 @@ const videoCard = (project: Api.ProjectView, onUploaded: () => void): HTMLElemen
     h("p", { class: "muted" }, "Можно выбрать сразу несколько видео: они загрузятся по очереди. Не закрывайте страницу, пока идёт загрузка. Исходные видео студия не меняет."))
 }
 
-const bubble = (message: Api.Message): HTMLElement => {
-  const node = h("div", { class: `bubble ${message.role}` }, message.text)
-  if (message.failed !== undefined) node.append(h("span", { class: "note" }, `Ответ не дошёл: ${message.failed}`))
-  return node
-}
-
-const decodeEvent = Schema.decodeUnknownOption(Api.ChatEvent)
-
-const readReply = (
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  onEvent: (event: Api.ChatEvent) => void
-): Effect.Effect<void> => {
-  const decoder = new TextDecoder()
-  const pump = (rest: string): Effect.Effect<void> =>
-    Effect.gen(function*() {
-      const chunk = yield* Effect.tryPromise({ try: () => reader.read(), catch: () => new Api.Offline() }).pipe(
-        Effect.catchTag("Offline", () => Effect.succeed({ done: true as const, value: undefined }))
-      )
-      if (chunk.done) return
-      const blocks = (rest + decoder.decode(chunk.value, { stream: true })).split("\n\n")
-      for (const block of blocks.slice(0, -1)) {
-        const event = Option.getOrUndefined(decodeEvent(parseEventBlock(block)))
-        if (event !== undefined) onEvent(event)
-      }
-      yield* pump(blocks.at(-1) ?? "")
-    })
-  return pump("")
-}
-
-const chatCard = (
-  project: Api.ProjectView,
-  messages: ReadonlyArray<Api.Message>,
-  models: ReadonlyArray<string>,
-  onReply: () => void
-): { readonly node: HTMLElement; readonly ask: (message: string) => void; readonly scrollToEnd: () => void } => {
-  const empty = h("p", { class: "muted" }, "Напишите, что оставить в ролике и что убрать. Студия слышит загруженные видео и сначала покажет план.")
-  const log = h("div", { class: "chat" }, ...(messages.length === 0 ? [empty] : messages.map(bubble)))
-  const text = h("textarea", { name: "text", rows: "3", required: true })
-  const model = h("select", { name: "model" }, ...models.map((id) => h("option", { value: id, selected: id === project.model }, modelName(id))))
-  const chosen = project.effort ?? "medium"
-  const effort = h("select", { name: "effort" }, ...EFFORTS.map(([id, name]) => h("option", { value: id, selected: id === chosen }, name)))
-  const button = h("button", { type: "submit", class: "primary" }, "Отправить")
-  const talk = (message: string): Effect.Effect<void, Api.Failed> =>
-    Effect.gen(function*() {
-      const words = h("span")
-      const answer = h("div", { class: "bubble assistant" }, words)
-      const step = h("p", { class: "muted step", role: "status" }, "Студия думает…")
-      const state = { done: false, text: "", base: "" }
-      const fail = (reason: string): void => { answer.append(h("span", { class: "note" }, `Ответ не дошёл: ${reason}`)) }
-      const response = yield* Api.postChat(project.id, message, model.value, EFFORTS.find(([id]) => id === effort.value)?.[0] ?? "medium").pipe(
-        Effect.catchTag("Offline", () => Effect.fail(new Api.Failed({ message: "Нет связи со студией. Проверьте Wi-Fi." })))
-      )
-      if (!response.ok || response.body === null) return yield* Effect.flatMap(Api.failure(response), Effect.fail)
-      empty.remove()
-      log.append(bubble({ role: "user", text: message }), step)
-      text.value = ""
-      step.scrollIntoView({ block: "nearest" })
-      yield* readReply(response.body.getReader(), (event) => {
-        if (event.type === "step") step.textContent = `${event.text}…`
-        if (event.type === "start") {
-          state.base = state.text
-        }
-        if (event.type === "retry") {
-          state.text = state.base
-          words.textContent = state.base
-          answer.querySelector(".note")?.remove()
-        }
-        if (event.type === "delta") {
-          if (!answer.isConnected) step.before(answer)
-          state.text += event.text
-          words.textContent = state.text
-        }
-        if (event.type === "error") {
-          if (!answer.isConnected) step.before(answer)
-          fail(event.message)
-        }
-        if (event.type === "done") state.done = true
-      })
-      if (!state.done) {
-        if (!answer.isConnected) step.before(answer)
-        fail("связь оборвалась. Отправьте сообщение ещё раз.")
-      }
-      step.remove()
-      onReply()
-    })
-  const problem = h("p", { class: "error", role: "alert" })
-  const form = h("form", {
-    submit: (event) => {
-      event.preventDefault()
-      const message = text.value.trim()
-      if (message === "") return
-      button.disabled = true
-      problem.textContent = ""
-      const finish = (): void => { button.disabled = false }
-      run(Effect.map(talk(message), finish), (failure) => {
-        problem.textContent = failure
-        finish()
-      })
-    }
-  }, h("label", {}, "Сообщение", text), h("div", { class: "row" }, h("label", { class: "grow" }, "Модель", model), h("label", { class: "grow" }, "Глубина размышления", effort)),
-    h("p", { class: "muted" }, CHOICE_HINT), button, problem)
-  form.className = "chat"
-  const node = h("section", { class: "card" }, h("h2", { class: "head" }, "Чат"), log, form)
-  const scrollToEnd = (): void => { log.scrollTop = log.scrollHeight }
-  const ask = (message: string): void => {
-    if (button.disabled) return
-    text.value = message
-    form.requestSubmit()
-    scrollToEnd()
-  }
-  return { node, ask, scrollToEnd }
-}
-
-const noteOf = (count: number, one: string, many: string): string => count === 0 ? "" : `${count === 1 ? one : many}: ${count}`
+const countNote = (count: number): string => count === 0 ? "" : String(count)
 
 const stageNotes = ({ blocks, heard, pauses }: Status): Readonly<Record<StageId, StageNote>> => ({
-  brief: { note: noteOf(heard, "видео", "видео"), done: heard > 0 },
-  takes: { note: noteOf(blocks ?? 0, "блок", "блоков"), done: blocks !== undefined },
+  brief: { note: countNote(heard), done: heard > 0 },
+  takes: { note: countNote(blocks ?? 0), done: blocks !== undefined },
   pauses: {
-    note: pauses.total === 0 ? "" : `убрано ${pauses.removed} из ${pauses.total}`,
+    note: pauses.total === 0 ? "" : `${pauses.removed} из ${pauses.total}`,
     done: pauses.total > 0 && pauses.removed === pauses.total
   }
 })
 
-const keysBar = (summary: HTMLElement): HTMLElement =>
-  h("footer", { class: "keys" }, ...KEYS.map(([key, does]) => h("span", {}, h("kbd", {}, key), does)), summary)
+const keysBar = (): HTMLElement =>
+  h("footer", { class: "keys" }, ...KEYS.map(([key, does]) => h("span", {}, h("kbd", {}, key), does)))
 
 const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
   Effect.gen(function*() {
     const [{ project }, { messages }, { models }] = yield* Effect.all([Api.getProject(id), Api.getChat(id), Api.getModels], { concurrency: 3 })
     document.title = `${project.title} · Студия Reels`
     const videos = videosCard(project.id)
-    const desk = h("div", { class: "desk" })
+    const reel = h("div", { class: "reel blank" })
     const seen = { first: true }
     const timeline = timelineCard(project.id, {
       ask: (message) => { chat.ask(message) },
@@ -310,7 +153,7 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
         stages.note("brief", notes.brief)
         stages.note("takes", notes.takes)
         stages.note("pauses", notes.pauses)
-        desk.classList.toggle("blank", status.blocks === undefined)
+        reel.classList.toggle("blank", status.blocks === undefined)
         if (seen.first && status.heard > 0) stages.open("takes")
         seen.first = false
       }
@@ -319,30 +162,34 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
       videos.refresh()
       timeline.refresh()
     }
-    const chat = chatCard(project, messages, models, refresh)
+    const chat = chatDrawer(project, messages, models, refresh)
     const remove = h("button", {
       type: "button",
       class: "secondary end",
       click: () => { askToRemove(project, () => { location.hash = "#/" }) }
     }, "Удалить ролик")
     const { panels } = timeline
-    const stages = stageRail({ brief: h("div", { class: "pane" }, videoCard(project, refresh), videos.node, remove), takes: panels.takes, pauses: panels.pauses })
-    desk.append(
-      h("header", { class: "deskbar" },
-        h("a", { class: "back", href: "#/" }, "← Все ролики"), h("h1", {}, project.title),
-        h("div", { class: "tools" }, panels.clock, ...panels.tools)),
-      h("div", { class: "cols" }, stages.rail, stages.work, panels.viewer, h("section", { class: "panel chatcol", "aria-label": "Чат" }, chat.node)),
-      panels.tracks,
-      keysBar(panels.summary))
-    show(desk)
+    const stages = stageRail(
+      { brief: h("div", { class: "pane" }, videoCard(project, refresh), videos.node, remove), takes: panels.takes, pauses: panels.pauses },
+      (stage) => { reel.dataset.stage = stage })
+    reel.append(
+      h("header", { class: "bar" },
+        h("a", { class: "back", href: "#/", "aria-label": "Все ролики", title: "Все ролики" }, "←"), h("h1", {}, project.title),
+        panels.undo, chat.opener),
+      panels.viewer,
+      h("div", { class: "dock" }, panels.summary),
+      h("div", { class: "board" }, stages.rail, panels.tracks, stages.work),
+      keysBar(),
+      chat.node)
+    show(reel)
+    shrinkWhenScrolledPast(panels.viewer)
     refresh()
-    chat.scrollToEnd()
   })
 
 const route = (): void => {
   const match = /^#\/p\/([a-z0-9-]+)$/.exec(location.hash)
   document.title = "Студия Reels"
-  const view = match?.[1] === undefined ? Effect.map(Api.listProjects, ({ projects }) => { listView(projects) }) : projectView(match[1])
+  const view = match?.[1] === undefined ? Effect.map(Api.listProjects, ({ projects }) => { show(homeView(projects, route)) }) : projectView(match[1])
   run(view, showFailure)
 }
 

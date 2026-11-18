@@ -29,7 +29,7 @@ To start the studio:
 1. Open `http://<address of the computer>:8765` in a browser on the same Wi-Fi.
 
 The log prints `Listening on http://0.0.0.0:8765`.
-The page shows the list of videos and a form that creates the first one.
+The page shows the videos as tiles with covers and a button that starts the next one.
 
 The studio answers only addresses of a private network and has no password.
 Do not forward its port to the internet.

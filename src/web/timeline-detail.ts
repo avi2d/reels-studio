@@ -121,7 +121,7 @@ export const pauseList = (placed: ReadonlyArray<Placed>, wordAt: (video: string,
     ? "В выбранных дублях пауз нет."
     : `Убрано ${all.length - kept.length} из ${all.length}. Осталось пауз на ${formatLength(lengthOf(kept))}.`
   return h("div", { class: "detail" },
-    h("p", { class: "did" }, "Студия нашла паузы в выбранных дублях. Уберите лишние по одной или все сразу кнопкой вверху."),
+    h("p", { class: "did" }, "Студия нашла паузы в выбранных дублях. Уберите лишние по одной или все сразу кнопкой выше."),
     h("div", { class: "rules" }, ...RULES.map((rule) => h("span", {}, rule))),
     h("p", { class: "muted", role: "status" }, count),
     h("ol", { class: "pause-list" }, ...all.map(({ number, one, pause }) => pauseItem(one, number, pause, wordAt, actions))))

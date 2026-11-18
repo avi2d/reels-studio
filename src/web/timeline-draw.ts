@@ -103,16 +103,16 @@ export interface Parts {
 
 export const partsOf = (): Parts => ({
   summary: h("span", { class: "sum" }),
-  clock: h("span", { class: "tc", role: "timer" }),
+  clock: h("span", { class: "clock", role: "timer" }),
   undo: tool("Отменить", "Отменяет последнее изменение монтажа. Клавиша Z"),
   strip: tool(STRIP.label, STRIP.hint),
-  play: tool(PLAY, "Показывает монтаж с начала", "primary"),
+  play: tool(PLAY, "Показывает монтаж с начала"),
   prev: h("button", { type: "button", disabled: true, "aria-label": "Блок до этого", title: "Блок до этого" }, "|◀"),
   go: h("button", { type: "button", class: "go", disabled: true, "aria-label": "Смотреть с этого блока", title: "Смотреть с этого блока. Пробел" }, "▶"),
   next: h("button", { type: "button", disabled: true, "aria-label": "Блок после этого", title: "Блок после этого" }, "▶|"),
   around: h("button", { type: "button", disabled: true, title: "Конец блока до него, этот блок и начало блока после" }, "С соседями"),
   tag: h("span", { class: "tag", hidden: true }),
-  facts: h("span", { class: "side right" }),
+  facts: h("span", { class: "facts" }),
   rowHolder: h("div", { class: "blocks-holder" }),
   map: h("ol", { class: "map" }),
   detailHolder: h("div", { class: "details" }),
@@ -169,12 +169,9 @@ export interface Panels {
   readonly viewer: HTMLElement
   readonly takes: HTMLElement
   readonly pauses: HTMLElement
-  readonly tools: ReadonlyArray<HTMLElement>
-  readonly clock: HTMLElement
+  readonly undo: HTMLElement
   readonly summary: HTMLElement
 }
-
-const LANES = ["Текст", "Видео", "Паузы"]
 
 export interface Frame {
   readonly notes: HTMLElement
@@ -192,19 +189,19 @@ export const frameOf = (parts: Parts): Frame => {
   const problem = h("p", { class: "error", role: "alert" })
   const empty = h("p", { class: "muted lane-empty" }, NO_ROW)
   const noPauses = h("p", { class: "muted" }, NO_PAUSES)
-  const ready = h("div", { class: "lanes", hidden: true },
-    h("div", { class: "lane-names", "aria-hidden": "true" }, ...LANES.map((name) => h("span", {}, name))), parts.rowHolder)
+  const ready = h("div", { class: "lanes", hidden: true }, parts.rowHolder)
   const frame = h("div", { class: "frame" }, parts.tag)
-  const overview = h("nav", { class: "overview", "aria-label": "Весь ролик", hidden: true }, h("span", { class: "label" }, "Весь ролик"), parts.map)
+  const overview = h("nav", { class: "overview", "aria-label": "Весь ролик", hidden: true }, parts.map)
   const panels: Panels = {
-    tracks: h("section", { class: "timeline", "aria-label": "Монтаж" }, overview, ready, empty, problem),
+    tracks: h("section", { class: "timeline", "aria-label": "Монтаж" }, ready, empty, problem),
     viewer: h("section", { class: "viewer", "aria-label": "Просмотр" },
-      h("div", { class: "stage" }, frame),
-      h("div", { class: "transport" }, h("span", { class: "side" }), parts.prev, parts.go, parts.next, parts.around, parts.facts)),
+      h("div", { class: "viewbox" },
+        h("div", { class: "stage" }, frame),
+        overview,
+        h("div", { class: "transport" }, parts.clock, parts.prev, parts.go, parts.next, parts.around, parts.play, parts.facts))),
     takes: h("div", { class: "pane" }, notes, parts.detailHolder),
-    pauses: h("div", { class: "pane" }, noPauses, parts.pauseHolder),
-    tools: [parts.undo, parts.strip, parts.play],
-    clock: parts.clock,
+    pauses: h("div", { class: "pane" }, noPauses, parts.strip, parts.pauseHolder),
+    undo: parts.undo,
     summary: parts.summary
   }
   return { notes, problem, empty, noPauses, ready, frame, overview, panels }

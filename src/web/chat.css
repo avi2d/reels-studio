@@ -1,0 +1,51 @@
+.drawer {
+  position: fixed;
+  z-index: 20;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(400px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  box-shadow: -30px 0 60px rgb(0 0 0 / 0.45);
+  transform: translateX(105%);
+  visibility: hidden;
+  transition: transform 0.26s cubic-bezier(0.32, 0.72, 0, 1), visibility 0s 0.26s;
+}
+.drawer.open { transform: none; visibility: visible; transition-delay: 0s; }
+.drawer header { display: flex; justify-content: space-between; align-items: center; padding: 10px 8px 10px 16px; border-bottom: 1px solid var(--line); }
+.drawer header b { font: 600 15px var(--display); letter-spacing: -0.02em; }
+
+.thread { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+.thread > :first-child { margin-top: auto; }
+.bubble { max-width: 90%; padding: 8px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bubble.user { align-self: flex-end; border-radius: 14px 14px 4px 14px; background: var(--acc); color: var(--acc-ink); }
+.bubble.assistant { align-self: flex-start; border-radius: 14px 14px 14px 4px; background: var(--raise); }
+.bubble .note { display: block; margin-top: 6px; font-size: 13px; }
+.bubble.assistant .note { color: var(--bad); }
+.step { align-self: flex-start; }
+
+.say { display: flex; flex-direction: column; gap: 8px; padding: 0 12px calc(12px + env(safe-area-inset-bottom, 0px)); }
+.engine { color: var(--mut); font-size: 13px; }
+.engine summary { display: flex; align-items: center; min-height: 32px; padding: 0 4px; cursor: pointer; }
+.engine[open] { display: flex; flex-direction: column; gap: 8px; padding-bottom: 4px; }
+.composer { display: flex; align-items: flex-end; gap: 6px; padding: 6px 6px 6px 14px; border: 1px solid var(--line); border-radius: 18px; background: var(--bg); }
+.composer:focus-within { border-color: var(--acc); }
+.composer textarea { flex: 1; min-height: 34px; max-height: 130px; padding: 6px 0; border: 0; border-radius: 0; outline: 0; background: none; resize: none; field-sizing: content; }
+.send { flex: none; width: 34px; min-height: 34px; padding: 0; border-radius: 50%; background: var(--acc); color: var(--acc-ink); font-size: 16px; font-weight: 700; }
+
+@media (hover: hover) and (pointer: fine) {
+  .engine summary:hover { color: var(--fg); }
+}
+
+@media (max-width: 820px) {
+  .drawer { top: auto; width: 100%; height: 82dvh; border: 0; border-top: 1px solid var(--line); border-radius: 20px 20px 0 0; box-shadow: 0 -30px 60px rgb(0 0 0 / 0.45); transform: translateY(105%); }
+  .send { width: 44px; min-height: 44px; }
+  .engine summary { min-height: 40px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer { transition: none; }
+}

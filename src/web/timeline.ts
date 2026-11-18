@@ -142,6 +142,7 @@ const redraw = ({ hooks, parts, player, state, ui, view }: Desk, actions: Action
   ui.empty.hidden = isReady
   ui.noPauses.hidden = isReady
   parts.pauseHolder.hidden = !isReady
+  parts.strip.hidden = !isReady
   parts.detailHolder.hidden = !isReady
   ui.notes.replaceChildren(...notesOf(loaded, hooks.ask))
   const drawn = timeline.state === "ready" && isReady
@@ -163,7 +164,7 @@ const redraw = ({ hooks, parts, player, state, ui, view }: Desk, actions: Action
     blocks: drawn === undefined ? undefined : view.placedNow().length,
     pauses: drawn?.status ?? { removed: 0, total: 0 }
   })
-  refocus([ui.panels.tracks, ui.panels.takes, ui.panels.pauses], active)
+  refocus([ui.panels.viewer, ui.panels.tracks, ui.panels.takes, ui.panels.pauses], active)
 }
 
 const loader = (projectId: string, anchor: HTMLElement, show: (loaded: Loaded, ticket: Ticket) => void, stamp: () => Ticket): () => void => {

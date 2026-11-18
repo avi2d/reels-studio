@@ -16,7 +16,8 @@ const ProjectView = Schema.Struct({
   model: Schema.optionalKey(Schema.String),
   effort: Schema.optionalKey(Effort),
   stage: Schema.Literals(["created", "uploaded"]),
-  files: Schema.Array(Schema.Struct({ name: Schema.String, size: Schema.Finite }))
+  files: Schema.Array(Schema.Struct({ name: Schema.String, size: Schema.Finite })),
+  cover: Schema.optionalKey(Schema.String)
 })
 export type ProjectView = typeof ProjectView.Type
 

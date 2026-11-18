@@ -1,5 +1,6 @@
 import { Array as Arr, Context, Crypto, DateTime, Effect, FileSystem, Layer, Path, Ref, Schema } from "effect"
 import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
+import { places } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
 
 const ProjectId = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]{0,63}$/))
@@ -21,6 +22,7 @@ type Stage = "created" | "uploaded"
 export interface ProjectView extends Project {
   readonly stage: Stage
   readonly files: ReadonlyArray<{ readonly name: string; readonly size: number }>
+  readonly cover?: string
 }
 
 const ProjectFile = Schema.fromJsonString(Project)
@@ -78,7 +80,9 @@ export class Projects extends Context.Service<Projects, {
             orBroken
           ))
         const stage: Stage = files.length > 0 ? "uploaded" : "created"
-        return { ...project, stage, files }
+        const watchable = yield* Effect.forEach(files, (file) => fs.exists(places({ dir, name: file.name }).preview).pipe(orBroken))
+        const cover = files.find((_, index) => watchable[index] === true)?.name
+        return { ...project, stage, files, ...(cover === undefined ? {} : { cover }) }
       })
 
       const get = (id: string) => Effect.flatMap(folder(id), view)
