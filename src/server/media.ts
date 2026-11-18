@@ -1,10 +1,10 @@
-import { type Crypto, Context, Deferred, Effect, Exit, FileSystem, Layer, Ref } from "effect"
+import { type Crypto, Cause, Context, Deferred, Effect, Exit, FileSystem, Layer, Option, Ref } from "effect"
 import type { ChildProcessSpawner } from "effect/process"
 import type { LibraryVideo, Pick } from "../shared/library.ts"
 import type { VideoView } from "../shared/plan.ts"
-import type { Edits, TimelineView } from "../shared/timeline.ts"
+import type { Edits, GazeFailure, TimelineView } from "../shared/timeline.ts"
 import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
-import { listen, look, places, previewIsFresh, readPlan, readTranscript, refreshPreview, type Job } from "./media-jobs.ts"
+import { GazeFailed, listen, look, places, previewIsFresh, readPlan, readTranscript, refreshPreview, type Job } from "./media-jobs.ts"
 import { Projects } from "./projects.ts"
 import { gatherLibrary, heardIn, keysIn, reuse as reuseOne, sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
@@ -16,10 +16,11 @@ const orBroken = orUnavailable("the media failed", UNAVAILABLE)
 const keyOf = (job: Job): string => places(job).source
 
 type Unheard = Ref.Ref<ReadonlySet<string>>
+type Unseen = Ref.Ref<ReadonlyMap<string, GazeFailure>>
 
 interface Failures {
   readonly unheard: Unheard
-  readonly unseen: Unheard
+  readonly unseen: Unseen
   readonly stale: Unheard
 }
 
@@ -67,7 +68,7 @@ const nextStale = Effect.fnUntraced(function*(stale: Unheard, jobs: ReadonlyArra
   return jobs.find((_, index) => old[index] === true)
 })
 
-const nextUnseen = Effect.fnUntraced(function*(unseen: Unheard, jobs: ReadonlyArray<Job>) {
+const nextUnseen = Effect.fnUntraced(function*(unseen: Unseen, jobs: ReadonlyArray<Job>) {
   const fs = yield* FileSystem.FileSystem
   const failed = yield* Ref.get(unseen)
   const waiting = yield* Effect.forEach(jobs, (job) => Effect.gen(function*() {
@@ -78,7 +79,7 @@ const nextUnseen = Effect.fnUntraced(function*(unseen: Unheard, jobs: ReadonlyAr
   return jobs.find((_, index) => waiting[index] === true)
 })
 
-const attempt = Effect.fnUntraced(function*<E, R>(failures: Unheard, work: Ref.Ref<Work>, job: Job, task: Effect.Effect<void, E, R>) {
+const attempt = Effect.fnUntraced(function*<E, R>(work: Ref.Ref<Work>, job: Job, task: Effect.Effect<void, E, R>, record: (cause: Cause.Cause<E>) => Effect.Effect<void>) {
   const running: Running = { dir: job.dir, stop: yield* Deferred.make<void>(), finished: yield* Deferred.make<void>() }
   const claimed = yield* Ref.modify(work, (state) =>
     state.closed.has(job.dir) ? [false, state] : [true, { ...state, running }])
@@ -90,18 +91,27 @@ const attempt = Effect.fnUntraced(function*<E, R>(failures: Unheard, work: Ref.R
   )
   if (Exit.isFailure(outcome)) {
     yield* Effect.logError("the media job failed", job.name, outcome.cause)
-    yield* Ref.update(failures, (set) => new Set([...set, keyOf(job)]))
+    yield* record(outcome.cause)
   }
 })
+
+const markFailed = (failures: Unheard, job: Job): Effect.Effect<void> =>
+  Ref.update(failures, (set) => new Set([...set, keyOf(job)]))
+
+const markGazeFailed = (failures: Unseen, job: Job) => (cause: Cause.Cause<unknown>): Effect.Effect<void> =>
+  Ref.update(failures, (map) => new Map([...map, [keyOf(job), Option.match(Cause.findErrorOption(cause), {
+    onNone: (): GazeFailure => "tool-failed",
+    onSome: (error): GazeFailure => error instanceof GazeFailed ? error.reason : "tool-failed"
+  })]]))
 
 const step = Effect.fnUntraced(function*(failures: Failures, work: Ref.Ref<Work>) {
   const jobs = yield* openJobs((yield* Ref.get(work)).closed)
   const unheard = yield* nextUnheard(failures.unheard, jobs)
-  if (unheard !== undefined) return yield* attempt(failures.unheard, work, unheard, listen(unheard))
+  if (unheard !== undefined) return yield* attempt(work, unheard, listen(unheard), () => markFailed(failures.unheard, unheard))
   const stale = yield* nextStale(failures.stale, jobs)
-  if (stale !== undefined) return yield* attempt(failures.stale, work, stale, refreshPreview(stale))
+  if (stale !== undefined) return yield* attempt(work, stale, refreshPreview(stale), () => markFailed(failures.stale, stale))
   const unseen = yield* nextUnseen(failures.unseen, jobs)
-  if (unseen !== undefined) return yield* attempt(failures.unseen, work, unseen, look(unseen))
+  if (unseen !== undefined) return yield* attempt(work, unseen, look(unseen), markGazeFailed(failures.unseen, unseen))
   yield* Effect.sleep("3 seconds")
 })
 
@@ -134,7 +144,7 @@ export class Media extends Context.Service<Media, {
       const projects = yield* Projects
       const context = yield* Effect.context<FileSystem.FileSystem | Crypto.Crypto | Settings | ChildProcessSpawner.ChildProcessSpawner>()
       const unheard: Unheard = yield* Ref.make<ReadonlySet<string>>(new Set())
-      const unseen: Unheard = yield* Ref.make<ReadonlySet<string>>(new Set())
+      const unseen: Unseen = yield* Ref.make<ReadonlyMap<string, GazeFailure>>(new Map())
       const stale: Unheard = yield* Ref.make<ReadonlySet<string>>(new Set())
       const work = yield* Ref.make<Work>({ closed: new Set(), running: undefined })
 

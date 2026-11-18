@@ -1,6 +1,6 @@
-import { Effect, FileSystem, Option, Schema } from "effect"
+import { Effect, FileSystem, Option, Result, Schema } from "effect"
 import type { Transcript } from "../shared/plan.ts"
-import { Blocks, Edits, NO_EDITS, soundBlocks, type Gaze, type TimelineView } from "../shared/timeline.ts"
+import { Blocks, Edits, NO_EDITS, soundBlocks, type Gaze, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
 import { places, readGaze, readTranscript } from "./media-jobs.ts"
 
 const decodeBlocks = Schema.decodeUnknownOption(Schema.fromJsonString(Blocks))
@@ -24,7 +24,14 @@ export const writeEdits = Effect.fnUntraced(function*(dir: string, edits: Edits)
 
 type Look = TimelineView["looks"][number]
 
-export const readTimeline = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>, unseen: ReadonlySet<string>) {
+const lookOf = (video: string, measured: Gaze | undefined, written: boolean, failure: GazeFailure | undefined): Look => {
+  if (measured !== undefined) return { video, state: "measured" }
+  if (written) return { video, state: "failed", reason: "file-unreadable" }
+  if (failure !== undefined) return { video, state: "failed", reason: failure }
+  return { video, state: "waiting" }
+}
+
+export const readTimeline = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>, unseen: ReadonlyMap<string, GazeFailure>) {
   const fs = yield* FileSystem.FileSystem
   const transcripts = new Map<string, Transcript>()
   const gazes = new Map<string, Gaze>()
@@ -34,10 +41,17 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
     if (!(yield* fs.exists(place.transcript))) continue
     transcripts.set(name, yield* readTranscript({ dir, name }))
     const written = yield* fs.exists(place.gaze)
-    const measured = written ? Option.getOrUndefined(yield* Effect.option(readGaze({ dir, name }))) : undefined
-    if (measured !== undefined) gazes.set(name, measured)
-    const lost = written || unseen.has(place.source)
-    looks.push({ video: name, state: measured !== undefined ? "measured" : lost ? "failed" : "waiting" })
+    let measured: Gaze | undefined
+    if (written) {
+      const decoded = yield* Effect.result(readGaze({ dir, name }))
+      if (Result.isSuccess(decoded)) {
+        measured = decoded.success
+        gazes.set(name, measured)
+      } else {
+        yield* Effect.logError("the gaze is unreadable", place.gaze, decoded.failure)
+      }
+    }
+    looks.push(lookOf(name, measured, written, unseen.get(place.source)))
   }
   const file = `${dir}/blocks.json`
   if (!(yield* fs.exists(file))) return { looks, timeline: { state: "none" } } satisfies TimelineView

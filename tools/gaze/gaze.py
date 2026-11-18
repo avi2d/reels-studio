@@ -3,6 +3,7 @@ import hashlib
 import json
 import math
 import os
+import sys
 import urllib.request
 from pathlib import Path
 
@@ -63,8 +64,9 @@ def main() -> None:
     landmarker = vision.FaceLandmarker.create_from_options(options)
     video = cv2.VideoCapture(args.video)
     rate = video.get(cv2.CAP_PROP_FPS)
-    if rate <= 0:
-        raise SystemExit("The video has no frame rate.")
+    if not video.isOpened() or rate <= 0:
+        print("The video cannot be read.", file=sys.stderr)
+        raise SystemExit(65)
     every = max(1, round(rate / SAMPLES_PER_SECOND))
     samples: list[str] = []
     number = 0
