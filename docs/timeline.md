@@ -7,11 +7,13 @@ The page of one video folder shows the speech of every heard video as a row of b
 
 ## The working screen
 
-A list of stages stands on the left, and three of them work: «Видео и задание», «Дубли и блоки» and «Паузы и склейки».
-The open stage fills the column next to the list, the player stands in the middle and the chat on the right.
-The row of blocks runs along the bottom, with the text, the clip and the pauses of each block on three tracks.
-«Убрать все паузы» and «Смотреть монтаж» stay at the top of the page at every stage.
-On a phone the same parts follow one another down the page, and the two buttons stay at the top of the screen.
+Three stages work: «Видео и задание», «Дубли и блоки» and «Паузы и склейки».
+A bar at the top holds the way back, the title, the undo and the chat.
+The player stands next to a strip of stage chips, the row of blocks and the open stage.
+The row of blocks sits between the chips and the open stage, with the text, the clip and the pauses of each block.
+«Смотреть монтаж» sits under the player, and «Убрать все паузы» sits on its own stage.
+The chat opens as a drawer over the page.
+On a phone the same parts follow one another down the page, under a sticky bar.
 
 ## Terms
 
