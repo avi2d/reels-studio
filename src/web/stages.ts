@@ -25,9 +25,8 @@ export const stageRail = (panes: Readonly<Record<StageId, HTMLElement>>, shared:
     return { id, tab, count, panel }
   })
   const rail = h("wa-tab-group", { class: "stages", active: state.now, "without-scroll-controls": true },
-    ...steps.map((step) => step.tab), ...steps.map((step) => step.panel))
+    ...steps.map((step) => step.tab), shared, ...steps.map((step) => step.panel))
   const show = (): void => {
-    steps.find((step) => step.id === state.now)?.panel.prepend(shared)
     onOpen(state.now)
   }
   const open = (stage: StageId): void => {
