@@ -21,8 +21,8 @@ const encodeLine = Schema.encodeEffect(MessageLine)
 
 const TOOLS = "read,grep,find,ls,write,edit"
 const NOT_STARTED = "чат не запустился. Программа pi не найдена или не запускается на компьютере студии. Установите pi, перезапустите студию и отправьте сообщение ещё раз."
-const EXITED = "Программа pi завершилась с ошибкой. Подробности в журнале студии. Проверьте, что команда pi --list-models работает, и отправьте сообщение ещё раз."
-const CLOSED = "Программа pi закрылась раньше ответа. Отправьте сообщение ещё раз или выберите другую модель."
+const EXITED = "программа pi завершилась с ошибкой. Подробности в журнале студии. Проверьте, что команда pi --list-models работает, и отправьте сообщение ещё раз."
+const CLOSED = "программа pi закрылась раньше ответа. Отправьте сообщение ещё раз или выберите другую модель."
 
 const modelFailed = (reason: string): string => {
   const line = reason.split("\n")[0]?.trim() ?? ""
@@ -202,13 +202,14 @@ const makeExpand = (state: Ref.Ref<RunState>) => (event: ChatEvent): Effect.Effe
 
 const endedWith = (state: Ref.Ref<RunState>, message: string): Effect.Effect<Stream.Stream<ChatEvent>> =>
   Effect.gen(function*() {
+    const shown = (yield* Ref.get(state)).pending ?? message
     yield* Ref.update(state, (current) => ({
       ...current,
-      failed: current.failed ?? current.pending ?? message,
+      failed: current.failed ?? shown,
       pending: undefined,
       settled: true
     }))
-    return Stream.make<Array<ChatEvent>>({ type: "error", message }, { type: "done" })
+    return Stream.make<Array<ChatEvent>>({ type: "error", message: shown }, { type: "done" })
   })
 
 const stoppedStream = <E>(
