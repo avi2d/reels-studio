@@ -41,8 +41,16 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
     if (!(yield* fs.exists(place.transcript))) continue
     transcripts.set(name, yield* readTranscript({ dir, name }))
     const written = yield* fs.exists(place.gaze)
-    const measured = written ? Option.getOrUndefined(yield* Effect.option(readGaze({ dir, name }))) : undefined
-    if (measured !== undefined) gazes.set(name, measured)
+    let measured: Gaze | undefined
+    if (written) {
+      const decoded = yield* Effect.either(readGaze({ dir, name }))
+      if (decoded._tag === "Right") {
+        measured = decoded.right
+        gazes.set(name, measured)
+      } else {
+        yield* Effect.logError("the gaze is unreadable", place.gaze, decoded.left)
+      }
+    }
     looks.push(lookOf(name, measured, written, unseen.get(place.source)))
   }
   const file = `${dir}/blocks.json`

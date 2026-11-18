@@ -66,7 +66,7 @@ def main() -> None:
     rate = video.get(cv2.CAP_PROP_FPS)
     if not video.isOpened() or rate <= 0:
         print("The video cannot be read.", file=sys.stderr)
-        raise SystemExit(2)
+        raise SystemExit(65)
     every = max(1, round(rate / SAMPLES_PER_SECOND))
     samples: list[str] = []
     number = 0
@@ -78,12 +78,6 @@ def main() -> None:
             image = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             samples.append(look_of(landmarker.detect(image)))
         number += 1
-    if not samples:
-        print("The video has no frames.", file=sys.stderr)
-        raise SystemExit(2)
-    if all(sample == "hidden" for sample in samples):
-        print("No face was found in the video.", file=sys.stderr)
-        raise SystemExit(3)
     result = {"step": every / rate, "samples": samples}
     Path(args.output).write_text(json.dumps(result), encoding="utf-8")
 

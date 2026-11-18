@@ -9,13 +9,13 @@ class ToolFailed extends Data.TaggedError("ToolFailed")<{ readonly command: stri
 
 export class GazeFailed extends Data.TaggedError("GazeFailed")<{ readonly reason: GazeFailure; readonly detail: string }> {}
 
-// The exit codes of tools/gaze/gaze.py: 2 for a video it cannot read, 3 for a video with no face in it.
-const gazeReason = (code: number): GazeFailure => code === 2 ? "file-unreadable" : code === 3 ? "no-face" : "tool-failed"
+// 65 is the gaze program itself reporting an unreadable video, 127 is the shell reporting a missing program.
+const gazeReason = (code: number): GazeFailure => code === 65 ? "file-unreadable" : code === 127 ? "no-tool" : "tool-failed"
 
-const gazeFailure = (error: ToolFailed | PlatformError.PlatformError): GazeFailed =>
+const gazeFailure = (heavy: ReadonlyArray<string>) => (error: ToolFailed | PlatformError.PlatformError): GazeFailed =>
   error instanceof ToolFailed
     ? new GazeFailed({ reason: gazeReason(error.code), detail: error.output })
-    : new GazeFailed({ reason: Predicate.isTagged("NotFound")(error.reason) ? "no-tool" : "tool-failed", detail: error.message })
+    : new GazeFailed({ reason: Predicate.isTagged("NotFound")(error.reason) && heavy.length === 0 ? "no-tool" : "tool-failed", detail: error.message })
 
 const Probe = Schema.fromJsonString(Schema.Struct({
   streams: Schema.Array(Schema.Struct({ color_transfer: Schema.optionalKey(Schema.String) }))
@@ -132,7 +132,7 @@ export const look = Effect.fn("Media.look")(function*(job: Job) {
   yield* Effect.forEach([place.work, `${job.dir}/gaze`], (folder) => fs.makeDirectory(folder, { recursive: true }))
   const measured = `${place.work}/gaze.json`
   const looker = `${settings.root}/tools/gaze`
-  yield* tool("uv", ["run", "--project", looker, "python", `${looker}/gaze.py`, place.preview, measured], settings.heavy).pipe(Effect.mapError(gazeFailure))
+  yield* tool("uv", ["run", "--project", looker, "python", `${looker}/gaze.py`, place.preview, measured], settings.heavy).pipe(Effect.mapError(gazeFailure(settings.heavy)))
   const gaze = yield* fs.readFileString(measured).pipe(
     Effect.flatMap(decodeGaze),
     Effect.mapError(() => new GazeFailed({ reason: "file-unreadable", detail: measured }))
