@@ -1,5 +1,6 @@
 import { offsetIn, type Pause, type Placed, type Take } from "../shared/timeline.ts"
 import { lengthOf } from "../shared/plan.ts"
+import { icon } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatLength, formatPause } from "./format.ts"
 
@@ -24,7 +25,7 @@ const pauseMark = (one: Placed, pause: Pause, length: number, actions: RowAction
     title: label,
     "data-key": `pause:${one.take.video}:${pause.after}`,
     click: () => { actions.setPause(one.take.video, pause.after, !pause.removed) }
-  }, pause.removed ? "↺" : size)
+  }, pause.removed ? icon("undo") : size)
 }
 
 const EDGE = 48
@@ -85,7 +86,7 @@ const dragHandle = (row: HTMLElement, slot: HTMLElement, title: string, id: stri
     "aria-label": `Переместить блок «${title}». Стрелки влево и вправо двигают его`,
     title: "Перетащите блок на новое место",
     "data-key": `handle:${id}`
-  }, "⠿")
+  }, icon("grip"))
   const state: Drag = { from: undefined, crossed: undefined }
   const drop = (): void => {
     const from = state.from

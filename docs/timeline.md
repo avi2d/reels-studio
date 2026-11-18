@@ -8,12 +8,13 @@ The page of one video folder shows the speech of every heard video as a row of b
 ## The working screen
 
 Three stages work: «Видео и задание», «Дубли и блоки» and «Паузы и склейки».
-A bar at the top holds the way back, the title, the undo and the chat.
-The player stands next to a strip of stage chips, the row of blocks and the open stage.
-The row of blocks sits between the chips and the open stage, with the text, the clip and the pauses of each block.
+A bar at the top holds the way back, the title, the undo and redo buttons and the chat.
+The player stands next to the stage tabs, the row of blocks and the open stage.
+The row of blocks sits between the tabs and the open stage, with the text, the clip and the pauses of each block.
 «Смотреть монтаж» sits under the player, and «Убрать все паузы» sits on its own stage.
 The chat opens as a drawer over the page.
 On a phone the same parts follow one another down the page, under a sticky bar.
+On a phone the tabs read «Видео», «Дубли» and «Паузы», so all three fit on one line.
 
 ## Terms
 
@@ -43,7 +44,9 @@ The old preview stays playable until the new one is complete.
 A removed pause leaves 0.2 s of silence in its place.
 The sound fades over 0.06 s on each side of a cut.
 «Послушать» next to a pause plays 1.5 s before it and 1.5 s after it.
-«Отменить» takes back the last change of the cut.
+The undo button in the bar takes back the last change of the cut, and the redo button brings it back.
+A new change after an undo clears what redo could bring back.
+The buttons carry icons, and a tooltip names each when the mouse rests on it or the keyboard focuses it.
 «С соседями» plays a take with the last 2 s of the block before it and the first 2 s of the block after it.
 A strip of numbered blocks shows the whole cut, each as wide as its length, and a click opens that block.
 The studio writes no video file from the row.

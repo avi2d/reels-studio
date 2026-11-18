@@ -1,10 +1,11 @@
 import { Effect } from "effect"
 import * as Api from "./api.ts"
+import { button } from "./controls.ts"
 import { h } from "./dom.ts"
 
 export const askToRemove = (project: { readonly id: string; readonly title: string }, onRemoved: () => void): void => {
-  const confirm = h("button", { type: "button", class: "danger" }, "Удалить ролик")
-  const cancel = h("button", { type: "button", class: "secondary" }, "Отмена")
+  const confirm = button("danger", {}, "Удалить ролик")
+  const cancel = button("quiet", {}, "Отмена")
   const problem = h("p", { class: "error", role: "alert" })
   const dialog = h("dialog", { class: "confirm", "aria-labelledby": "remove-title" },
     h("h2", { id: "remove-title" }, `Удалить ролик «${project.title}»?`),

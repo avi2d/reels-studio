@@ -5,11 +5,12 @@ import {
   type Clip, type Edits, type Placed, type Take
 } from "../shared/timeline.ts"
 import * as Api from "./api.ts"
+import { icon } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatLength } from "./format.ts"
 import { montage, type Playing } from "./montage.ts"
 import {
-  drawReady, frameOf, notesOf, partsOf, PLAY, refocus, startOf, STOP, textOf,
+  drawReady, frameOf, GO, notesOf, partsOf, PLAY, refocus, startOf, STOP, textOf,
   type Actions, type Frame, type Hooks, type Loaded, type Panels, type Parts
 } from "./timeline-draw.ts"
 import { onKeys } from "./timeline-keys.ts"
@@ -67,6 +68,7 @@ interface State {
   acked: Edits
   changes: number
   history: Array<Edits>
+  undone: Array<Edits>
   selected: string | undefined
   open: Placed | undefined
   base: number | undefined
@@ -110,8 +112,9 @@ const display = (parts: Parts, state: State) => {
     const before = state.playing?.clip.block
     state.playing = playing
     parts.play.textContent = playing === undefined ? PLAY : STOP
-    parts.go.textContent = playing === undefined ? "▶" : "■"
-    parts.go.setAttribute("aria-label", playing === undefined ? "Смотреть с этого блока" : STOP)
+    const goLabel = playing === undefined ? `${GO}. Пробел` : `${STOP}. Пробел`
+    parts.go.replaceChildren(icon(playing === undefined ? "play" : "stop", goLabel))
+    parts.goTip.textContent = goLabel
     showClock()
     const now = playing?.clip.block
     if (before === now) return
@@ -153,6 +156,7 @@ const redraw = ({ hooks, parts, player, state, ui, view }: Desk, actions: Action
   for (const button of [parts.play, parts.go, parts.around]) button.disabled = open === undefined
   if (open === undefined) for (const button of [parts.strip, parts.prev, parts.next]) button.disabled = true
   parts.undo.disabled = state.history.length === 0
+  parts.redo.disabled = state.undone.length === 0
   if (!isReady) parts.summary.textContent = ""
   const first = open?.spans[0]
   if (open !== undefined && first !== undefined) player.show({ ...first, video: open.take.video, block: open.block.id })
@@ -256,7 +260,7 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
   const parts = partsOf()
   const ui = frameOf(parts)
   const state: State =
-    { loaded: undefined, edits: NO_EDITS, acked: NO_EDITS, changes: 0, history: [], selected: undefined, open: undefined, base: undefined, playing: undefined, drawn: "", content: "", pending: undefined }
+    { loaded: undefined, edits: NO_EDITS, acked: NO_EDITS, changes: 0, history: [], undone: [], selected: undefined, open: undefined, base: undefined, playing: undefined, drawn: "", content: "", pending: undefined }
   const view = display(parts, state)
   const player = montage(projectId, view.markPlaying)
   ui.frame.prepend(player.node)
@@ -293,12 +297,22 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
 
   const change = (edits: Edits): void => {
     state.history.push(state.edits)
+    state.undone.length = 0
     apply(edits)
   }
 
   const undo = (): void => {
     const before = state.history.pop()
-    if (before !== undefined) apply(before)
+    if (before === undefined) return
+    state.undone.push(state.edits)
+    apply(before)
+  }
+
+  const redo = (): void => {
+    const after = state.undone.pop()
+    if (after === undefined) return
+    state.history.push(state.edits)
+    apply(after)
   }
 
   const select = (block: string): void => {
@@ -317,6 +331,7 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
   parts.play.addEventListener("click", () => { toggle(undefined) })
   parts.go.addEventListener("click", () => { toggle(state.open?.block.id) })
   parts.undo.addEventListener("click", undo)
+  parts.redo.addEventListener("click", redo)
   parts.around.addEventListener("click", () => {
     const open = state.open
     if (open !== undefined) actions.hearAround(open.block.id, open.take)

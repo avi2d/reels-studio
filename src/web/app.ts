@@ -1,9 +1,11 @@
 import { Effect } from "effect"
 import * as Api from "./api.ts"
 import { chatDrawer } from "./chat.ts"
+import { button, iconButton, tooltip } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatSize } from "./format.ts"
 import { homeView } from "./home.ts"
+import { startKit } from "./kit.ts"
 import { libraryPicker } from "./library.ts"
 import { shrinkWhenScrolledPast } from "./mini.ts"
 import { oneAfterAnother } from "./queue.ts"
@@ -163,22 +165,23 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
       timeline.refresh()
     }
     const chat = chatDrawer(project, messages, models, refresh)
-    const remove = h("button", {
-      type: "button",
-      class: "secondary end",
+    const remove = button("quiet", {
+      class: "end",
       click: () => { askToRemove(project, () => { location.hash = "#/" }) }
     }, "Удалить ролик")
+    const back = iconButton("plain", "back", "Все ролики", { class: "back", href: "#/" })
     const { panels } = timeline
     const stages = stageRail(
       { brief: h("div", { class: "pane" }, videoCard(project, refresh), videos.node, remove), takes: panels.takes, pauses: panels.pauses },
+      panels.tracks,
       (stage) => { reel.dataset.stage = stage })
     reel.append(
       h("header", { class: "bar" },
-        h("a", { class: "back", href: "#/", "aria-label": "Все ролики", title: "Все ролики" }, "←"), h("h1", {}, project.title),
-        panels.undo, chat.opener),
+        back, tooltip(back, "bar-back", "Все ролики"), h("h1", {}, project.title),
+        panels.history, chat.opener),
       panels.viewer,
       h("div", { class: "dock" }, panels.summary),
-      h("div", { class: "board" }, stages.rail, panels.tracks, stages.work),
+      h("div", { class: "board" }, stages.rail),
       keysBar(),
       chat.node)
     show(reel)
@@ -193,5 +196,6 @@ const route = (): void => {
   run(view, showFailure)
 }
 
+startKit()
 globalThis.addEventListener("hashchange", route)
 route()

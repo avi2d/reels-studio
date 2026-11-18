@@ -21,8 +21,8 @@ interface Now {
   readonly open: Placed | undefined
 }
 
-const PRESSES = "input, textarea, select, button, a, video, dialog"
-const TYPES = "input, textarea, select, video, dialog"
+const TYPES = "input, textarea, select, video, dialog, wa-select, wa-textarea"
+const PRESSES = `${TYPES}, button, a, wa-button, wa-tab`
 const MOVES_ITSELF = ".handle"
 const STEPS: Readonly<Record<string, number>> = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }
 

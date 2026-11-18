@@ -1,6 +1,7 @@
 import { Effect } from "effect"
 import { lengthOf, removedSpans, removedWords, skipTarget, type Span, type VideoView } from "../shared/plan.ts"
 import * as Api from "./api.ts"
+import { button } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatLength } from "./format.ts"
 
@@ -62,8 +63,7 @@ const section = (projectId: string, video: VideoView, retry: Retry): HTMLElement
     return h("div", { class: "video" }, title, h("p", { class: "muted", role: "status" }, "Студия слушает видео. Текст появится здесь сам через несколько минут."))
   }
   const trouble = h("p", { class: "error", role: "alert" })
-  const again = h("button", {
-    type: "button",
+  const again = button("normal", {
     class: "end",
     click: () => {
       again.disabled = true
