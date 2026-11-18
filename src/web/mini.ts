@@ -15,6 +15,9 @@ export const shrinkWhenScrolledPast = (viewer: HTMLElement): void => {
   }, { rootMargin: `-${BAR}px 0px 0px 0px` })
   watcher.observe(viewer)
   viewer.querySelector(".stage")?.addEventListener("click", () => {
-    if (viewer.classList.contains("mini")) viewer.scrollIntoView({ block: "start" })
+    if (!viewer.classList.contains("mini")) return
+    viewer.classList.remove("mini")
+    viewer.style.minHeight = ""
+    viewer.scrollIntoView({ block: "start" })
   })
 }
