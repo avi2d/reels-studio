@@ -43,7 +43,7 @@ export type Edits = typeof Edits.Type
 
 export const NO_EDITS: Edits = { order: [], deleted: [], chosen: [], pauses: [] }
 
-export const GazeFailure = Schema.Literals(["no-tool", "tool-failed", "file-unreadable"])
+export const GazeFailure = Schema.Literals(["no-tool", "tool-failed", "file-unreadable", "video-unreadable"])
 export type GazeFailure = typeof GazeFailure.Type
 
 const Look = Schema.Union([

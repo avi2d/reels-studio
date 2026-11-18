@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Option, Schema } from "effect"
+import { Effect, FileSystem, Option, Result, Schema } from "effect"
 import type { Transcript } from "../shared/plan.ts"
 import { Blocks, Edits, NO_EDITS, soundBlocks, type Gaze, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
 import { places, readGaze, readTranscript } from "./media-jobs.ts"
@@ -43,12 +43,12 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
     const written = yield* fs.exists(place.gaze)
     let measured: Gaze | undefined
     if (written) {
-      const decoded = yield* Effect.either(readGaze({ dir, name }))
-      if (decoded._tag === "Right") {
-        measured = decoded.right
+      const decoded = yield* Effect.result(readGaze({ dir, name }))
+      if (Result.isSuccess(decoded)) {
+        measured = decoded.success
         gazes.set(name, measured)
       } else {
-        yield* Effect.logError("the gaze is unreadable", place.gaze, decoded.left)
+        yield* Effect.logError("the gaze is unreadable", place.gaze, decoded.failure)
       }
     }
     looks.push(lookOf(name, measured, written, unseen.get(place.source)))

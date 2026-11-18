@@ -10,7 +10,7 @@ class ToolFailed extends Data.TaggedError("ToolFailed")<{ readonly command: stri
 export class GazeFailed extends Data.TaggedError("GazeFailed")<{ readonly reason: GazeFailure; readonly detail: string }> {}
 
 // 65 is the gaze program itself reporting an unreadable video, 127 is the shell reporting a missing program.
-const gazeReason = (code: number): GazeFailure => code === 65 ? "file-unreadable" : code === 127 ? "no-tool" : "tool-failed"
+const gazeReason = (code: number): GazeFailure => code === 65 ? "video-unreadable" : code === 127 ? "no-tool" : "tool-failed"
 
 const gazeFailure = (heavy: ReadonlyArray<string>) => (error: ToolFailed | PlatformError.PlatformError): GazeFailed =>
   error instanceof ToolFailed
@@ -135,7 +135,7 @@ export const look = Effect.fn("Media.look")(function*(job: Job) {
   yield* tool("uv", ["run", "--project", looker, "python", `${looker}/gaze.py`, place.preview, measured], settings.heavy).pipe(Effect.mapError(gazeFailure(settings.heavy)))
   const gaze = yield* fs.readFileString(measured).pipe(
     Effect.flatMap(decodeGaze),
-    Effect.mapError(() => new GazeFailed({ reason: "file-unreadable", detail: measured }))
+    Effect.mapError(() => new GazeFailed({ reason: "tool-failed", detail: measured }))
   )
   yield* fs.writeFileString(place.gazeText, gazeText(job.name, yield* readTranscript(job), gaze))
   yield* fs.rename(measured, place.gaze)

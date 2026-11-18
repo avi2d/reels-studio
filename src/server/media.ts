@@ -1,4 +1,4 @@
-import { type Crypto, Cause, Context, Deferred, Effect, Exit, FileSystem, Layer, Ref } from "effect"
+import { type Crypto, Cause, Context, Deferred, Effect, Exit, FileSystem, Layer, Option, Ref } from "effect"
 import type { ChildProcessSpawner } from "effect/process"
 import type { LibraryVideo, Pick } from "../shared/library.ts"
 import type { VideoView } from "../shared/plan.ts"
@@ -98,14 +98,11 @@ const attempt = Effect.fnUntraced(function*<E, R>(work: Ref.Ref<Work>, job: Job,
 const markFailed = (failures: Unheard, job: Job): Effect.Effect<void> =>
   Ref.update(failures, (set) => new Set([...set, keyOf(job)]))
 
-const markGazeFailed = (failures: Unseen, job: Job) => (cause: Cause.Cause<unknown>): Effect.Effect<void> => {
-  const failure = Cause.failureOption(cause)
-  if (failure._tag === "Some" && failure.value instanceof GazeFailed) {
-    const reason = failure.value.reason
-    return Ref.update(failures, (map) => new Map([...map, [keyOf(job), reason]]))
-  }
-  return Effect.void
-}
+const markGazeFailed = (failures: Unseen, job: Job) => (cause: Cause.Cause<unknown>): Effect.Effect<void> =>
+  Ref.update(failures, (map) => new Map([...map, [keyOf(job), Option.match(Cause.findErrorOption(cause), {
+    onNone: (): GazeFailure => "tool-failed",
+    onSome: (error): GazeFailure => error instanceof GazeFailed ? error.reason : "tool-failed"
+  })]]))
 
 const step = Effect.fnUntraced(function*(failures: Failures, work: Ref.Ref<Work>) {
   const jobs = yield* openJobs((yield* Ref.get(work)).closed)
