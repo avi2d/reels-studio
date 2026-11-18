@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import * as Api from "./api.ts"
+import { button, iconButton } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatDay } from "./format.ts"
 import { askToRemove } from "./remove.ts"
@@ -8,8 +9,8 @@ import { run } from "./run.ts"
 const askForTitle = (): void => {
   const title = h("input", { type: "text", name: "title", maxlength: "120", required: true, autocomplete: "off", placeholder: "Например: нотариальный осмотр сайта" })
   const problem = h("p", { class: "error", role: "alert" })
-  const create = h("button", { type: "submit", class: "primary" }, "Создать ролик")
-  const cancel = h("button", { type: "button", class: "secondary" }, "Отмена")
+  const create = button("primary", { type: "submit" }, "Создать ролик")
+  const cancel = button("quiet", { type: "button" }, "Отмена")
   const form = h("form", {
     submit: (event) => {
       event.preventDefault()
@@ -51,13 +52,13 @@ const cover = (project: Api.ProjectView): HTMLElement => {
 const tile = (project: Api.ProjectView, onRemoved: () => void): HTMLElement =>
   h("li", { class: project.stage === "created" ? "tile waits" : "tile" },
     h("a", { href: `#/p/${project.id}` }, cover(project), h("b", {}, project.title), h("small", {}, formatDay(project.createdAt))),
-    h("button", {
-      type: "button",
+    iconButton("normal", "close", `Удалить ролик «${project.title}»`, {
       class: "del",
-      "aria-label": `Удалить ролик «${project.title}»`,
+      size: "s",
+      pill: true,
       title: "Удалить ролик",
       click: () => { askToRemove(project, onRemoved) }
-    }, "✕"))
+    }))
 
 const countsOf = (projects: ReadonlyArray<Api.ProjectView>): HTMLElement => {
   const waiting = projects.filter((project) => project.stage === "created").length
@@ -71,7 +72,7 @@ export const homeView = (projects: ReadonlyArray<Api.ProjectView>, onRemoved: ()
     h("header", { class: "top" },
       h("h1", { class: "brand" }, "Студия Reels"),
       countsOf(projects),
-      h("button", { type: "button", class: "primary", click: askForTitle }, "Новый ролик")),
+      button("primary", { click: askForTitle }, "Новый ролик")),
     projects.length === 0
       ? h("p", { class: "none" }, "Роликов пока нет. Нажмите «Новый ролик» и назовите первый.")
       : h("ul", { class: "grid" }, ...projects.map((project) => tile(project, onRemoved))))

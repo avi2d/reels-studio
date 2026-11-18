@@ -14,8 +14,10 @@
     "test:unit": "checks-test --tier=unit"
   },
   "dependencies": {
+    "@awesome.me/webawesome": "3.15.0",
     "@effect/platform-bun": "4.0.0",
-    "effect": "4.0.0"
+    "effect": "4.0.0",
+    "lucide-static": "1.75.0"
   },
   "devDependencies": {
     "@avi2dg/checks": "0.101.2",

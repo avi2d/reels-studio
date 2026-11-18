@@ -1,5 +1,8 @@
 import { Effect, Option, Schema } from "effect"
 import * as Api from "./api.ts"
+import type WaSelect from "@awesome.me/webawesome/dist/components/select/select.js"
+import type WaTextarea from "@awesome.me/webawesome/dist/components/textarea/textarea.js"
+import { button, iconButton, setExpanded, tooltip } from "./controls.ts"
 import { h } from "./dom.ts"
 import { modelName, parseEventBlock } from "./format.ts"
 import { run } from "./run.ts"
@@ -38,14 +41,16 @@ const readReply = (
   return pump("")
 }
 
+const chosenOf = (select: WaSelect): string => typeof select.value === "string" ? select.value : ""
+
 const effortOf = (value: string): readonly [Api.Effort, string] => EFFORTS.find(([id]) => id === value) ?? ["medium", "средняя"]
 
 interface Talk {
   readonly log: HTMLElement
   readonly empty: HTMLElement
-  readonly text: HTMLTextAreaElement
-  readonly model: HTMLSelectElement
-  readonly effort: HTMLSelectElement
+  readonly text: WaTextarea
+  readonly model: WaSelect
+  readonly effort: WaSelect
 }
 
 const talk = (projectId: string, { effort, empty, log, model, text }: Talk, message: string): Effect.Effect<void, Api.Failed> =>
@@ -55,7 +60,7 @@ const talk = (projectId: string, { effort, empty, log, model, text }: Talk, mess
     const step = h("p", { class: "muted step", role: "status" }, "Студия думает…")
     const state = { done: false, text: "", base: "" }
     const fail = (reason: string): void => { answer.append(h("span", { class: "note" }, `Ответ не дошёл: ${reason}`)) }
-    const response = yield* Api.postChat(projectId, message, model.value, effortOf(effort.value)[0]).pipe(
+    const response = yield* Api.postChat(projectId, message, chosenOf(model), effortOf(chosenOf(effort))[0]).pipe(
       Effect.catchTag("Offline", () => Effect.fail(new Api.Failed({ message: "Нет связи со студией. Проверьте Wi-Fi." })))
     )
     if (!response.ok || response.body === null) return yield* Effect.flatMap(Api.failure(response), Effect.fail)
@@ -92,13 +97,14 @@ const talk = (projectId: string, { effort, empty, log, model, text }: Talk, mess
   })
 
 const drawerOf = (log: HTMLElement, form: HTMLElement, text: HTMLElement) => {
-  const opener = h("button", { type: "button", "aria-expanded": "false" }, "Чат")
-  const close = h("button", { type: "button", class: "ghost", "aria-label": "Закрыть чат" }, "✕")
+  const opener = button("normal", {}, "Чат")
+  setExpanded(opener, false)
+  const close = iconButton("plain", "close", "Закрыть чат")
   const node = h("aside", { class: "drawer", "aria-label": "Чат", inert: true }, h("header", {}, h("b", {}, "Чат"), close), log, form)
   const setOpen = (open: boolean): void => {
     node.classList.toggle("open", open)
     node.inert = !open
-    opener.setAttribute("aria-expanded", String(open))
+    setExpanded(opener, open)
     if (!open) {
       opener.focus()
       return
@@ -130,26 +136,34 @@ export const chatDrawer = (
 ): ChatDrawer => {
   const empty = h("p", { class: "muted" }, NO_MESSAGES)
   const log = h("div", { class: "thread" }, ...(messages.length === 0 ? [empty] : messages.map(bubble)))
-  const text = h("textarea", { name: "text", rows: "1", required: true, "aria-label": "Сообщение", placeholder: "Сообщение студии" })
-  const model = h("select", { name: "model" }, ...models.map((id) => h("option", { value: id, selected: id === project.model }, modelName(id))))
-  const chosen = project.effort ?? "medium"
-  const effort = h("select", { name: "effort" }, ...EFFORTS.map(([id, name]) => h("option", { value: id, selected: id === chosen }, name)))
+  const text = h("wa-textarea", { name: "text", rows: "1", resize: "auto", appearance: "plain", placeholder: "Сообщение студии" },
+    h("span", { slot: "label", class: "visually-hidden" }, "Сообщение"))
+  const firstModel = models.find((id) => id === project.model) ?? models[0] ?? ""
+  const firstEffort = project.effort ?? "medium"
+  const model = h("wa-select", { name: "model", class: "grow", label: "Модель", value: firstModel },
+    ...models.map((id) => h("wa-option", { value: id }, modelName(id))))
+  const effort = h("wa-select", { name: "effort", class: "grow", label: "Глубина размышления", value: firstEffort },
+    ...EFFORTS.map(([id, name]) => h("wa-option", { value: id }, name)))
   const engine = h("summary")
-  const nameEngine = (): void => { engine.textContent = `${modelName(model.value)} · глубина ${effortOf(effort.value)[1]}` }
-  model.addEventListener("change", nameEngine)
-  effort.addEventListener("change", nameEngine)
-  nameEngine()
-  const button = h("button", { type: "submit", class: "send", "aria-label": "Отправить", title: "Отправить" }, "↑")
+  const nameEngine = (modelId: string, effortId: string): void => {
+    engine.textContent = `${modelName(modelId)} · глубина ${effortOf(effortId)[1]}`
+  }
+  const renameEngine = (): void => { nameEngine(chosenOf(model), chosenOf(effort)) }
+  model.addEventListener("change", renameEngine)
+  effort.addEventListener("change", renameEngine)
+  nameEngine(firstModel, firstEffort)
+  const send = iconButton("primary", "send", "Отправить", { type: "submit", pill: true })
+  const sendTip = tooltip(send, "chat-send", "Отправить")
   const problem = h("p", { class: "error", role: "alert" })
   const form = h("form", {
     class: "say",
     submit: (event) => {
       event.preventDefault()
-      const message = text.value.trim()
+      const message = (text.value ?? "").trim()
       if (message === "") return
-      button.disabled = true
+      send.disabled = true
       problem.textContent = ""
-      const finish = (): void => { button.disabled = false }
+      const finish = (): void => { send.disabled = false }
       run(Effect.map(talk(project.id, { log, empty, text, model, effort }, message), () => {
         finish()
         onReply()
@@ -160,12 +174,12 @@ export const chatDrawer = (
     }
   },
     h("details", { class: "engine" }, engine,
-      h("div", { class: "row" }, h("label", { class: "grow" }, "Модель", model), h("label", { class: "grow" }, "Глубина размышления", effort)),
+      h("div", { class: "row" }, model, effort),
       h("p", { class: "muted" }, CHOICE_HINT)),
-    h("div", { class: "composer" }, text, button), problem)
+    h("div", { class: "composer" }, text, send, sendTip), problem)
   const drawer = drawerOf(log, form, text)
   const ask = (message: string): void => {
-    if (button.disabled) return
+    if (send.disabled) return
     drawer.setOpen(true)
     text.value = message
     form.requestSubmit()

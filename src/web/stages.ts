@@ -1,48 +1,50 @@
+import type { WaTabShowEvent } from "@awesome.me/webawesome/dist/events/tab-show.js"
 import { h } from "./dom.ts"
 
-const LIVE = [["brief", "Видео и задание"], ["takes", "Дубли и блоки"], ["pauses", "Паузы и склейки"]] as const
+const LIVE = [["brief", "Видео и задание", "Видео"], ["takes", "Дубли и блоки", "Дубли"], ["pauses", "Паузы и склейки", "Паузы"]] as const
 export type StageId = typeof LIVE[number][0]
+
+const stageOf = (name: string): StageId | undefined => LIVE.find(([id]) => id === name)?.[0]
 
 export interface StageNote {
   readonly note: string
   readonly done: boolean
 }
 
-export const stageRail = (panes: Readonly<Record<StageId, HTMLElement>>, onOpen: (stage: StageId) => void): {
+export const stageRail = (panes: Readonly<Record<StageId, HTMLElement>>, shared: HTMLElement, onOpen: (stage: StageId) => void): {
   readonly rail: HTMLElement
-  readonly work: HTMLElement
   readonly open: (stage: StageId) => void
   readonly now: () => StageId
   readonly note: (stage: StageId, note: StageNote) => void
 } => {
-  const work = h("div", { class: "work" })
   const state: { now: StageId } = { now: "brief" }
-  const steps = LIVE.map(([id, name]) => {
+  const steps = LIVE.map(([id, name, short]) => {
     const count = h("em")
-    const button = h("button", { type: "button", class: "chip", "aria-pressed": "false" }, name, count)
-    button.addEventListener("click", () => {
-      open(id)
-      button.scrollIntoView({ block: "nearest", inline: "nearest" })
-    })
-    return { id, button, count }
+    const tab = h("wa-tab", { panel: id }, h("span", { class: "long" }, name), h("span", { class: "short" }, short), count)
+    const panel = h("wa-tab-panel", { name: id }, panes[id])
+    return { id, tab, count, panel }
   })
+  const rail = h("wa-tab-group", { class: "stages", active: state.now, "without-scroll-controls": true },
+    ...steps.map((step) => step.tab), shared, ...steps.map((step) => step.panel))
   const show = (): void => {
-    for (const step of steps) step.button.setAttribute("aria-pressed", String(step.id === state.now))
-    work.replaceChildren(panes[state.now])
     onOpen(state.now)
   }
-  function open(stage: StageId): void {
-    if (stage === state.now && work.firstChild !== null) return
+  const open = (stage: StageId): void => {
+    if (stage === state.now) return
     state.now = stage
+    rail.active = stage
     show()
   }
+  rail.addEventListener("wa-tab-show", (event: WaTabShowEvent) => {
+    const stage = stageOf(event.detail.name)
+    if (stage !== undefined) open(stage)
+  })
   const note = (stage: StageId, fresh: StageNote): void => {
     const step = steps.find((one) => one.id === stage)
     if (step === undefined) return
     step.count.textContent = fresh.note
-    step.button.classList.toggle("done", fresh.done)
+    step.tab.classList.toggle("done", fresh.done)
   }
-  const rail = h("nav", { class: "filter", "aria-label": "Этапы работы" }, ...steps.map((step) => step.button))
   show()
-  return { rail, work, open, now: () => state.now, note }
+  return { rail, open, now: () => state.now, note }
 }

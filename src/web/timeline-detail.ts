@@ -1,6 +1,7 @@
 import type { Transcript } from "../shared/plan.ts"
 import { lengthOf } from "../shared/plan.ts"
 import { MIN_PAUSE, PAUSE_REST, pausesOf, playedSpans, type Block, type Edits, type Pause, type Placed, type Take } from "../shared/timeline.ts"
+import { button, spoken } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatLength, formatPause } from "./format.ts"
 
@@ -44,19 +45,15 @@ const takeItem = (block: Block, take: Take, chosen: Take, transcript: Transcript
       h("span", { class: "muted" }, take.reason),
       h("span", { class: "facts" }, facts.join(" · ")))),
     h("div", { class: "take-acts" },
-      h("button", {
-        type: "button",
-        "aria-label": `Послушать дубль ${rank}`,
+      button("normal", {
         "data-key": `hear:${block.id}:${take.video}:${take.from}`,
         click: () => { actions.hear(block.id, take) }
-      }, "Послушать"),
-      h("button", {
-        type: "button",
-        "aria-label": `Послушать дубль ${rank} с соседними блоками`,
+      }, ...spoken("Послушать", `Послушать дубль ${rank}`)),
+      button("normal", {
         title: "Конец блока до него, этот дубль и начало блока после",
         "data-key": `around:${block.id}:${take.video}:${take.from}`,
         click: () => { actions.hearAround(block.id, take) }
-      }, "С соседями")))
+      }, ...spoken("С соседями", `Послушать дубль ${rank} с соседними блоками`))))
 }
 
 export const blockDetail = (
@@ -70,7 +67,7 @@ export const blockDetail = (
   h("div", { class: "detail" },
     h("div", { class: "detail-head" },
       h("h3", {}, `Блок ${number}. ${block.title}`),
-      h("button", { type: "button", "data-key": `delete:${block.id}`, click: () => { actions.setDeleted(block.id, true) } }, "Удалить блок")),
+      button("quiet", { "data-key": `delete:${block.id}`, click: () => { actions.setDeleted(block.id, true) } }, "Удалить блок")),
     h("p", { class: "muted" }, block.takes.length === 1 ? "У этого блока один дубль." : "Дубли идут от лучшего к худшему. Отметьте тот, что пойдёт в монтаж."),
     h("ol", { class: "takes" }, ...block.takes.flatMap((take) => {
       const transcript = transcripts.get(take.video)
@@ -82,12 +79,10 @@ export const deletedList = (deleted: ReadonlyArray<Block>, actions: DetailAction
     h("h3", {}, "Удалённые блоки"),
     h("ul", { class: "files" }, ...deleted.map((block) =>
       h("li", {}, h("span", {}, block.title),
-        h("button", {
-          type: "button",
-          "aria-label": `Вернуть блок «${block.title}»`,
+        button("normal", {
           "data-key": `restore:${block.id}`,
           click: () => { actions.setDeleted(block.id, false) }
-        }, "Вернуть")))))
+        }, ...spoken("Вернуть", `Вернуть блок «${block.title}»`))))))
 
 const RULES = [`Пауза: молчание от ${formatPause(MIN_PAUSE)}`, `На месте паузы остаётся ${formatPause(PAUSE_REST)}`, "Звук на стыке: плавно"]
 
@@ -99,19 +94,15 @@ const pauseItem = (one: Placed, number: number, pause: Pause, wordAt: (video: st
       h("b", {}, size),
       h("span", {}, `блок ${number}, после «${word}»`)),
     h("div", { class: "take-acts" },
-      h("button", {
-        type: "button",
-        "aria-label": `Послушать место паузы ${size} в блоке ${number}`,
+      button("normal", {
         title: "Полторы секунды до паузы и полторы после",
         "data-key": `hear-pause:${one.take.video}:${pause.after}`,
         click: () => { actions.hearPause(one, pause) }
-      }, "Послушать"),
-      h("button", {
-        type: "button",
-        "aria-label": pause.removed ? `Вернуть паузу ${size} в блоке ${number}` : `Убрать паузу ${size} в блоке ${number}`,
+      }, ...spoken("Послушать", `Послушать место паузы ${size} в блоке ${number}`)),
+      button("normal", {
         "data-key": `list-pause:${one.take.video}:${pause.after}`,
         click: () => { actions.setPause(one.take.video, pause.after, !pause.removed) }
-      }, pause.removed ? "Вернуть" : "Убрать")))
+      }, ...spoken(pause.removed ? "Вернуть" : "Убрать", pause.removed ? `Вернуть паузу ${size} в блоке ${number}` : `Убрать паузу ${size} в блоке ${number}`))))
 }
 
 export const pauseList = (placed: ReadonlyArray<Placed>, wordAt: (video: string, index: number) => string, actions: DetailActions): HTMLElement => {

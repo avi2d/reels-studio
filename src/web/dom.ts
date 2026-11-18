@@ -1,6 +1,6 @@
-type Child = Node | string
+export type Child = Node | string
 
-type Props = Readonly<Record<string, string | boolean | EventListener>>
+export type Props = Readonly<Record<string, string | boolean | EventListener>>
 
 export const h = <K extends keyof HTMLElementTagNameMap>(
   tag: K,

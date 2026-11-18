@@ -1,6 +1,8 @@
 import { Effect } from "effect"
 import type { LibraryVideo } from "../shared/library.ts"
 import * as Api from "./api.ts"
+import type WaButton from "@awesome.me/webawesome/dist/components/button/button.js"
+import { button, setExpanded } from "./controls.ts"
 import { h } from "./dom.ts"
 import { addLabel, formatLength, formatSize, fromProjects } from "./format.ts"
 
@@ -14,11 +16,12 @@ const choice = (video: LibraryVideo, onChange: () => void): { readonly node: HTM
 export const libraryPicker = (
   projectId: string,
   onAdded: () => Effect.Effect<void, Api.Failed>
-): { readonly open: HTMLButtonElement; readonly panel: HTMLElement; readonly reload: () => void } => {
-  const open = h("button", { type: "button", class: "secondary", hidden: true, "aria-expanded": "false" }, "Взять из других роликов")
+): { readonly open: WaButton; readonly panel: HTMLElement; readonly reload: () => void } => {
+  const open = button("quiet", { hidden: true }, "Взять из других роликов")
+  setExpanded(open, false)
   const list = h("ul", { class: "choices" })
-  const add = h("button", { type: "button", disabled: true }, addLabel(0))
-  const cancel = h("button", { type: "button", class: "secondary" }, "Отмена")
+  const add = button("normal", { disabled: true }, addLabel(0))
+  const cancel = button("quiet", {}, "Отмена")
   const problem = h("p", { class: "error", role: "alert" })
   const panel = h("fieldset", { class: "picker", hidden: true },
     h("legend", {}, "Видео из других роликов"),
@@ -33,7 +36,7 @@ export const libraryPicker = (
   const show = (shown: boolean): void => {
     state.shown = shown
     panel.hidden = !shown
-    open.setAttribute("aria-expanded", String(shown))
+    setExpanded(open, shown)
     problem.textContent = ""
   }
   const fill = (videos: ReadonlyArray<LibraryVideo>): void => {

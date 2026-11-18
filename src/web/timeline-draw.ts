@@ -1,5 +1,7 @@
 import { lengthOf, type Transcript } from "../shared/plan.ts"
 import { arrange, assemble, chosenTake, withPauses, type Edits, type GazeFailure, type Placed, type Take, type TimelineView } from "../shared/timeline.ts"
+import type WaButton from "@awesome.me/webawesome/dist/components/button/button.js"
+import { button, focusWhenReady, iconButton, tooltip } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatLength } from "./format.ts"
 import { blockDetail, deletedList, pauseList, type DetailActions } from "./timeline-detail.ts"
@@ -8,6 +10,7 @@ import { blockRow, type RowActions } from "./timeline-row.ts"
 
 export const PLAY = "Смотреть монтаж"
 export const STOP = "Остановить"
+export const GO = "Смотреть с этого блока"
 const STRIP = { label: "Убрать все паузы", hint: "Убирает все паузы в выбранных дублях" }
 const UNSTRIP = { label: "Вернуть все паузы", hint: "Возвращает все паузы в выбранные дубли" }
 
@@ -60,7 +63,7 @@ const looksNote = (looks: TimelineView["looks"]): ReadonlyArray<HTMLElement> => 
 
 export const notesOf = ({ transcripts, view }: Loaded, ask: (text: string) => void): ReadonlyArray<HTMLElement> => {
   if (transcripts.size === 0) return [h("p", { class: "muted" }, NO_SPEECH)]
-  const gather = (label: string): HTMLElement => h("button", { type: "button", class: "primary end", click: () => { ask(GATHER) } }, label)
+  const gather = (label: string): HTMLElement => button("primary", { class: "end", click: () => { ask(GATHER) } }, label)
   const { timeline } = view
   if (timeline.state !== "ready") {
     return timeline.state === "none"
@@ -84,24 +87,33 @@ export const refocus = (roots: ReadonlyArray<HTMLElement>, key: string | undefin
   if (key === undefined) return
   for (const root of roots) {
     for (const node of root.querySelectorAll<HTMLElement>("[data-key]")) {
-      if (node.dataset.key === key) node.focus({ preventScroll: true })
+      if (node.dataset.key === key) focusWhenReady(node)
     }
   }
 }
 
-const tool = (label: string, title: string, cls = ""): HTMLButtonElement =>
-  h("button", { type: "button", class: cls, disabled: true, title }, label)
+const tool = (label: string, title: string, props: Readonly<Record<string, string>> = {}): WaButton =>
+  button("normal", { disabled: true, title, ...props }, label)
+
+const iconTool = (id: string, ...[look, name, label]: Parameters<typeof iconButton>): { readonly button: WaButton; readonly tip: HTMLElement } => {
+  const made = iconButton(look, name, label, { disabled: true })
+  return { button: made, tip: tooltip(made, id, label) }
+}
 
 export interface Parts {
   readonly summary: HTMLElement
   readonly clock: HTMLElement
-  readonly undo: HTMLButtonElement
-  readonly strip: HTMLButtonElement
-  readonly play: HTMLButtonElement
-  readonly prev: HTMLButtonElement
-  readonly go: HTMLButtonElement
-  readonly next: HTMLButtonElement
-  readonly around: HTMLButtonElement
+  readonly undo: WaButton
+  readonly redo: WaButton
+  readonly strip: WaButton
+  readonly play: WaButton
+  readonly prev: WaButton
+  readonly go: WaButton
+  readonly goTip: HTMLElement
+  readonly next: WaButton
+  readonly around: WaButton
+  readonly historyTips: ReadonlyArray<HTMLElement>
+  readonly transportTips: ReadonlyArray<HTMLElement>
   readonly tag: HTMLElement
   readonly facts: HTMLElement
   readonly rowHolder: HTMLElement
@@ -110,23 +122,38 @@ export interface Parts {
   readonly pauseHolder: HTMLElement
 }
 
-export const partsOf = (): Parts => ({
+export const partsOf = (): Parts => {
+  const undo = iconTool("tool-undo", "quiet", "undo", "Отменить. Клавиша Z")
+  const redo = iconTool("tool-redo", "quiet", "redo", "Повторить")
+  const prev = iconTool("tool-prev", "plain", "previous", "Блок до этого")
+  const go = iconTool("tool-go", "bright", "play", `${GO}. Пробел`)
+  const next = iconTool("tool-next", "plain", "next", "Блок после этого")
+  prev.button.classList.add("prev")
+  next.button.classList.add("next")
+  go.button.classList.add("go")
+  go.button.pill = true
+  return {
   summary: h("span", { class: "sum" }),
   clock: h("span", { class: "clock", role: "timer" }),
-  undo: tool("Отменить", "Отменяет последнее изменение монтажа. Клавиша Z"),
-  strip: tool(STRIP.label, STRIP.hint),
-  play: tool(PLAY, "Показывает монтаж с начала"),
-  prev: h("button", { type: "button", disabled: true, "aria-label": "Блок до этого", title: "Блок до этого" }, "|◀"),
-  go: h("button", { type: "button", class: "go", disabled: true, "aria-label": "Смотреть с этого блока", title: "Смотреть с этого блока. Пробел" }, "▶"),
-  next: h("button", { type: "button", disabled: true, "aria-label": "Блок после этого", title: "Блок после этого" }, "▶|"),
-  around: h("button", { type: "button", disabled: true, title: "Конец блока до него, этот блок и начало блока после" }, "С соседями"),
+  undo: undo.button,
+  redo: redo.button,
+  strip: tool(STRIP.label, STRIP.hint, { class: "end" }),
+  play: tool(PLAY, "Показывает монтаж с начала", { class: "play" }),
+  prev: prev.button,
+  go: go.button,
+  goTip: go.tip,
+  next: next.button,
+  around: tool("С соседями", "Конец блока до него, этот блок и начало блока после", { class: "around" }),
+  historyTips: [undo.tip, redo.tip],
+  transportTips: [prev.tip, go.tip, next.tip],
   tag: h("span", { class: "tag", hidden: true }),
   facts: h("span", { class: "facts" }),
   rowHolder: h("div", { class: "blocks-holder" }),
   map: h("ol", { class: "map" }),
   detailHolder: h("div", { class: "details" }),
   pauseHolder: h("div", { class: "details" })
-})
+  }
+}
 
 interface Drawn {
   readonly loaded: Loaded
@@ -178,7 +205,7 @@ export interface Panels {
   readonly viewer: HTMLElement
   readonly takes: HTMLElement
   readonly pauses: HTMLElement
-  readonly undo: HTMLElement
+  readonly history: HTMLElement
   readonly summary: HTMLElement
 }
 
@@ -207,10 +234,10 @@ export const frameOf = (parts: Parts): Frame => {
       h("div", { class: "viewbox" },
         h("div", { class: "stage" }, frame),
         overview,
-        h("div", { class: "transport" }, parts.clock, parts.prev, parts.go, parts.next, parts.around, parts.play, parts.facts))),
+        h("div", { class: "transport" }, parts.clock, parts.prev, parts.go, parts.next, parts.around, parts.play, parts.facts, ...parts.transportTips))),
     takes: h("div", { class: "pane" }, notes, parts.detailHolder),
     pauses: h("div", { class: "pane" }, noPauses, parts.strip, parts.pauseHolder),
-    undo: parts.undo,
+    history: h("div", { class: "history", role: "group", "aria-label": "Правки монтажа" }, parts.undo, parts.redo, ...parts.historyTips),
     summary: parts.summary
   }
   return { notes, problem, empty, noPauses, ready, frame, overview, panels }

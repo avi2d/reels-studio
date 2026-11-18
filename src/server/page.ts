@@ -6,8 +6,8 @@ class BundleFailed extends Data.TaggedError("BundleFailed")<{ readonly message: 
 
 const bundle = (entry: string): Effect.Effect<string, BundleFailed> =>
   Effect.tryPromise({
-    try: () => Bun.build({ entrypoints: [entry], target: "browser", minify: true }).then((built) => built.outputs[0]?.text() ?? ""),
-    catch: (cause) => new BundleFailed({ message: `The page script did not build: ${String(cause)}` })
+    try: () => Bun.build({ entrypoints: [entry], target: "browser", minify: true, define: { "process.env.NODE_ENV": '"production"' } }).then((built) => built.outputs[0]?.text() ?? ""),
+    catch: (cause) => new BundleFailed({ message: `The page file ${entry} did not build: ${String(cause)}` })
   })
 
 const NO_STORE = { "cache-control": "no-store" }
@@ -21,8 +21,9 @@ export const pageRoutes = Layer.unwrap(Effect.gen(function*() {
   const settings = yield* Settings
   const web = path.join(settings.root, "src", "web")
   const html = yield* fs.readFileString(path.join(web, "index.html"))
+  const theme = yield* bundle(path.join(web, "theme.css"))
   const sheets = yield* Effect.forEach(SHEETS, (name) => fs.readFileString(path.join(web, name)))
-  const css = sheets.join("\n")
+  const css = [theme, ...sheets].join("\n")
   const script = yield* bundle(path.join(web, "app.ts"))
   const fonts = yield* Effect.forEach(FONTS, (name) =>
     Effect.map(fs.readFile(path.join(web, "fonts", name)), (bytes) =>
