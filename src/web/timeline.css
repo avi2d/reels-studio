@@ -61,6 +61,7 @@ del.gap { color: var(--wa-color-text-quiet); }
   .handle:hover, .pick:hover { background: var(--wa-color-overlay-inline); }
   .map-item:not(.selected):hover { background: var(--wa-color-text-quiet); color: var(--wa-color-surface-default); }
   .pause:not(.removed):hover { background: color-mix(in srgb, var(--wa-color-brand-fill-loud) 30%, var(--wa-color-surface-default)); }
+  .pause.removed:hover { background: var(--wa-color-overlay-inline); }
 }
 
 @media (max-width: 820px) {

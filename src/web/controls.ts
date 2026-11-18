@@ -27,12 +27,11 @@ export const iconButton = (look: Look, name: IconName, label: string, props: Pro
 
 export const setExpanded = (target: WaButton, expanded: boolean): void => {
   const value = String(expanded)
-  target.setAttribute("aria-expanded", value)
   const sync = (): void => {
     target.button?.setAttribute("aria-expanded", value)
   }
   sync()
-  void (target as unknown as { readonly updateComplete?: Promise<void> }).updateComplete?.then(sync)
+  void target.updateComplete.then(sync)
 }
 
 const TOOLTIP_TRIGGER = globalThis.matchMedia("(hover: hover)").matches ? "hover focus" : "manual"

@@ -97,7 +97,7 @@ const talk = (projectId: string, { effort, empty, log, model, text }: Talk, mess
   })
 
 const drawerOf = (log: HTMLElement, form: HTMLElement, text: HTMLElement) => {
-  const opener = button("normal", { "aria-expanded": "false" }, "Чат")
+  const opener = button("normal", {}, "Чат")
   setExpanded(opener, false)
   const close = iconButton("plain", "close", "Закрыть чат")
   const node = h("aside", { class: "drawer", "aria-label": "Чат", inert: true }, h("header", {}, h("b", {}, "Чат"), close), log, form)

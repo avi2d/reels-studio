@@ -17,7 +17,7 @@ export const libraryPicker = (
   projectId: string,
   onAdded: () => Effect.Effect<void, Api.Failed>
 ): { readonly open: WaButton; readonly panel: HTMLElement; readonly reload: () => void } => {
-  const open = button("quiet", { hidden: true, "aria-expanded": "false" }, "Взять из других роликов")
+  const open = button("quiet", { hidden: true }, "Взять из других роликов")
   setExpanded(open, false)
   const list = h("ul", { class: "choices" })
   const add = button("normal", { disabled: true }, addLabel(0))
