@@ -26,20 +26,21 @@ export const iconButton = (look: Look, name: IconName, label: string, props: Pro
   button(look, props, icon(name, label))
 
 export const focusWhenReady = (target: HTMLElement): void => {
-  const ready = (target as unknown as { readonly updateComplete?: Promise<unknown> }).updateComplete
-  if (ready === undefined) {
+  const focus = (): void => {
     target.focus({ preventScroll: true })
+  }
+  const pending = "updateComplete" in target ? target.updateComplete : undefined
+  if (pending instanceof Promise) {
+    void pending.then(focus)
     return
   }
-  void ready.then(() => {
-    target.focus({ preventScroll: true })
-  })
+  focus()
 }
 
 export const setExpanded = (target: WaButton, expanded: boolean): void => {
   const value = String(expanded)
   const sync = (): void => {
-    target.button?.setAttribute("aria-expanded", value)
+    target.renderRoot.querySelector(".button")?.setAttribute("aria-expanded", value)
   }
   sync()
   void target.updateComplete.then(sync)
