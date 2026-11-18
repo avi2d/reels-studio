@@ -1,7 +1,7 @@
 import { lengthOf, type Transcript } from "../shared/plan.ts"
 import { arrange, assemble, chosenTake, withPauses, type Edits, type GazeFailure, type Placed, type Take, type TimelineView } from "../shared/timeline.ts"
 import type WaButton from "@awesome.me/webawesome/dist/components/button/button.js"
-import { button, iconButton, tooltip } from "./controls.ts"
+import { button, focusWhenReady, iconButton, tooltip } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatLength } from "./format.ts"
 import { blockDetail, deletedList, pauseList, type DetailActions } from "./timeline-detail.ts"
@@ -87,7 +87,7 @@ export const refocus = (roots: ReadonlyArray<HTMLElement>, key: string | undefin
   if (key === undefined) return
   for (const root of roots) {
     for (const node of root.querySelectorAll<HTMLElement>("[data-key]")) {
-      if (node.dataset.key === key) node.focus({ preventScroll: true })
+      if (node.dataset.key === key) focusWhenReady(node)
     }
   }
 }

@@ -25,6 +25,17 @@ export const spoken = (visible: string, name: string): ReadonlyArray<Child> =>
 export const iconButton = (look: Look, name: IconName, label: string, props: Props = {}): WaButton =>
   button(look, props, icon(name, label))
 
+export const focusWhenReady = (target: HTMLElement): void => {
+  const ready = (target as unknown as { readonly updateComplete?: Promise<unknown> }).updateComplete
+  if (ready === undefined) {
+    target.focus({ preventScroll: true })
+    return
+  }
+  void ready.then(() => {
+    target.focus({ preventScroll: true })
+  })
+}
+
 export const setExpanded = (target: WaButton, expanded: boolean): void => {
   const value = String(expanded)
   const sync = (): void => {

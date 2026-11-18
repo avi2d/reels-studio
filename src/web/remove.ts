@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import * as Api from "./api.ts"
-import { button } from "./controls.ts"
+import { button, focusWhenReady } from "./controls.ts"
 import { h } from "./dom.ts"
 
 export const askToRemove = (project: { readonly id: string; readonly title: string }, onRemoved: () => void): void => {
@@ -39,5 +39,5 @@ export const askToRemove = (project: { readonly id: string; readonly title: stri
   })
   document.body.append(dialog)
   dialog.showModal()
-  cancel.focus()
+  focusWhenReady(cancel)
 }

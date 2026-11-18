@@ -43,6 +43,7 @@
 .stages wa-tab em { margin-left: 6px; font-style: normal; font-weight: 600; color: var(--wa-color-brand-fill-loud); }
 .stages wa-tab em:empty, .stages .short { display: none; }
 .stages::part(nav) { position: sticky; top: 0; z-index: 3; background: var(--wa-color-surface-default); }
+.stages > .timeline { margin-top: 14px; margin-bottom: 0; }
 .stages wa-tab.done em { color: var(--wa-color-success-on-quiet); }
 
 .pane { display: flex; flex-direction: column; gap: 14px; min-width: 0; }

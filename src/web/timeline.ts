@@ -291,8 +291,8 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
     state.edits = edits
     state.changes += 1
     if (state.loaded !== undefined) state.content = playedKey(state.loaded, edits)
-    draw()
     saving.save()
+    draw()
   }
 
   const change = (edits: Edits): void => {
