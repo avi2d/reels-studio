@@ -28,7 +28,7 @@ jobs:
     uses: avi2d/workflows/.github/workflows/test.yml@v3
     permissions: { contents: read, actions: write }
     with:
-      run: "bun tests/e2e/browser/run.ts"
+      run: "sudo apt-get update && sudo apt-get install -y ffmpeg && bun tests/e2e/browser/run.ts"
       runs-on: "ubuntu-latest"
   checks:
     needs: [static, test, browser]
