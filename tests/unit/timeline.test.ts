@@ -86,9 +86,10 @@ test("a deleted block leaves the row and comes back to its place when the deleti
 test("the montage plays the chosen take of each block in row order across videos, not video by video", () => {
   const edits = withChoice({ ...NO_EDITS, order: ["deposit", "advance", "thanks"] }, "advance", take("a", 0, 4))
   expect(clipsOf(assemble([advance, deposit, thanks], edits, transcripts))).toEqual([
-    { video: "a", block: "deposit", start: 6, end: 12 },
-    { video: "a", block: "advance", start: 1, end: 6 },
-    { video: "b", block: "thanks", start: 3, end: 5 }
+    { video: "a", block: "deposit", start: 6, end: 7.4 },
+    { video: "a", block: "advance", start: 1, end: 2.1 },
+    { video: "a", block: "advance", start: 2.9, end: 4.8 },
+    { video: "b", block: "thanks", start: 3, end: 3.7 }
   ])
 })
 

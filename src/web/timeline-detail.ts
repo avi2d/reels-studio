@@ -106,7 +106,7 @@ export const pauseList = (placed: ReadonlyArray<Placed>, wordAt: (video: string,
     ? "В выбранных дублях пауз нет."
     : kept.length === 0
       ? "Все паузы сокращены."
-      : `Полной длины ${kept.length} из ${all.length}, на ${formatLength(lengthOf(kept))}.`
+      : `Сокращено ${all.length - kept.length} из ${all.length}. Полной длины осталось на ${formatLength(lengthOf(kept))}.`
   return h("div", { class: "detail" },
     h("p", { class: "did" }, `Студия сама сокращает паузы в выбранных дублях до ${formatPause(PAUSE_REST)}. Вернуть паузу полной можно по одной.`),
     h("div", { class: "rules" }, ...RULES.map((rule) => h("span", {}, rule))),
