@@ -89,7 +89,7 @@ const videoCard = (project: Api.ProjectView, onUploaded: () => void): HTMLElemen
   const rows = h("ul", { class: "uploads" })
   if (!uploadsByProject.has(project.id)) uploadsByProject.set(project.id, [])
   rows.append(...(uploadsByProject.get(project.id) ?? []))
-  const input = h("input", { class: "file-input", type: "file", accept: "video/*", multiple: true })
+  const input = h("input", { class: "file-input", name: "videos", type: "file", accept: "video/*", multiple: true })
   const label = h("span", {}, project.files.length === 0 ? PICK_FIRST : PICK_MORE)
   const refresh = (): Effect.Effect<void, Api.Failed> =>
     Effect.map(Api.getProject(project.id), (fresh) => {
