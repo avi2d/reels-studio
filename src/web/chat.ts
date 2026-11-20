@@ -2,6 +2,7 @@ import { Effect, Option, Schema } from "effect"
 import * as Api from "./api.ts"
 import type WaSelect from "@awesome.me/webawesome/dist/components/select/select.js"
 import type WaTextarea from "@awesome.me/webawesome/dist/components/textarea/textarea.js"
+import { attachTray, sentFiles, type Tray } from "./attach.ts"
 import { button, iconButton, setExpanded, tooltip } from "./controls.ts"
 import { h } from "./dom.ts"
 import { modelName, parseEventBlock } from "./format.ts"
@@ -10,13 +11,19 @@ import { run } from "./run.ts"
 const EFFORTS: ReadonlyArray<readonly [Api.Effort, string]> = [["low", "низкая"], ["medium", "средняя"], ["high", "высокая"]]
 const CHOICE_HINT = "Выбранная модель делает в чате всю работу: смотрит материал, планирует нарезку и запускает инструменты. "
   + "Средняя глубина подходит для обычной нарезки, высокая нужна для трудных случаев."
-const NO_MESSAGES = "Напишите, что оставить в ролике и что убрать. Студия слышит загруженные видео и сначала покажет план."
+const NO_MESSAGES = "Напишите, что оставить в ролике и что убрать. Студия слышит загруженные видео и сначала покажет план. "
+  + "К сообщению можно приложить картинки, скриншоты, документы, видео и звук."
 
-const bubble = (message: Api.Message): HTMLElement => {
-  const node = h("div", { class: `bubble ${message.role}` }, message.text)
+const bubble = (message: Api.Message, files: HTMLElement | undefined): HTMLElement => {
+  const node = h("div", { class: `bubble ${message.role}` })
+  if (files !== undefined) node.append(files)
+  if (message.text !== "") node.append(h("span", {}, message.text))
   if (message.failed !== undefined) node.append(h("span", { class: "note" }, `Ответ не дошёл: ${message.failed}`))
   return node
 }
+
+const savedBubble = (projectId: string) => (message: Api.Message): HTMLElement =>
+  bubble(message, message.files === undefined ? undefined : sentFiles(projectId, message.files))
 
 const decodeEvent = Schema.decodeUnknownOption(Api.ChatEvent)
 
@@ -51,22 +58,25 @@ interface Talk {
   readonly text: WaTextarea
   readonly model: WaSelect
   readonly effort: WaSelect
+  readonly tray: Tray
 }
 
-const talk = (projectId: string, { effort, empty, log, model, text }: Talk, message: string): Effect.Effect<void, Api.Failed> =>
+const talk = (projectId: string, { effort, empty, log, model, text, tray }: Talk, message: string): Effect.Effect<void, Api.Failed> =>
   Effect.gen(function*() {
+    const files = yield* tray.send
     const words = h("span")
     const answer = h("div", { class: "bubble assistant" }, words)
     const step = h("p", { class: "muted step", role: "status" }, "Студия думает…")
     const state = { done: false, text: "", base: "" }
     const fail = (reason: string): void => { answer.append(h("span", { class: "note" }, `Ответ не дошёл: ${reason}`)) }
-    const response = yield* Api.postChat(projectId, message, chosenOf(model), effortOf(chosenOf(effort))[0]).pipe(
+    const response = yield* Api.postChat(projectId, message, files, chosenOf(model), effortOf(chosenOf(effort))[0]).pipe(
       Effect.catchTag("Offline", () => Effect.fail(new Api.Failed({ message: "Нет связи со студией. Проверьте Wi-Fi." })))
     )
     if (!response.ok || response.body === null) return yield* Effect.flatMap(Api.failure(response), Effect.fail)
     empty.remove()
-    log.append(bubble({ role: "user", text: message }), step)
+    log.append(bubble({ role: "user", text: message }, files.length === 0 ? undefined : tray.sentView()), step)
     text.value = ""
+    tray.clear()
     step.scrollIntoView({ block: "nearest" })
     yield* readReply(response.body.getReader(), (event) => {
       if (event.type === "step") step.textContent = `${event.text}…`
@@ -135,7 +145,7 @@ export const chatDrawer = (
   onReply: () => void
 ): ChatDrawer => {
   const empty = h("p", { class: "muted" }, NO_MESSAGES)
-  const log = h("div", { class: "thread" }, ...(messages.length === 0 ? [empty] : messages.map(bubble)))
+  const log = h("div", { class: "thread" }, ...(messages.length === 0 ? [empty] : messages.map(savedBubble(project.id))))
   const text = h("wa-textarea", { name: "text", rows: "1", resize: "auto", placeholder: "Сообщение студии" },
     h("span", { slot: "label", class: "visually-hidden" }, "Сообщение"))
   const firstModel = models.find((id) => id === project.model) ?? models[0] ?? ""
@@ -155,16 +165,29 @@ export const chatDrawer = (
   const send = iconButton("primary", "send", "Отправить", { type: "submit", pill: true })
   const sendTip = tooltip(send, "chat-send", "Отправить")
   const problem = h("p", { class: "error", role: "alert" })
+  const tray = attachTray(project.id, (message) => { problem.textContent = message })
+  const attachTip = tooltip(tray.opener, "chat-attach", "Приложить файлы")
+  text.addEventListener("paste", (event) => {
+    const pasted = [...(event.clipboardData?.files ?? [])]
+    if (pasted.length === 0) return
+    event.preventDefault()
+    tray.add(pasted)
+  })
   const form = h("form", {
     class: "say",
     submit: (event) => {
       event.preventDefault()
       const message = (text.value ?? "").trim()
-      if (message === "") return
+      if (message === "" && tray.count() === 0) return
+      if (send.disabled) return
       send.disabled = true
+      tray.lock(true)
       problem.textContent = ""
-      const finish = (): void => { send.disabled = false }
-      run(Effect.map(talk(project.id, { log, empty, text, model, effort }, message), () => {
+      const finish = (): void => {
+        send.disabled = false
+        tray.lock(false)
+      }
+      run(Effect.map(talk(project.id, { log, empty, text, model, effort, tray }, message), () => {
         finish()
         onReply()
       }), (failure) => {
@@ -176,7 +199,8 @@ export const chatDrawer = (
     h("details", { class: "engine" }, engine,
       h("div", { class: "row" }, model, effort),
       h("p", { class: "muted" }, CHOICE_HINT)),
-    h("div", { class: "composer" }, text, send, sendTip), problem)
+    tray.node,
+    h("div", { class: "composer" }, tray.opener, attachTip, tray.input, text, send, sendTip), problem)
   const drawer = drawerOf(log, form, text)
   const ask = (message: string): void => {
     if (send.disabled) return

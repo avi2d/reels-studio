@@ -13,7 +13,7 @@ import { askToRemove } from "./remove.ts"
 import { run } from "./run.ts"
 import { stageRail, type StageId, type StageNote } from "./stages.ts"
 import { timelineCard, type Status } from "./timeline.ts"
-import { upload, type Progress } from "./upload.ts"
+import { upload, videoShelf, type Progress } from "./upload.ts"
 import { videosCard } from "./videos.ts"
 
 const app = document.querySelector("#app") ?? document.body
@@ -61,7 +61,7 @@ const uploadRow = (projectId: string, file: File) => {
       ? message
       : `${message} Выберите тот же файл ещё раз, и загрузка продолжится с того же места.`
   }
-  const work = upload(projectId, file, onProgress).pipe(
+  const work = upload(videoShelf(projectId), file, onProgress).pipe(
     Effect.flatMap(() => (refreshByProject.get(projectId)?.() ?? Effect.void).pipe(
       Effect.map(() => {
         for (const kept of uploadsByProject.get(projectId) ?? []) {

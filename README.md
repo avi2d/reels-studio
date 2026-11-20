@@ -4,6 +4,8 @@ Reels studio is a web page served from a home computer, where a person prepares 
 The person uploads a video, writes in a chat in plain words, and the studio answers with a plan before it changes anything.
 The studio writes down every word of an uploaded video with its time, and the chat model reads that text.
 The page shows the text with the planned removals struck through, and its player skips them.
+The person can attach pictures, screenshots, PDF files, video and sound to a chat message, and the studio says what each holds.
+The chat model runs at its provider in the cloud, so the attached files and the pictures and text taken from them are sent there.
 It does not cut, caption, crop, restyle or publish a video yet.
 
 ## Before you begin
@@ -11,7 +13,7 @@ It does not cut, caption, crop, restyle or publish a video yet.
 - Bun, at the version `.bun-version` pins.
 - pi, the agent the chat runs on, signed in to at least one model provider.
 - ffmpeg and ffprobe, built with the `zscale` and `tonemap` filters, which turn iPhone HDR video into ordinary colours.
-- uv, which installs and runs the speech recognizer in `tools/transcribe/` and the gaze measure in `tools/gaze/`.
+- uv, which installs and runs the speech recognizer in `tools/transcribe/`, the gaze measure in `tools/gaze/` and the PDF reader in `tools/pdf/`.
 - A computer on the home network that keeps running while the studio is in use.
 
 ## Install

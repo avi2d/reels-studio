@@ -3,6 +3,7 @@ import { Pick } from "../shared/library.ts"
 import { Edits } from "../shared/timeline.ts"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { ApiError, badRequest } from "./api-error.ts"
+import { Attachments } from "./attachments.ts"
 import { Chat } from "./chat.ts"
 import { allowedHosts, isAllowedHost, isHomeAddress, isSameOrigin } from "./home-network.ts"
 import { Media } from "./media.ts"
@@ -54,7 +55,12 @@ const projects = Layer.mergeAll(
   })))
 )
 
-const NewMessage = Schema.Struct({ text: Schema.String, model: Schema.String, effort: Effort })
+const NewMessage = Schema.Struct({
+  text: Schema.String,
+  files: Schema.optionalKey(Schema.Array(Schema.String)),
+  model: Schema.String,
+  effort: Effort
+})
 
 const KEEP_ALIVE = Stream.tick("15 seconds").pipe(Stream.map(() => ": \n\n"))
 
@@ -70,7 +76,7 @@ const chat = Layer.mergeAll(
   HttpRouter.add("POST", "/api/projects/:id/chat", reply(Effect.gen(function*() {
     const talk = yield* Chat
     const input = yield* body(NewMessage)
-    const events = yield* talk.send(yield* param("id"), input.text, input.model, input.effort)
+    const events = yield* talk.send(yield* param("id"), input.text, input.files ?? [], input.model, input.effort)
     const lines = events.pipe(
       Stream.catch((error) => Stream.make({ type: "error" as const, message: error.message }, { type: "done" as const })),
       Stream.map((event) => `data: ${JSON.stringify(event)}\n\n`)
@@ -87,8 +93,30 @@ const uploads = Layer.mergeAll(
     const store = yield* Projects
     const id = yield* param("id")
     const dir = yield* store.folder(id)
-    if (request.method === "POST") return yield* Tus.create(request, dir, `/api/projects/${id}/uploads`)
+    if (request.method === "POST") return yield* Tus.create(request, dir, `/api/projects/${id}/uploads`, "source")
     return yield* new ApiError({ status: 405, message: "Так загрузку не начать" })
+  }))),
+  HttpRouter.add("*", "/api/projects/:id/attachments", (request) => reply(Effect.gen(function*() {
+    const store = yield* Projects
+    const id = yield* param("id")
+    const dir = yield* store.folder(id)
+    if (request.method === "POST") return yield* Tus.create(request, dir, `/api/projects/${id}/attachments`, "attached")
+    return yield* new ApiError({ status: 405, message: "Так загрузку не начать" })
+  }))),
+  HttpRouter.add("*", "/api/projects/:id/attachments/:upload", (request) => reply(Effect.gen(function*() {
+    const store = yield* Projects
+    const dir = yield* store.folder(yield* param("id"))
+    const upload = yield* param("upload")
+    if (request.method === "HEAD") return yield* Tus.head(request, dir, upload)
+    if (request.method === "PATCH") return yield* Tus.patch(request, dir, upload)
+    return yield* new ApiError({ status: 405, message: "Так загрузку не продолжить" })
+  }))),
+  HttpRouter.add("GET", "/api/projects/:id/attachments/:name/cover", reply(Effect.gen(function*() {
+    const attachments = yield* Attachments
+    const target = yield* attachments.cover(yield* param("id"), yield* param("name"))
+    return yield* HttpServerResponse.file(target, { contentType: "image/jpeg", headers: { "cache-control": "no-store" } }).pipe(
+      Effect.mapError(() => new ApiError({ status: 500, message: "Файл недоступен. Попробуйте открыть страницу ещё раз." }))
+    )
   }))),
   HttpRouter.add("*", "/api/projects/:id/uploads/:upload", (request) => reply(Effect.gen(function*() {
     const store = yield* Projects

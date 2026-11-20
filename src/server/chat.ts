@@ -1,19 +1,16 @@
 import { Array as Arr, Context, Deferred, Effect, Fiber, FileSystem, Layer, Option, Path, type PlatformError, Ref, Schema, Stream } from "effect"
 import { ChildProcess, type ChildProcessSpawner } from "effect/process"
+import { Message, MAX_FILES } from "../shared/chat.ts"
 import { ApiError, badRequest, orUnavailable } from "./api-error.ts"
+import { promptText } from "./attachment-notes.ts"
+import { Attachments, type Shown } from "./attachments.ts"
 import { Media } from "./media.ts"
 import type { VideoView } from "../shared/plan.ts"
 import type { TimelineView } from "../shared/timeline.ts"
 import { toChatEvents, type ChatEvent } from "./pi-events.ts"
 import { Projects, type Effort } from "./projects.ts"
 import { Settings } from "./settings.ts"
-
-const Message = Schema.Struct({
-  role: Schema.Literals(["user", "assistant"]),
-  text: Schema.String,
-  failed: Schema.optionalKey(Schema.String)
-})
-export type Message = typeof Message.Type
+import { completedName } from "./tus.ts"
 
 const MessageLine = Schema.fromJsonString(Message)
 const decodeLine = Schema.decodeUnknownOption(MessageLine)
@@ -32,6 +29,7 @@ const modelFailed = (reason: string): string => {
     : `модель не ответила: ${detail}. Выберите другую модель или отправьте сообщение ещё раз.`
 }
 const UNAVAILABLE = "Чат недоступен. Отправьте сообщение ещё раз."
+const LOOKING: ChatEvent = { type: "step", text: "Смотрю приложенные файлы" }
 const INTERRUPTED = "студия остановилась раньше, чем ответила. Отправьте сообщение ещё раз."
 
 const videoLine = (video: VideoView): string =>
@@ -245,6 +243,7 @@ export class Chat extends Context.Service<Chat, {
   readonly send: (
     id: string,
     text: string,
+    uploads: ReadonlyArray<string>,
     model: string,
     effort: Effort
   ) => Effect.Effect<Stream.Stream<ChatEvent, ApiError>, ApiError>
@@ -258,6 +257,7 @@ export class Chat extends Context.Service<Chat, {
       const settings = yield* Settings
       const projects = yield* Projects
       const media = yield* Media
+      const attachments = yield* Attachments
       const context = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>()
       const { claim, release, withoutTurn } = yield* makeTurns
       const systemPrompt = yield* fs.readFileString(path.join(settings.root, "prompts", "studio.md")).pipe(orBroken)
@@ -275,8 +275,10 @@ export class Chat extends Context.Service<Chat, {
       const heardVideos = Effect.fn("Chat.heardVideos")(function*(id: string) {
         return videoLines(yield* media.videos(id), yield* media.timeline(id))
       }, orBroken)
-      const command = (dir: string, text: string, model: string, effort: Effort, videos: string) => {
-        const prompt = JSON.stringify({ id: "prompt", type: "prompt", message: text })
+      const attachedNote = (listed: string): string => listed === "" ? "" : `\nThe files the person attached in the chat:\n${listed}\n`
+      const command = (dir: string, text: string, files: ReadonlyArray<Shown>, model: string, effort: Effort, known: string) => {
+        const images = files.flatMap((file) => file.images)
+        const prompt = JSON.stringify({ id: "prompt", type: "prompt", message: promptText(text, files), ...(images.length === 0 ? {} : { images }) })
         return ChildProcess.make(settings.pi, [
           "--mode", "rpc",
           "--model", model,
@@ -291,21 +293,22 @@ export class Chat extends Context.Service<Chat, {
           "--no-context-files",
           "--no-prompt-templates",
           "--extension", path.join(settings.root, "src", "pi", "project-guard.ts"),
-          "--system-prompt", `${systemPrompt}\nThe uploaded videos:\n${videos}\n`
+          "--system-prompt", `${systemPrompt}\nThe uploaded videos:\n${known}`
         ], {
           cwd: dir,
           stdin: Stream.concat(Stream.make(new TextEncoder().encode(prompt + "\n")), Stream.never),
         })
       }
-      const run = (id: string, dir: string, text: string, model: string, effort: Effort): Stream.Stream<ChatEvent, ApiError> =>
-        Stream.unwrap(Effect.gen(function*() {
+      const run = (id: string, dir: string, text: string, names: ReadonlyArray<string>, model: string, effort: Effort): Stream.Stream<ChatEvent, ApiError> =>
+        Stream.concat(names.length === 0 ? Stream.empty : Stream.make(LOOKING), Stream.unwrap(Effect.gen(function*() {
           const state = yield* Ref.make<RunState>({ text: "", base: "", pending: undefined, failed: undefined, settled: false })
           yield* Effect.addFinalizer(() =>
             Ref.get(state).pipe(Effect.flatMap((last) => append(dir, lastWords(last))),
               Effect.catchTag("ApiError", (error) => Effect.logError("the reply was not saved", error.message))
             ))
-          const videos = yield* heardVideos(id)
-          const launched = yield* command(dir, text, model, effort, videos).pipe(
+          const files = yield* attachments.show(dir, names)
+          const known = `${yield* heardVideos(id)}\n${attachedNote(yield* attachments.listed(dir))}`
+          const launched = yield* command(dir, text, files, model, effort, known).pipe(
             Effect.tapError((error) => Effect.logError("pi did not start", error)),
             Effect.option
           )
@@ -314,12 +317,14 @@ export class Chat extends Context.Service<Chat, {
           const complaints = yield* handle.stderr.pipe(Stream.decodeText(), Stream.mkString, Effect.forkScoped)
           const exited = yield* handle.exitCode.pipe(Effect.forkScoped)
           return piStream(handle.stdout, makeExpand(state), stoppedStream(state, exited, complaints))
-        })).pipe(brokenStream, Stream.provideContext(context))
-      const send = Effect.fn("Chat.send")(function*(id: string, text: string, model: string, effort: Effort) {
+        }))).pipe(brokenStream, Stream.provideContext(context))
+      const send = Effect.fn("Chat.send")(function*(id: string, text: string, uploads: ReadonlyArray<string>, model: string, effort: Effort) {
         const trimmed = text.trim()
-        if (trimmed === "") return yield* badRequest("Напишите сообщение")
+        if (trimmed === "" && uploads.length === 0) return yield* badRequest("Напишите сообщение")
+        if (uploads.length > MAX_FILES) return yield* badRequest(`Прикрепите к одному сообщению не больше ${MAX_FILES} файлов`)
         if (!settings.models.includes(model)) return yield* badRequest("Такой модели в студии нет")
         const dir = yield* projects.folder(id)
+        const names = Arr.dedupe(yield* Effect.forEach(uploads, (upload) => completedName(dir, upload, "attached").pipe(Effect.provideService(FileSystem.FileSystem, fs), Effect.provideService(Path.Path, path))))
         const turn = yield* makeTurn
         if ((yield* claim(id, turn)) !== undefined) {
           return yield* new ApiError({ status: 409, message: "Дождитесь ответа на прошлое сообщение" })
@@ -327,9 +332,9 @@ export class Chat extends Context.Service<Chat, {
         yield* Effect.gen(function*() {
           yield* fs.makeDirectory(path.join(dir, "chat"), { recursive: true }).pipe(orBroken)
           yield* projects.setChoice(id, model, effort)
-          yield* append(dir, { role: "user", text: trimmed })
+          yield* append(dir, names.length === 0 ? { role: "user", text: trimmed } : { role: "user", text: trimmed, files: names })
         }).pipe(Effect.onError(() => release(id, turn)))
-        return run(id, dir, trimmed, model, effort).pipe(
+        return run(id, dir, trimmed, names, model, effort).pipe(
           Stream.interruptWhen(Deferred.await(turn.stop)),
           Stream.ensuring(release(id, turn))
         )
