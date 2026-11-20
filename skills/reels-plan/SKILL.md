@@ -43,7 +43,7 @@ The person films one thought several times, in one video or across several.
 A block is one thought of the reel, and a take is one attempt to say it.
 Write `blocks.json` when the person asks to gather the blocks, and write it again after a new video is heard.
 The page then shows the blocks as a row, with the first take of each block chosen.
-The person chooses another take, moves and deletes blocks and removes pauses on the page, and you never write those choices.
+The person chooses another take, moves and deletes blocks and returns pauses to full length on the page, and you never write those choices.
 
 1. Read the transcript of every heard video, and `gaze/<video name>.txt` of every video that has one.
 2. Split all speech into takes. A take is a run of words that says one thought once, from the first word of the attempt to its last.

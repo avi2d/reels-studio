@@ -31,30 +31,37 @@ const advance: Block = { id: "advance", title: "Аванс", takes: [take("b", 0
 const deposit: Block = { id: "deposit", title: "Задаток", takes: [take("a", 5, 6)] }
 const thanks: Block = { id: "thanks", title: "Спасибо", takes: [take("b", 2, 2)] }
 
-test("silence of half a second or more inside a take is a pause, and a 0.2 s gap between words is not", () => {
+test("silence of half a second or more inside a take is a pause that is shortened by default, and a 0.2 s gap between words is not", () => {
   expect(pausesOf(first, take("a", 0, 4), NO_EDITS)).toEqual([
-    { after: 1, start: 2, end: 3, removed: false },
-    { after: 4, start: 4.6, end: 6, removed: false }
+    { after: 1, start: 2, end: 3, removed: true },
+    { after: 4, start: 4.6, end: 6, removed: true }
   ])
 })
 
-test("a take plays through its pauses up to the next word, not only to the end of its last word", () => {
-  expect(playedSpans(first, take("a", 0, 4), NO_EDITS)).toEqual([{ start: 1, end: 6 }])
+test("the pauses of the chosen take of a new block are shortened before anyone presses anything", () => {
+  const placed = assemble([advance], NO_EDITS, transcripts)
+  expect(placed[0]?.take).toEqual(take("b", 0, 1))
+  expect(placed[0]?.pauses).toEqual([{ after: 1, start: 1.5, end: 3, removed: true }])
 })
 
-test("a removed pause leaves 0.2 s of rest between its two words, not a cut at the word edges, and the kept pause still plays", () => {
-  const edits = withPauses(NO_EDITS, [{ video: "a", after: 1 }], true)
+test("a restored take plays through its pauses up to the next word, not only to the end of its last word", () => {
+  const edits = withPauses(NO_EDITS, [{ video: "a", after: 1 }, { video: "a", after: 4 }], false)
+  expect(playedSpans(first, take("a", 0, 4), edits)).toEqual([{ start: 1, end: 6 }])
+})
+
+test("a shortened pause leaves 0.2 s of rest between its two words, not a cut at the word edges, and a restored pause still plays", () => {
+  const edits = withPauses(NO_EDITS, [{ video: "a", after: 4 }], false)
   expect(playedSpans(first, take("a", 0, 4), edits)).toEqual([{ start: 1, end: 2.1 }, { start: 2.9, end: 6 }])
 })
 
-test("a removed pause after the last word ends the take 0.2 s after that word, not at the next take", () => {
-  const edits = withPauses(NO_EDITS, [{ video: "a", after: 1 }, { video: "a", after: 4 }], true)
-  expect(playedSpans(first, take("a", 0, 4), edits)).toEqual([{ start: 1, end: 2.1 }, { start: 2.9, end: 4.8 }])
+test("a shortened pause after the last word ends the take 0.2 s after that word, not at the next take", () => {
+  expect(playedSpans(first, take("a", 0, 4), NO_EDITS)).toEqual([{ start: 1, end: 2.1 }, { start: 2.9, end: 4.8 }])
 })
 
-test("a pause removed and then returned plays again, and a pause of another video is not touched", () => {
-  const removed = withPauses(NO_EDITS, [{ video: "a", after: 1 }, { video: "b", after: 1 }], true)
-  expect(withPauses(removed, [{ video: "a", after: 1 }], false).pauses).toEqual([{ video: "b", after: 1 }])
+test("a pause returned to full length stays full, a second press shortens it again, and a pause of another video is not touched", () => {
+  const restored = withPauses(NO_EDITS, [{ video: "a", after: 1 }, { video: "b", after: 1 }], false)
+  expect(pausesOf(first, take("a", 0, 4), restored).map((pause) => pause.removed)).toEqual([false, true])
+  expect(withPauses(restored, [{ video: "a", after: 1 }], true).restored).toEqual([{ video: "b", after: 1 }])
 })
 
 test("the first take is chosen until the person picks another, and a pick that the block lost falls back to the first", () => {

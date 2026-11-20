@@ -1,5 +1,5 @@
 import { lengthOf, type Transcript } from "../shared/plan.ts"
-import { arrange, assemble, chosenTake, withPauses, type Edits, type GazeFailure, type Placed, type Take, type TimelineView } from "../shared/timeline.ts"
+import { arrange, assemble, chosenTake, type Edits, type GazeFailure, type Placed, type Take, type TimelineView } from "../shared/timeline.ts"
 import type WaButton from "@awesome.me/webawesome/dist/components/button/button.js"
 import { button, focusWhenReady, iconButton, tooltip } from "./controls.ts"
 import { h } from "./dom.ts"
@@ -10,10 +10,6 @@ import { blockRow, type RowActions } from "./timeline-row.ts"
 
 export const STOP = "Остановить"
 export const GO = "Смотреть с этого блока"
-const STRIP = { label: "Убрать все паузы", hint: "Убирает все паузы в выбранных дублях" }
-const UNSTRIP = { label: "Вернуть все паузы", hint: "Возвращает все паузы в выбранные дубли" }
-
-export const stripWords = (allRemoved: boolean): typeof STRIP => allRemoved ? UNSTRIP : STRIP
 const GATHER = "Собери блоки из всех видео и расставь дубли от лучшего к худшему."
 const NO_SPEECH = "Блоки появятся, когда студия услышит первое видео."
 const NO_BLOCKS = "Блоков пока нет. Студия соберёт их из текста всех видео: дубли с одним смыслом попадут в один блок, лучший дубль встанет первым."
@@ -78,7 +74,7 @@ const summaryOf = (placed: ReadonlyArray<Placed>): string => {
   if (placed.length === 0) return "Все блоки удалены"
   const pauses = placed.flatMap((one) => one.pauses.filter((pause) => !pause.removed))
   const length = formatLength(lengthOf(placed.flatMap((one) => one.spans)))
-  const kept = pauses.length === 0 ? "пауз нет" : `пауз: ${pauses.length} на ${formatLength(lengthOf(pauses))}`
+  const kept = pauses.length === 0 ? "полных пауз нет" : `полных пауз: ${pauses.length} на ${formatLength(lengthOf(pauses))}`
   return `Блоков: ${placed.length} · ролик ${length} · ${kept}`
 }
 
@@ -91,9 +87,6 @@ export const refocus = (roots: ReadonlyArray<HTMLElement>, key: string | undefin
   }
 }
 
-const tool = (label: string, title: string, props: Readonly<Record<string, string>> = {}): WaButton =>
-  button("normal", { disabled: true, title, ...props }, label)
-
 const iconTool = (id: string, ...[look, name, label]: Parameters<typeof iconButton>): { readonly button: WaButton; readonly tip: HTMLElement } => {
   const made = iconButton(look, name, label, { disabled: true })
   return { button: made, tip: tooltip(made, id, label) }
@@ -104,7 +97,6 @@ export interface Parts {
   readonly clock: HTMLElement
   readonly undo: WaButton
   readonly redo: WaButton
-  readonly strip: WaButton
   readonly prev: WaButton
   readonly go: WaButton
   readonly goTip: HTMLElement
@@ -134,7 +126,6 @@ export const partsOf = (): Parts => {
   clock: h("span", { class: "clock", role: "timer" }),
   undo: undo.button,
   redo: redo.button,
-  strip: tool(STRIP.label, STRIP.hint, { class: "end" }),
   prev: prev.button,
   go: go.button,
   goTip: go.tip,
@@ -157,7 +148,7 @@ interface Drawn {
   readonly selected: string | undefined
 }
 
-export type Actions = RowActions & DetailActions & { readonly change: (edits: Edits) => void }
+export type Actions = RowActions & DetailActions
 
 export const textOf = (transcripts: ReadonlyMap<string, Transcript>, take: Take): string =>
   (transcripts.get(take.video)?.words ?? []).slice(take.from, take.to + 1).map((word) => word.text).join(" ")
@@ -175,16 +166,10 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { reado
   const { edits, loaded, selected, timeline } = drawn
   const placed = assemble(timeline.blocks, edits, loaded.transcripts)
   const { deleted } = arrange(timeline.blocks, edits)
-  const pauses = placed.flatMap((one) => one.pauses.map((pause) => ({ video: one.take.video, after: pause.after, removed: pause.removed })))
-  const allRemoved = pauses.length > 0 && pauses.every((pause) => pause.removed)
+  const pauses = placed.flatMap((one) => one.pauses)
   const index = Math.max(0, placed.findIndex((one) => one.block.id === selected))
   const open = placed[index]
   parts.summary.textContent = summaryOf(placed)
-  parts.strip.disabled = pauses.length === 0
-  const strip = stripWords(allRemoved)
-  parts.strip.textContent = strip.label
-  parts.strip.title = strip.hint
-  parts.strip.onclick = () => { actions.change(withPauses(edits, pauses, !allRemoved)) }
   parts.prev.disabled = index === 0
   parts.next.disabled = index >= placed.length - 1
   parts.prev.onclick = () => { actions.select(placed[index - 1]?.block.id ?? "") }
@@ -238,7 +223,7 @@ export const frameOf = (parts: Parts): Frame => {
         overview,
         h("div", { class: "transport" }, parts.clock, parts.prev, parts.go, parts.next, parts.facts, ...parts.transportTips))),
     takes: h("div", { class: "pane" }, notes, parts.detailHolder),
-    pauses: h("div", { class: "pane" }, noPauses, parts.strip, parts.pauseHolder),
+    pauses: h("div", { class: "pane" }, noPauses, parts.pauseHolder),
     history: h("div", { class: "history", role: "group", "aria-label": "Правки монтажа" }, parts.undo, parts.redo, ...parts.historyTips),
     summary: parts.summary
   }

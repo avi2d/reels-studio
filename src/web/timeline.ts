@@ -44,7 +44,7 @@ const editKey = (edits: Edits): string => JSON.stringify([
   edits.order,
   edits.deleted,
   edits.chosen.map((one) => [one.block, one.video, one.from]),
-  edits.pauses.map((one) => [one.video, one.after])
+  edits.restored.map((one) => [one.video, one.after])
 ])
 
 const adoptServer = (local: Edits, acked: Edits, server: Edits): boolean =>
@@ -153,7 +153,6 @@ const redraw = ({ hooks, parts, player, state, ui, view }: Desk, actions: Action
   ui.empty.hidden = isReady
   ui.noPauses.hidden = isReady
   parts.pauseHolder.hidden = !isReady
-  parts.strip.hidden = !isReady
   parts.detailHolder.hidden = !isReady
   ui.notes.replaceChildren(...notesOf(loaded, hooks.ask))
   const drawn = timeline.state === "ready" && isReady
@@ -162,7 +161,7 @@ const redraw = ({ hooks, parts, player, state, ui, view }: Desk, actions: Action
   const open = drawn?.open
   state.open = open
   parts.go.disabled = open === undefined
-  if (open === undefined) for (const button of [parts.strip, parts.prev, parts.next]) button.disabled = true
+  if (open === undefined) for (const button of [parts.prev, parts.next]) button.disabled = true
   parts.undo.disabled = state.history.length === 0
   parts.redo.disabled = state.undone.length === 0
   if (!isReady) parts.summary.textContent = ""
@@ -219,7 +218,6 @@ const actionsOf = (
 ): Actions => {
   const { hooks, state, view } = card
   return {
-    change,
     textOf: (take) => textOf(state.loaded?.transcripts ?? new Map(), take),
     select: (block) => {
       select(block)

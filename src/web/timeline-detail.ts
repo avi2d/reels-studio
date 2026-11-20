@@ -104,9 +104,11 @@ export const pauseList = (placed: ReadonlyArray<Placed>, wordAt: (video: string,
   const kept = all.filter(({ pause }) => !pause.removed).map(({ pause }) => pause)
   const count = all.length === 0
     ? "В выбранных дублях пауз нет."
-    : `Убрано ${all.length - kept.length} из ${all.length}. Осталось пауз на ${formatLength(lengthOf(kept))}.`
+    : kept.length === 0
+      ? "Все паузы сокращены."
+      : `Полной длины ${kept.length} из ${all.length}, на ${formatLength(lengthOf(kept))}.`
   return h("div", { class: "detail" },
-    h("p", { class: "did" }, "Студия нашла паузы в выбранных дублях. Уберите лишние по одной или все сразу кнопкой выше."),
+    h("p", { class: "did" }, `Студия сама сокращает паузы в выбранных дублях до ${formatPause(PAUSE_REST)}. Вернуть паузу полной можно по одной.`),
     h("div", { class: "rules" }, ...RULES.map((rule) => h("span", {}, rule))),
     h("p", { class: "muted", role: "status" }, count),
     h("ol", { class: "pause-list", "data-scroll-key": "pauses" }, ...all.map(({ number, one, pause }) => pauseItem(one, number, pause, wordAt, actions))))

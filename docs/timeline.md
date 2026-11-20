@@ -36,14 +36,15 @@ The model judges a stumble from the transcript.
 A stumble is a repeated word, a word cut off, a sentence started again, a filler or a pause inside the take.
 Each take carries a short reason in Russian.
 
-The person chooses a take, drags and deletes blocks, and removes pauses on the page.
+The person chooses a take, drags and deletes blocks, and returns a pause to full length on the page.
 The studio keeps these choices in `timeline.json`, which the chat model cannot write.
-A deleted block and a removed pause stay listed on the page, and one tap returns each.
-The player shows the chosen takes in order and skips the removed pauses.
+A deleted block stays listed on the page, and one tap returns it.
+A shortened pause stays listed too, and one tap returns it to full length.
+The player shows the chosen takes in order, each with its pauses shortened.
 Each preview holds a key frame every half second.
 The studio re-encodes a preview made with the old key frame distance by itself in the background.
 The old preview stays playable until the new one is complete.
-A removed pause leaves 0.2 s of silence in its place.
+Every pause of a chosen take is shortened to 0.2 s of silence as soon as the blocks are gathered, unless the person returns it to full length.
 The sound fades over 0.06 s on each side of a cut.
 «Послушать» next to a pause plays 1.5 s before it and 1.5 s after it.
 The undo button in the bar takes back the last change of the cut, and the redo button brings it back.
@@ -86,4 +87,4 @@ Each video folder holds these next to `plan.json`:
 | `gaze/<video>.json` | One sample per 0.2 s: `camera`, `away` or `hidden` |
 | `gaze/<video>.txt` | The share of looks into the camera for each stretch of speech, which the chat model reads |
 | `blocks.json` | The blocks and their takes, written by the chat model |
-| `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes and the removed pauses |
+| `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes and the pauses returned to full length |

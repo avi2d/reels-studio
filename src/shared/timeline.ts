@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import type { Span, Transcript } from "./plan.ts"
 
 export const MIN_PAUSE = 0.5
@@ -37,11 +37,12 @@ export const Edits = Schema.Struct({
   order: Schema.Array(Schema.String),
   deleted: Schema.Array(Schema.String),
   chosen: Schema.Array(Schema.Struct({ block: Schema.String, video: Schema.String, from: Schema.Int })),
-  pauses: Schema.Array(PauseRef)
+  // Pauses listed here play at full length; all others are shortened.
+  restored: Schema.Array(PauseRef).pipe(Schema.withDecodingDefault(Effect.succeed([])))
 })
 export type Edits = typeof Edits.Type
 
-export const NO_EDITS: Edits = { order: [], deleted: [], chosen: [], pauses: [] }
+export const NO_EDITS: Edits = { order: [], deleted: [], chosen: [], restored: [] }
 
 export const GazeFailure = Schema.Literals(["no-tool", "tool-failed", "file-unreadable", "video-unreadable"])
 export type GazeFailure = typeof GazeFailure.Type
@@ -131,7 +132,7 @@ export const pausesOf = (transcript: Transcript, take: Take, edits: Edits): Read
     const after = take.from + offset
     const end = transcript.words[after + 1]?.start ?? transcript.duration
     if (end - word.end < MIN_PAUSE) return []
-    return [{ after, start: word.end, end, removed: edits.pauses.some((pause) => samePause(pause, { video: take.video, after })) }]
+    return [{ after, start: word.end, end, removed: !edits.restored.some((pause) => samePause(pause, { video: take.video, after })) }]
   })
 
 export const playedSpans = (transcript: Transcript, take: Take, edits: Edits): ReadonlyArray<Span> => {
@@ -198,6 +199,6 @@ export const withDeleted = (edits: Edits, id: string, deleted: boolean): Edits =
 })
 
 export const withPauses = (edits: Edits, pauses: ReadonlyArray<PauseRef>, removed: boolean): Edits => {
-  const kept = edits.pauses.filter((old) => !pauses.some((pause) => samePause(old, pause)))
-  return { ...edits, pauses: removed ? [...kept, ...pauses] : kept }
+  const others = edits.restored.filter((old) => !pauses.some((pause) => samePause(old, pause)))
+  return { ...edits, restored: removed ? others : [...others, ...pauses] }
 }
