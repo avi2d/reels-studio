@@ -5,7 +5,7 @@ kind: reference
 
 The studio starts on each uploaded video by itself, one video at a time.
 It writes a small preview for the page and a text of the speech, which takes a few minutes for a long video.
-The preview holds a key frame every half second, so «Смотреть монтаж» starts at once.
+The preview holds a key frame every half second so the player can start at the selected block.
 A preview made before that keeps the old key frame distance until the studio re-encodes it by itself in the background, one video at a time and with the same encoder settings.
 The old preview stays playable until the new one is complete, and only the preview is re-encoded.
 GigaAM v3 recognizes the speech, and Silero VAD finds the stretches of speech first.

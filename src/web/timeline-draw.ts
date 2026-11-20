@@ -8,7 +8,6 @@ import { blockDetail, deletedList, pauseList, type DetailActions } from "./timel
 import { cutMap } from "./timeline-map.ts"
 import { blockRow, type RowActions } from "./timeline-row.ts"
 
-export const PLAY = "Смотреть монтаж"
 export const STOP = "Остановить"
 export const GO = "Смотреть с этого блока"
 const STRIP = { label: "Убрать все паузы", hint: "Убирает все паузы в выбранных дублях" }
@@ -106,12 +105,10 @@ export interface Parts {
   readonly undo: WaButton
   readonly redo: WaButton
   readonly strip: WaButton
-  readonly play: WaButton
   readonly prev: WaButton
   readonly go: WaButton
   readonly goTip: HTMLElement
   readonly next: WaButton
-  readonly around: WaButton
   readonly historyTips: ReadonlyArray<HTMLElement>
   readonly transportTips: ReadonlyArray<HTMLElement>
   readonly tag: HTMLElement
@@ -138,12 +135,10 @@ export const partsOf = (): Parts => {
   undo: undo.button,
   redo: redo.button,
   strip: tool(STRIP.label, STRIP.hint, { class: "end" }),
-  play: tool(PLAY, "Показывает монтаж с начала", { class: "play" }),
   prev: prev.button,
   go: go.button,
   goTip: go.tip,
   next: next.button,
-  around: tool("С соседями", "Конец блока до него, этот блок и начало блока после", { class: "around" }),
   historyTips: [undo.tip, redo.tip],
   transportTips: [prev.tip, go.tip, next.tip],
   tag: h("span", { class: "tag", hidden: true }),
@@ -241,7 +236,7 @@ export const frameOf = (parts: Parts): Frame => {
       h("div", { class: "viewbox" },
         h("div", { class: "stage" }, frame),
         overview,
-        h("div", { class: "transport" }, parts.clock, parts.prev, parts.go, parts.next, parts.around, parts.play, parts.facts, ...parts.transportTips))),
+        h("div", { class: "transport" }, parts.clock, parts.prev, parts.go, parts.next, parts.facts, ...parts.transportTips))),
     takes: h("div", { class: "pane" }, notes, parts.detailHolder),
     pauses: h("div", { class: "pane" }, noPauses, parts.strip, parts.pauseHolder),
     history: h("div", { class: "history", role: "group", "aria-label": "Правки монтажа" }, parts.undo, parts.redo, ...parts.historyTips),

@@ -8,7 +8,6 @@ import { formatLength, formatPause } from "./format.ts"
 export interface DetailActions {
   readonly choose: (block: string, take: Take) => void
   readonly hear: (block: string, take: Take) => void
-  readonly hearAround: (block: string, take: Take) => void
   readonly hearPause: (one: Placed, pause: Pause) => void
   readonly setDeleted: (block: string, deleted: boolean) => void
   readonly setPause: (video: string, after: number, removed: boolean) => void
@@ -48,12 +47,7 @@ const takeItem = (block: Block, take: Take, chosen: Take, transcript: Transcript
       button("normal", {
         "data-key": `hear:${block.id}:${take.video}:${take.from}`,
         click: () => { actions.hear(block.id, take) }
-      }, ...spoken("Послушать", `Послушать дубль ${rank}`)),
-      button("normal", {
-        title: "Конец блока до него, этот дубль и начало блока после",
-        "data-key": `around:${block.id}:${take.video}:${take.from}`,
-        click: () => { actions.hearAround(block.id, take) }
-      }, ...spoken("С соседями", `Послушать дубль ${rank} с соседними блоками`))))
+      }, ...spoken("Послушать", `Послушать дубль ${rank}`))))
 }
 
 export const blockDetail = (
