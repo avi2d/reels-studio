@@ -52,8 +52,8 @@
 .stages wa-tab.done em { color: var(--wa-color-success-on-quiet); }
 
 .pane { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.plan { white-space: pre-wrap; overflow-wrap: anywhere; }
-.done { display: flex; flex-direction: column; gap: 6px; padding-left: 18px; list-style: disc; }
+.plan-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.studio-work { display: flex; flex-direction: column; gap: 6px; padding-left: 18px; list-style: disc; }
 .card { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 16px; border-radius: 16px; background: var(--wa-color-surface-raised); }
 
 .reel.blank .viewer { display: none; }

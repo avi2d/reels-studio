@@ -3,7 +3,7 @@ import { MAX_BRIEF, type BriefView, type Done, type PlanView } from "../shared/b
 import * as Api from "./api.ts"
 import { button } from "./controls.ts"
 import { h } from "./dom.ts"
-import { formatLength } from "./format.ts"
+import { formatPause } from "./format.ts"
 import { run } from "./run.ts"
 
 const ASK_PLAN = "Составь один план всего ролика по заданию."
@@ -19,7 +19,7 @@ const doneLine = (done: Done): string => {
   if (done.kind === "pauses") {
     return done.count === 0
       ? "Пауз длиннее полсекунды в выбранных дублях нет."
-      : `Укорочено пауз: ${done.count}. Каждая теперь 0,2 с, и ролик стал короче на ${formatLength(done.seconds)}. Любую паузу можно вернуть на этапе «Паузы и склейки».`
+      : `Укорочено пауз: ${done.count}. Каждая теперь 0,2 с, и ролик стал короче на ${formatPause(done.seconds)}. Любую паузу можно вернуть на этапе «Паузы и склейки».`
   }
   const take = done.of === 1 ? "дубль один" : `выбран дубль ${done.take} из ${done.of}`
   return `«${done.block}»: ${take}. ${sentence(done.reason)}`
@@ -29,7 +29,7 @@ const approvedAt = (iso: string): string =>
   new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }).format(new Date(iso))
 
 const planBody = (plan: Exclude<PlanView, { readonly state: "none" }>, ask: (text: string) => void): ReadonlyArray<HTMLElement> => {
-  const text = h("p", { class: "plan" }, plan.text.trim())
+  const text = h("p", { class: "plan-text" }, plan.text.trim())
   if (plan.state === "proposed") {
     return [text, h("p", { class: "muted" }, PROPOSED), button("primary", { class: "end", click: () => { ask(YES) } }, YES)]
   }
@@ -37,7 +37,7 @@ const planBody = (plan: Exclude<PlanView, { readonly state: "none" }>, ask: (tex
     text,
     h("p", { class: "muted" }, `Вы согласились с планом ${approvedAt(plan.at)}.`),
     h("h3", {}, "Что сделала студия"),
-    h("ul", { class: "done" }, ...plan.done.map((done) => h("li", {}, doneLine(done))))
+    h("ul", { class: "studio-work" }, ...plan.done.map((done) => h("li", {}, doneLine(done))))
   ]
 }
 
@@ -45,7 +45,8 @@ export const briefCards = (projectId: string, ask: (text: string) => void): {
   readonly nodes: ReadonlyArray<HTMLElement>
   readonly refresh: () => void
 } => {
-  const field = h("wa-textarea", { name: "brief", rows: "3", resize: "auto", maxlength: String(MAX_BRIEF), label: "Задание", hint: BRIEF_HINT })
+  const field = h("wa-textarea", { name: "brief", rows: "3", resize: "auto", maxlength: String(MAX_BRIEF), hint: BRIEF_HINT },
+    h("span", { slot: "label", class: "visually-hidden" }, "Задание"))
   const problem = h("p", { class: "error", role: "alert" })
   const state = { filled: false, shown: "" }
   const make = button("primary", {
