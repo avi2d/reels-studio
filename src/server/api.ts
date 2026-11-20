@@ -4,6 +4,7 @@ import { Edits } from "../shared/timeline.ts"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { ApiError, badRequest } from "./api-error.ts"
 import { Attachments } from "./attachments.ts"
+import { Brief } from "./brief.ts"
 import { Chat } from "./chat.ts"
 import { allowedHosts, isAllowedHost, isHomeAddress, isSameOrigin } from "./home-network.ts"
 import { Media } from "./media.ts"
@@ -61,6 +62,21 @@ const NewMessage = Schema.Struct({
   model: Schema.String,
   effort: Effort
 })
+
+const NewBrief = Schema.Struct({ text: Schema.String })
+
+const brief = Layer.mergeAll(
+  HttpRouter.add("GET", "/api/projects/:id/brief", reply(Effect.gen(function*() {
+    const store = yield* Brief
+    return json(yield* store.view(yield* param("id")))
+  }))),
+  HttpRouter.add("PUT", "/api/projects/:id/brief", reply(Effect.gen(function*() {
+    const store = yield* Brief
+    const id = yield* param("id")
+    yield* store.write(id, (yield* body(NewBrief)).text)
+    return json(yield* store.view(id))
+  })))
+)
 
 const KEEP_ALIVE = Stream.tick("15 seconds").pipe(Stream.map(() => ": \n\n"))
 
@@ -201,4 +217,4 @@ const homeOnly = HttpRouter.middleware(
   { global: true }
 )
 
-export const apiRoutes = Layer.mergeAll(projects, chat, uploads, videos, homeOnly)
+export const apiRoutes = Layer.mergeAll(projects, brief, chat, uploads, videos, homeOnly)

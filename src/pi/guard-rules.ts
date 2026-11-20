@@ -43,7 +43,7 @@ export const judge = (scope: GuardScope, toolName: string, target: string | unde
   if (!inside(project, resolved)) return refuse("Writing is limited to the project folder.")
   const top = resolved.slice(project.length + 1).split("/")[0] ?? ""
   if (top === ".pi" || top === ".agents") return refuse("Writing is limited to the project folder.")
-  if (["source", "attached", "attached-views", "uploads", "chat", "transcripts", "preview", "work", "gaze", "project.json", "chat.jsonl", "timeline.json"].includes(top)) {
+  if (["source", "attached", "attached-views", "uploads", "chat", "transcripts", "preview", "work", "gaze", "project.json", "chat.jsonl", "timeline.json", "brief.md", "approval.json"].includes(top)) {
     return refuse(`The studio owns ${top}. Write notes, plan.md, plan.json and blocks.json next to it.`)
   }
   return { allowed: true }

@@ -13,6 +13,7 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/server/` | The routes, the video folders, the resumable upload, the chat and the transcription job |
 | `src/shared/plan.ts` | The transcript and plan formats and the spans the player skips, used by the server and the page |
 | `src/shared/timeline.ts` | The formats of the gaze samples, the blocks, the takes and the person's choices, and the spans the montage plays |
+| `src/shared/brief.ts` | The format of the brief, the plan and the saved yes, and the work the studio does after the yes |
 | `src/shared/chat.ts` | The format of a chat message and the kinds of file a person can attach to it |
 | `src/shared/library.ts` | The format of a video offered from another folder and of a pick, used by the server and the page |
 | `tools/transcribe/` | The speech recognizer, a Python script that uv runs |

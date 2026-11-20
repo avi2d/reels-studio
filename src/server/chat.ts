@@ -1,9 +1,11 @@
 import { Array as Arr, Context, Deferred, Effect, Fiber, FileSystem, Layer, Option, Path, type PlatformError, Ref, Schema, Stream } from "effect"
 import { ChildProcess, type ChildProcessSpawner } from "effect/process"
+import { approves } from "../shared/brief.ts"
 import { Message, MAX_FILES } from "../shared/chat.ts"
 import { ApiError, badRequest, orUnavailable } from "./api-error.ts"
 import { promptText } from "./attachment-notes.ts"
 import { Attachments, type Shown } from "./attachments.ts"
+import { Brief } from "./brief.ts"
 import { Media } from "./media.ts"
 import type { VideoView } from "../shared/plan.ts"
 import type { TimelineView } from "../shared/timeline.ts"
@@ -31,6 +33,11 @@ const modelFailed = (reason: string): string => {
 const UNAVAILABLE = "Чат недоступен. Отправьте сообщение ещё раз."
 const LOOKING: ChatEvent = { type: "step", text: "Смотрю приложенные файлы" }
 const INTERRUPTED = "студия остановилась раньше, чем ответила. Отправьте сообщение ещё раз."
+const YES_NOTE = "\nWith this message the person agrees with the whole plan in plan.md. Follow «After the yes» in the reels-plan skill now, and leave plan.md as it is.\n"
+
+const briefNote = (brief: string): string => brief === ""
+  ? "\nThe person has not written a brief yet. The page holds it in the field «Задание» of the stage «Видео и задание».\n"
+  : `\nThe brief the person wrote in the field «Задание», also kept in brief.md:\n${brief}`
 
 const videoLine = (video: VideoView): string =>
   video.state === "ready" && video.plan === "unreadable"
@@ -258,6 +265,7 @@ export class Chat extends Context.Service<Chat, {
       const projects = yield* Projects
       const media = yield* Media
       const attachments = yield* Attachments
+      const brief = yield* Brief
       const context = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>()
       const { claim, release, withoutTurn } = yield* makeTurns
       const systemPrompt = yield* fs.readFileString(path.join(settings.root, "prompts", "studio.md")).pipe(orBroken)
@@ -299,7 +307,7 @@ export class Chat extends Context.Service<Chat, {
           stdin: Stream.concat(Stream.make(new TextEncoder().encode(prompt + "\n")), Stream.never),
         })
       }
-      const run = (id: string, dir: string, text: string, names: ReadonlyArray<string>, model: string, effort: Effort): Stream.Stream<ChatEvent, ApiError> =>
+      const run = (id: string, dir: string, text: string, names: ReadonlyArray<string>, model: string, effort: Effort, approving: boolean): Stream.Stream<ChatEvent, ApiError> =>
         Stream.concat(names.length === 0 ? Stream.empty : Stream.make(LOOKING), Stream.unwrap(Effect.gen(function*() {
           const state = yield* Ref.make<RunState>({ text: "", base: "", pending: undefined, failed: undefined, settled: false })
           yield* Effect.addFinalizer(() =>
@@ -307,7 +315,8 @@ export class Chat extends Context.Service<Chat, {
               Effect.catchTag("ApiError", (error) => Effect.logError("the reply was not saved", error.message))
             ))
           const files = yield* attachments.show(dir, names)
-          const known = `${yield* heardVideos(id)}\n${attachedNote(yield* attachments.listed(dir, files))}`
+          const task = briefNote((yield* brief.view(id)).brief) + (approving ? YES_NOTE : "")
+          const known = `${yield* heardVideos(id)}\n${task}${attachedNote(yield* attachments.listed(dir, files))}`
           const launched = yield* command(dir, text, files, model, effort, known).pipe(
             Effect.tapError((error) => Effect.logError("pi did not start", error)),
             Effect.option
@@ -325,6 +334,8 @@ export class Chat extends Context.Service<Chat, {
         if (!settings.models.includes(model)) return yield* badRequest("Такой модели в студии нет")
         const dir = yield* projects.folder(id)
         const names = Arr.dedupe(yield* Effect.forEach(uploads, (upload) => completedName(dir, upload, "attached").pipe(Effect.provideService(FileSystem.FileSystem, fs), Effect.provideService(Path.Path, path))))
+        const plan = approves(trimmed) && names.length === 0 ? yield* brief.plan(id) : undefined
+        const approved = plan === undefined || plan.state === "none" ? undefined : plan.text
         const turn = yield* makeTurn
         if ((yield* claim(id, turn)) !== undefined) {
           return yield* new ApiError({ status: 409, message: "Дождитесь ответа на прошлое сообщение" })
@@ -334,7 +345,10 @@ export class Chat extends Context.Service<Chat, {
           yield* projects.setChoice(id, model, effort)
           yield* append(dir, names.length === 0 ? { role: "user", text: trimmed } : { role: "user", text: trimmed, files: names })
         }).pipe(Effect.onError(() => release(id, turn)))
-        return run(id, dir, trimmed, names, model, effort).pipe(
+        const work = approved === undefined ? Stream.empty : Stream.fromEffect(brief.workAlone(id, approved).pipe(
+          Effect.catchTag("ApiError", (error) => Effect.logError("the work after the yes failed", error.message))
+        )).pipe(Stream.drain)
+        return Stream.concat(run(id, dir, trimmed, names, model, effort, approved !== undefined), work).pipe(
           Stream.interruptWhen(Deferred.await(turn.stop)),
           Stream.ensuring(release(id, turn))
         )

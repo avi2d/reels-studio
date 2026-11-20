@@ -1,4 +1,5 @@
 import { Data, Effect, Option, Schema } from "effect"
+import { BriefView } from "../shared/brief.ts"
 import { Message } from "../shared/chat.ts"
 import { LibraryVideo, type Pick } from "../shared/library.ts"
 import { VideoView } from "../shared/plan.ts"
@@ -115,6 +116,12 @@ export const removeProject = (id: string): Effect.Effect<{ readonly removed: str
 
 export const postChat = (id: string, text: string, files: ReadonlyArray<string>, model: string, effort: Effort): Effect.Effect<Response, Offline> =>
   send(`/api/projects/${id}/chat`, post({ text, files, model, effort }))
+
+export const getBrief = (id: string): Effect.Effect<BriefView, Failed> =>
+  call(BriefView, `/api/projects/${id}/brief`)
+
+export const saveBrief = (id: string, text: string): Effect.Effect<BriefView, Failed> =>
+  call(BriefView, `/api/projects/${id}/brief`, { ...post({ text }), method: "PUT" })
 
 export const coverUrl = (id: string, name: string): string =>
   `/api/projects/${id}/attachments/${encodeURIComponent(name)}/cover`
