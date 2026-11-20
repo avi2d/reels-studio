@@ -1,8 +1,8 @@
 # Vision
 
-A lawyer turns a recorded video into a finished vertical video for Instagram Reels, YouTube Shorts and TikTok by writing in plain words, with no editor and no developer.
+A lawyer turns a recorded video into a finished vertical video for each of Instagram Reels, YouTube Shorts and TikTok by writing in plain words, with no editor and no developer.
 It serves one person who records the videos, and the owner who keeps the computer running.
-It owns the path from an uploaded original to a video that fits the players of all three.
+It owns the path from an uploaded original to a separate video for each platform, each fitted to that platform's specifics, audience expectations, size and montage.
 
 ## The person reads plain Russian
 
