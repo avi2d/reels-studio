@@ -19,7 +19,7 @@ export const reelPlaces = (dir: string): Readonly<Record<"file" | "record" | "wo
   work: `${dir}/reel/work`
 })
 
-export const buildReel = Effect.fn("Reel.build")(function*(dir: string, clips: ReadonlyArray<Clip>, onDone: (share: number) => Effect.Effect<void>) {
+const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, onDone: (share: number) => Effect.Effect<void>) {
   const fs = yield* FileSystem.FileSystem
   const settings = yield* Settings
   const place = reelPlaces(dir)
@@ -46,7 +46,13 @@ export const buildReel = Effect.fn("Reel.build")(function*(dir: string, clips: R
   yield* fs.remove(place.record, { force: true })
   yield* fs.rename(`${place.work}/reel.mp4`, place.file)
   yield* fs.writeFileString(place.record, yield* encodeRecord({ made: DateTime.formatIso(yield* DateTime.now), parts }))
-  yield* fs.remove(place.work, { recursive: true })
+})
+
+export const buildReel = Effect.fn("Reel.build")(function*(dir: string, clips: ReadonlyArray<Clip>, onDone: (share: number) => Effect.Effect<void>) {
+  const fs = yield* FileSystem.FileSystem
+  yield* encodeReel(dir, clips, onDone).pipe(Effect.ensuring(fs.remove(reelPlaces(dir).work, { recursive: true, force: true }).pipe(
+    Effect.catch((error) => Effect.logError("the half-built reel parts were not removed", error))
+  )))
 })
 
 export const readReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, job: ReelView["job"]) {

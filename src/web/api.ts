@@ -121,6 +121,9 @@ export const getReel = (id: string): Effect.Effect<ReelView, Failed> =>
 export const buildReel = (id: string): Effect.Effect<ReelView, Failed> =>
   call(ReelView, `/api/projects/${id}/reel`, { method: "POST" })
 
+export const cancelReel = (id: string): Effect.Effect<ReelView, Failed> =>
+  call(ReelView, `/api/projects/${id}/reel/build`, { method: "DELETE" })
+
 export const reelUrl = (id: string, made: string): string =>
   `/api/projects/${id}/reel/file?made=${encodeURIComponent(made)}`
 

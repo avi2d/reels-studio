@@ -124,8 +124,12 @@ const nextReel = Effect.fnUntraced(function*(reels: Reels, closed: ReadonlySet<s
   return undefined
 })
 
+const startReel = (reels: Reels, dir: string): Effect.Effect<boolean> =>
+  Ref.modify(reels, (map) => map.get(dir)?.state === "waiting" ? [true, new Map([...map, [dir, { state: "running", done: 0 }]])] : [false, map])
+
 const reelTask = (reels: Reels, dir: string) =>
   Effect.gen(function*() {
+    if (!(yield* startReel(reels, dir))) return
     const clips = yield* readCut(dir, yield* sourceNames(dir))
     yield* buildReel(dir, clips, (done) => setReel(reels, dir, { state: "running", done }))
   }).pipe(Effect.onExit((exit) => Exit.isFailure(exit) && !Exit.hasInterrupts(exit) ? setReel(reels, dir, { state: "failed" }) : forgetReel(reels, dir)))
@@ -158,7 +162,17 @@ const view = Effect.fnUntraced(function*(unheard: Unheard, job: Job) {
 
 type Needs = FileSystem.FileSystem | Crypto.Crypto | Settings | ChildProcessSpawner.ChildProcessSpawner
 
-const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, reels: Reels, context: Context.Context<Needs>) => {
+const stopReel = Effect.fnUntraced(function*(work: Ref.Ref<Work>, reels: Reels, dir: string) {
+  const job = (yield* Ref.get(reels)).get(dir)
+  if (job?.state === "waiting") return yield* forgetReel(reels, dir)
+  if (job?.state !== "running") return
+  const running = (yield* Ref.get(work)).running
+  if (running?.dir !== dir) return
+  yield* Deferred.succeed(running.stop, undefined)
+  yield* Deferred.await(running.finished)
+})
+
+const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, reels: Reels, work: Ref.Ref<Work>, context: Context.Context<Needs>) => {
   const reelOf = Effect.fnUntraced(function*(dir: string) {
     const job = (yield* Ref.get(reels)).get(dir) ?? { state: "idle" }
     return yield* readReel(dir, yield* readCut(dir, yield* sourceNames(dir)), job)
@@ -185,7 +199,13 @@ const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, r
     return target
   }, orBroken, Effect.provideContext(context))
 
-  return { reel, buildReel: queueReel, reelFile }
+  const cancelReel = Effect.fn("Media.cancelReel")(function*(id: string) {
+    const dir = yield* folder(id)
+    yield* stopReel(work, reels, dir)
+    return yield* reelOf(dir)
+  }, orBroken, Effect.provideContext(context))
+
+  return { reel, buildReel: queueReel, cancelReel, reelFile }
 }
 
 export class Media extends Context.Service<Media, {
@@ -198,6 +218,7 @@ export class Media extends Context.Service<Media, {
   readonly saveEdits: (id: string, edits: Edits) => Effect.Effect<void, ApiError>
   readonly reel: (id: string) => Effect.Effect<ReelView, ApiError>
   readonly buildReel: (id: string) => Effect.Effect<ReelView, ApiError>
+  readonly cancelReel: (id: string) => Effect.Effect<ReelView, ApiError>
   readonly reelFile: (id: string) => Effect.Effect<string, ApiError>
   readonly withoutWork: <A, E, R>(dir: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }>()("reels-studio/Media") {
@@ -274,7 +295,7 @@ export class Media extends Context.Service<Media, {
         yield* writeEdits(yield* projects.folder(id), edits)
       }, orUnavailable("the timeline was not saved", "Не получилось сохранить монтаж. Попробуйте ещё раз."), Effect.provideContext(context))
 
-      const { reel, buildReel: queueReel, reelFile } = reelHandlers(projects.folder, reels, context)
+      const { reel, buildReel: queueReel, cancelReel, reelFile } = reelHandlers(projects.folder, reels, work, context)
 
       const withoutWork = <A, E, R>(dir: string, use: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
         Effect.acquireUseRelease(
@@ -291,7 +312,7 @@ export class Media extends Context.Service<Media, {
           () => Ref.update(work, (state) => ({ ...state, closed: new Set([...state.closed].filter((other) => other !== dir)) }))
         )
 
-      return Media.of({ videos, preview, retry, library, reuse, timeline, saveEdits, reel, buildReel: queueReel, reelFile, withoutWork })
+      return Media.of({ videos, preview, retry, library, reuse, timeline, saveEdits, reel, buildReel: queueReel, cancelReel, reelFile, withoutWork })
     })
   )
 }

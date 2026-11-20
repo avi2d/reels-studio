@@ -135,6 +135,10 @@ const reel = Layer.mergeAll(
     const media = yield* Media
     return json(yield* media.buildReel(yield* param("id")), 202)
   }))),
+  HttpRouter.add("DELETE", "/api/projects/:id/reel/build", reply(Effect.gen(function*() {
+    const media = yield* Media
+    return json(yield* media.cancelReel(yield* param("id")))
+  }))),
   HttpRouter.add("GET", "/api/projects/:id/reel/file", (request) => reply(Effect.gen(function*() {
     const media = yield* Media
     const target = yield* media.reelFile(yield* param("id"))

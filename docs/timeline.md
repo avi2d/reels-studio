@@ -61,6 +61,7 @@ It is 1080 by 1920 at 30 frames a second, H.264 High with AAC sound in an MP4.
 An iPhone HDR original is turned into ordinary BT.709 colours, so the reel does not look washed out in Instagram.
 The studio cuts each clip to whole frames, encodes the clips one by one through `REELS_HEAVY` with `REELS_ENCODER`, then joins them without encoding again.
 A bar shows how much of the reel is encoded.
+«Остановить сборку» stops a waiting or running build, ends its ffmpeg and removes the half-built parts, and the last finished reel stays.
 The build waits while the computer hears or measures another video, because the studio runs one heavy job at a time.
 The originals stay untouched.
 

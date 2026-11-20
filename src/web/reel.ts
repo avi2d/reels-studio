@@ -41,8 +41,10 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
   const stale = h("p", { class: "stale", hidden: true }, STALE)
   const save = button("normal", { href: Api.reelDownloadUrl(projectId), download: "" }, "Скачать")
   const file = h("div", { class: "built", hidden: true }, player, h("div", { class: "built-facts" }, facts, save, h("p", { class: "muted" }, SAVE_HINT)))
-  const make = button("primary", { class: "end" }, "Собрать ролик")
-  const node = h("div", { class: "pane" }, h("section", { class: "card reel-card" }, h("h2", {}, "Готовый ролик"), h("p", { class: "muted" }, ABOUT), make, status, bar, stale, problem), file)
+  const make = button("primary", {}, "Собрать ролик")
+  const cancel = button("quiet", { hidden: true }, "Остановить сборку")
+  const actions = h("div", { class: "row" }, make, cancel)
+  const node = h("div", { class: "pane" }, h("section", { class: "card reel-card" }, h("h2", {}, "Готовый ролик"), h("p", { class: "muted" }, ABOUT), actions, status, bar, stale, problem), file)
   player.addEventListener("play", hooks.playing)
 
   const later = (): void => {
@@ -53,6 +55,9 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
   const show = (view: ReelView): void => {
     const busy = isBusy(view)
     make.disabled = busy || view.cut === 0
+    make.hidden = busy
+    cancel.hidden = !busy
+    cancel.disabled = false
     make.textContent = view.file === undefined ? "Собрать ролик" : "Собрать заново"
     status.textContent = statusOf(view)
     bar.hidden = view.job.state !== "running"
@@ -89,6 +94,17 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
       Effect.catchTag("Failed", (error) => Effect.sync(() => {
         problem.textContent = error.message
         make.disabled = false
+      }))
+    ))
+  })
+
+  cancel.addEventListener("click", () => {
+    cancel.disabled = true
+    Effect.runFork(Api.cancelReel(projectId).pipe(
+      Effect.map(show),
+      Effect.catchTag("Failed", (error) => Effect.sync(() => {
+        problem.textContent = error.message
+        cancel.disabled = false
       }))
     ))
   })
