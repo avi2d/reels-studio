@@ -20,16 +20,17 @@
     "lucide-static": "1.75.0"
   },
   "devDependencies": {
-    "@avi2dg/checks": "0.101.2",
-    "@stryker-mutator/core": "10.0.0",
-    "@hughescr/stryker-bun-runner": "1.4.0",
+    "@avi2dg/checks": "0.108.0",
     "@effect/tsgo": "0.45.0",
+    "@hughescr/stryker-bun-runner": "1.4.0",
+    "@stryker-mutator/core": "10.0.0",
     "@swc/core": "1.16.2",
     "@types/bun": "^1.4.2",
     "dependency-cruiser": "18.4.0",
     "jscpd": "5.3.2",
     "oxlint": "1.83.0",
     "oxlint-tsgolint": "7.0.2002",
+    "playwright-core": "1.63.0",
     "typescript": "7.0.2"
   },
   "version": "0.1.0",
