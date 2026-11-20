@@ -12,15 +12,19 @@ export interface Cover {
   readonly right: number
 }
 
-export const COVER_PERCENT = {
-  Instagram: { top: 14, bottom: 35, left: 6, right: 6 },
-  "YouTube Shorts": { top: 10, bottom: 20, left: 6, right: 12 },
-  TikTok: { top: 10, bottom: 20, left: 6, right: 15 }
-} as const satisfies Readonly<Record<Platform, Cover>>
+export type Source =
+  | { readonly kind: "published"; readonly name: string }
+  | { readonly kind: "unconfirmed" }
+
+export const ZONES = {
+  Instagram: { source: { kind: "published", name: "Meta Ads Guide, Instagram Reels" }, cover: { top: 14, bottom: 35, left: 6, right: 6 } },
+  "YouTube Shorts": { source: { kind: "unconfirmed" }, cover: { top: 10, bottom: 20, left: 6, right: 12 } },
+  TikTok: { source: { kind: "unconfirmed" }, cover: { top: 10, bottom: 20, left: 6, right: 15 } }
+} as const satisfies Readonly<Record<Platform, { readonly source: Source; readonly cover: Cover }>>
 
 export const styleOf = (platform: Platform): string => {
-  const cover = COVER_PERCENT[platform]
-  return `--top: ${cover.top}%; --bottom: ${cover.bottom}%; --left: ${cover.left}%; --right: ${cover.right}%`
+  const { top, bottom, left, right } = ZONES[platform].cover
+  return `--top: ${top}%; --bottom: ${bottom}%; --left: ${left}%; --right: ${right}%`
 }
 
 export interface Margins {
