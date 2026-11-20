@@ -10,6 +10,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  checks:
-    uses: avi2d/workflows/.github/workflows/ci.yml@v3
+  static:
+    # Runs on every run but the release run: a dispatch on a release/ branch, or the pull request from release/<base> in this repository.
+    if: ${{ !((github.event_name == 'workflow_dispatch' && startsWith(github.ref_name, 'release/')) || (github.event_name == 'pull_request' && github.head_ref == format('release/{0}', github.base_ref) && github.event.pull_request.head.repo.full_name == github.repository)) }}
+    uses: avi2d/workflows/.github/workflows/static.yml@v3
     permissions: { contents: read, actions: write, statuses: write, pull-requests: read }
+  test:
+    # Runs on every run but the release run: a dispatch on a release/ branch, or the pull request from release/<base> in this repository.
+    if: ${{ !((github.event_name == 'workflow_dispatch' && startsWith(github.ref_name, 'release/')) || (github.event_name == 'pull_request' && github.head_ref == format('release/{0}', github.base_ref) && github.event.pull_request.head.repo.full_name == github.repository)) }}
+    uses: avi2d/workflows/.github/workflows/test.yml@v3
+    permissions: { contents: read, actions: write }
+    with:
+      runs-on: "${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}"
+  browser:
+    # Runs on every run but the release run: a dispatch on a release/ branch, or the pull request from release/<base> in this repository.
+    if: ${{ !((github.event_name == 'workflow_dispatch' && startsWith(github.ref_name, 'release/')) || (github.event_name == 'pull_request' && github.head_ref == format('release/{0}', github.base_ref) && github.event.pull_request.head.repo.full_name == github.repository)) }}
+    uses: avi2d/workflows/.github/workflows/test.yml@v3
+    permissions: { contents: read, actions: write }
+    with:
+      run: "bun tests/e2e/browser/run.ts"
+      runs-on: "ubuntu-latest"
+  checks:
+    needs: [static, test, browser]
+    if: always()
+    uses: avi2d/workflows/.github/workflows/gate.yml@v3
+    permissions: { contents: read, statuses: write }
+    with:
+      results: ${{ toJSON(needs) }}
+      # The jobs the gate passes as skipped: every job on the release run.
+      skips: ${{ ((github.event_name == 'workflow_dispatch' && startsWith(github.ref_name, 'release/')) || (github.event_name == 'pull_request' && github.head_ref == format('release/{0}', github.base_ref) && github.event.pull_request.head.repo.full_name == github.repository)) && 'static test browser' || '' }}

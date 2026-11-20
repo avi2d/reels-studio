@@ -93,6 +93,9 @@ To run the checks:
 1. Run `bun run lint` to run the linter and the kit gates.
 1. Run `bun run typecheck` to check the types and the Effect diagnostics.
 
+GitHub Actions runs `checks-browser` on pull requests.
+The suite in [tests/e2e/browser/](tests/e2e/browser/) runs only in GitHub Actions and needs no model account.
+
 The project layout lives in [Project layout](docs/project-layout.md).
 The row of blocks and takes is described in [Takes and blocks](docs/timeline.md).
 
