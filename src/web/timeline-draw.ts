@@ -4,6 +4,7 @@ import type WaButton from "@awesome.me/webawesome/dist/components/button/button.
 import { button, focusWhenReady, iconButton, tooltip } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatLength } from "./format.ts"
+import { margins, type Margins } from "./margins.ts"
 import { blockDetail, deletedList, pauseList, type DetailActions } from "./timeline-detail.ts"
 import { cutMap } from "./timeline-map.ts"
 import { blockRow, type RowActions } from "./timeline-row.ts"
@@ -112,6 +113,7 @@ export interface Parts {
   readonly historyTips: ReadonlyArray<HTMLElement>
   readonly transportTips: ReadonlyArray<HTMLElement>
   readonly tag: HTMLElement
+  readonly zones: Margins
   readonly facts: HTMLElement
   readonly rowHolder: HTMLElement
   readonly map: HTMLElement
@@ -142,6 +144,7 @@ export const partsOf = (): Parts => {
   historyTips: [undo.tip, redo.tip],
   transportTips: [prev.tip, go.tip, next.tip],
   tag: h("span", { class: "tag", hidden: true }),
+  zones: margins(),
   facts: h("span", { class: "facts" }),
   rowHolder: h("div", { class: "blocks-holder" }),
   map: h("ol", { class: "map" }),
@@ -228,7 +231,7 @@ export const frameOf = (parts: Parts): Frame => {
   const empty = h("p", { class: "muted lane-empty" }, NO_ROW)
   const noPauses = h("p", { class: "muted" }, NO_PAUSES)
   const ready = h("div", { class: "lanes", hidden: true }, parts.rowHolder)
-  const frame = h("div", { class: "frame" }, parts.tag)
+  const frame = h("div", { class: "frame" }, parts.tag, parts.zones.overlay)
   const overview = h("nav", { class: "overview", "aria-label": "Весь ролик", hidden: true }, parts.map)
   const panels: Panels = {
     tracks: h("section", { class: "timeline", "aria-label": "Монтаж" }, ready, empty, problem),
@@ -236,7 +239,7 @@ export const frameOf = (parts: Parts): Frame => {
       h("div", { class: "viewbox" },
         h("div", { class: "stage" }, frame),
         overview,
-        h("div", { class: "transport" }, parts.clock, parts.prev, parts.go, parts.next, parts.facts, ...parts.transportTips))),
+        h("div", { class: "transport" }, parts.clock, parts.prev, parts.go, parts.next, parts.facts, ...parts.transportTips), parts.zones.controls)),
     takes: h("div", { class: "pane" }, notes, parts.detailHolder),
     pauses: h("div", { class: "pane" }, noPauses, parts.strip, parts.pauseHolder),
     history: h("div", { class: "history", role: "group", "aria-label": "Правки монтажа" }, parts.undo, parts.redo, ...parts.historyTips),
