@@ -44,7 +44,8 @@ The player shows the chosen takes in order, each with its pauses shortened.
 Each preview holds a key frame every half second.
 The studio re-encodes a preview made with the old key frame distance by itself in the background.
 The old preview stays playable until the new one is complete.
-Every pause of a chosen take is shortened to 0.2 s of silence as soon as the blocks are gathered, unless the person returns it to full length.
+Every pause of a chosen take is shortened to 0.2 s of silence as soon as the blocks are gathered.
+The pause stays shortened unless the person returns it to full length.
 The sound fades over 0.06 s on each side of a cut.
 «Послушать» next to a pause plays 1.5 s before it and 1.5 s after it.
 The undo button in the bar takes back the last change of the cut, and the redo button brings it back.
