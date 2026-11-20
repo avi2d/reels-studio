@@ -102,14 +102,30 @@ A frame counts as a look into the camera when the eyes point within 12 degrees o
 The direction of the eyes is the turn of the head plus the turn of the eyes, which the model gives as blendshape scores.
 A frame with no face counts as no look into the camera.
 
+## Places to check
+
+A join is a place where the cut jumps from one moment of a video to another, at a removed pause or between two blocks.
+Two blocks that follow each other in one video with no gap make no join.
+The gaze measure also writes, for each sample, where the eyes are and how tall the face is, from brow to chin.
+For each join, the studio takes the last face at or before the join and the first face at or after it, each within 0.4 s.
+It sums the shift of the eyes and the change of the face height, and divides that by the mean face height.
+A join whose sum is above 0.08 becomes a place to check in the «Паузы и склейки» stage.
+A join with no face on one side is not a place.
+The tab of that stage shows how many places are left unanswered.
+«Посмотреть» plays 1.5 s of the cut before the join and 1.5 s after it in the player.
+«Оставить» and «Простая склейка» answer the place, and either answer takes it off the count.
+The answer is kept in `timeline.json` with the two ends of the join, so a change of the cut that moves the join opens it again.
+The studio re-measures by itself, in the background, a video whose gaze file holds no head positions.
+This runs on the home computer and does not ask the chat model.
+
 ## Files
 
 Each video folder holds these next to `plan.json`:
 
 | Path | What it holds |
 | --- | --- |
-| `gaze/<video>.json` | One sample per 0.2 s: `camera`, `away` or `hidden` |
+| `gaze/<video>.json` | One sample per 0.2 s: `camera`, `away` or `hidden`, and where the eyes are and the face height, as shares of the frame height |
 | `gaze/<video>.txt` | The share of looks into the camera for each stretch of speech, which the chat model reads |
 | `blocks.json` | The blocks and their takes, written by the chat model |
-| `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses and the returned pauses |
+| `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses and the answers to the places to check |
 | `gathered.json` | The heard videos and the settled gaze the studio last asked the chat model to gather blocks from, with a failed mark, the hash of the `blocks.json` the failed attempt saw, and the hash of the `blocks.json` it last shortened pauses for |

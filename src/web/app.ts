@@ -134,12 +134,18 @@ const videoCard = (project: Api.ProjectView, onUploaded: () => void): HTMLElemen
 
 const countNote = (count: number): string => count === 0 ? "" : String(count)
 
-const stageNotes = ({ blocks, heard, pauses }: Status): Readonly<Record<StageId, StageNote>> => ({
+const pausesNote = ({ pauses, places }: Status): string => {
+  const removed = pauses.total === 0 ? "" : `${pauses.removed} из ${pauses.total}`
+  const check = places === 0 ? "" : `проверить ${places}`
+  return [removed, check].filter((part) => part !== "").join(" · ")
+}
+
+const stageNotes = ({ blocks, heard, pauses, places }: Status): Readonly<Record<StageId, StageNote>> => ({
   brief: { note: countNote(heard), done: heard > 0 },
   takes: { note: countNote(blocks ?? 0), done: blocks !== undefined },
   pauses: {
-    note: pauses.total === 0 ? "" : `${pauses.removed} из ${pauses.total}`,
-    done: pauses.total > 0 && pauses.removed === pauses.total
+    note: pausesNote({ blocks, heard, pauses, places }),
+    done: pauses.total > 0 && pauses.removed === pauses.total && places === 0
   }
 })
 

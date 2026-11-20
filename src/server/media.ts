@@ -4,7 +4,7 @@ import type { LibraryVideo, Pick } from "../shared/library.ts"
 import type { VideoView } from "../shared/plan.ts"
 import { mergeEdits as joinEdits, type Edits, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
 import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
-import { GazeFailed, listen, look, places, previewIsFresh, readPlan, readTranscript, refreshPreview, type Job } from "./media-jobs.ts"
+import { GazeFailed, listen, look, places, previewIsFresh, readGaze, readPlan, readTranscript, refreshPreview, type Job } from "./media-jobs.ts"
 import { Projects } from "./projects.ts"
 import { gatherLibrary, heardIn, keysIn, reuse as reuseOne, sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
@@ -73,8 +73,11 @@ const nextUnseen = Effect.fnUntraced(function*(unseen: Unseen, jobs: ReadonlyArr
   const failed = yield* Ref.get(unseen)
   const waiting = yield* Effect.forEach(jobs, (job) => Effect.gen(function*() {
     const place = places(job)
-    if (failed.has(keyOf(job)) || (yield* fs.exists(place.gaze))) return false
-    return (yield* fs.exists(place.transcript)) && (yield* fs.exists(place.preview))
+    if (failed.has(keyOf(job))) return false
+    if (!((yield* fs.exists(place.transcript)) && (yield* fs.exists(place.preview)))) return false
+    if (!(yield* fs.exists(place.gaze))) return true
+    const measured = yield* Effect.option(readGaze(job))
+    return Option.isSome(measured) && measured.value.heads === undefined
   }))
   return jobs.find((_, index) => waiting[index] === true)
 })

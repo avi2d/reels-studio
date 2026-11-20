@@ -1,5 +1,6 @@
 import { lengthOf, type Transcript } from "../shared/plan.ts"
-import { arrange, assemble, chosenTake, withManualPauses, type Edits, type GazeFailure, type Placed, type Take, type TimelinePage, type TimelineView } from "../shared/timeline.ts"
+import { openPlaces, placesOf } from "../shared/joins.ts"
+import { arrange, assemble, chosenTake, clipsOf, withManualPauses, type Edits, type GazeFailure, type Placed, type Take, type TimelinePage, type TimelineView } from "../shared/timeline.ts"
 import type WaButton from "@awesome.me/webawesome/dist/components/button/button.js"
 import { button, focusWhenReady, iconButton, tooltip } from "./controls.ts"
 import { h } from "./dom.ts"
@@ -7,6 +8,7 @@ import { formatLength } from "./format.ts"
 import { margins, type Margins } from "./margins.ts"
 import { blockDetail, deletedList, pauseList, type DetailActions } from "./timeline-detail.ts"
 import { cutMap } from "./timeline-map.ts"
+import { placeList, type PlaceActions } from "./timeline-places.ts"
 import { blockRow, type RowActions } from "./timeline-row.ts"
 
 export const STOP = "Остановить"
@@ -35,6 +37,7 @@ export interface Status {
   readonly heard: number
   readonly blocks: number | undefined
   readonly pauses: { readonly removed: number; readonly total: number }
+  readonly places: number
 }
 
 export interface Hooks {
@@ -127,6 +130,7 @@ export interface Parts {
   readonly map: HTMLElement
   readonly detailHolder: HTMLElement
   readonly pauseHolder: HTMLElement
+  readonly placeHolder: HTMLElement
 }
 
 export const partsOf = (): Parts => {
@@ -157,7 +161,8 @@ export const partsOf = (): Parts => {
   rowHolder: h("div", { class: "blocks-holder" }),
   map: h("ol", { class: "map" }),
   detailHolder: h("div", { class: "details" }),
-  pauseHolder: h("div", { class: "details" })
+  pauseHolder: h("div", { class: "details" }),
+  placeHolder: h("div", { class: "details places" })
   }
 }
 
@@ -168,7 +173,7 @@ interface Drawn {
   readonly selected: string | undefined
 }
 
-export type Actions = RowActions & DetailActions & { readonly change: (edits: Edits) => void }
+export type Actions = RowActions & DetailActions & PlaceActions & { readonly change: (edits: Edits) => void }
 
 export const textOf = (transcripts: ReadonlyMap<string, Transcript>, take: Take): string =>
   (transcripts.get(take.video)?.words ?? []).slice(take.from, take.to + 1).map((word) => word.text).join(" ")
@@ -182,7 +187,18 @@ const replaceLists = (holder: HTMLElement, ...nodes: ReadonlyArray<HTMLElement>)
   for (const list of lists()) list.scrollTop = offsets.get(list.dataset.scrollKey) ?? 0
 }
 
-export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { readonly open: Placed | undefined; readonly status: Status["pauses"] } => {
+const measuringHeads = (view: TimelineView, placed: ReadonlyArray<Placed>): boolean => {
+  const measured = new Set(view.heads.map((one) => one.video))
+  const failed = new Set(view.looks.flatMap((look) => look.state === "failed" ? [look.video] : []))
+  return placed.some((one) => !measured.has(one.take.video) && !failed.has(one.take.video))
+}
+
+export interface DrawnStatus {
+  readonly pauses: Status["pauses"]
+  readonly places: number
+}
+
+export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { readonly open: Placed | undefined; readonly status: DrawnStatus } => {
   const { edits, loaded, selected, timeline } = drawn
   const placed = assemble(timeline.blocks, edits, loaded.transcripts)
   const { deleted } = arrange(timeline.blocks, edits)
@@ -209,8 +225,10 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { reado
   replaceLists(parts.detailHolder,
     ...(open === undefined ? [] : [blockDetail(open.block, index + 1, chosenTake(open.block, edits), loaded.transcripts, edits, actions)]),
     ...(deleted.length === 0 ? [] : [deletedList(deleted, actions)]))
+  const places = placesOf(clipsOf(placed), new Map(loaded.view.heads.map((one) => [one.video, one])), edits)
+  parts.placeHolder.replaceChildren(placeList(places, placed, measuringHeads(loaded.view, placed), actions))
   replaceLists(parts.pauseHolder, pauseList(placed, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
-  return { open, status: { removed: pauses.filter((pause) => pause.removed).length, total: pauses.length } }
+  return { open, status: { pauses: { removed: pauses.filter((pause) => pause.removed).length, total: pauses.length }, places: openPlaces(places) } }
 }
 
 export interface Panels {
@@ -249,7 +267,7 @@ export const frameOf = (parts: Parts): Frame => {
         overview,
         h("div", { class: "transport" }, parts.clock, parts.prev, parts.go, parts.next, parts.facts, parts.zones.gear, ...parts.transportTips), parts.zones.panel)),
     takes: h("div", { class: "pane" }, notes, parts.detailHolder),
-    pauses: h("div", { class: "pane" }, noPauses, parts.strip, parts.pauseHolder),
+    pauses: h("div", { class: "pane" }, noPauses, parts.placeHolder, parts.strip, parts.pauseHolder),
     history: h("div", { class: "history", role: "group", "aria-label": "Правки монтажа" }, parts.undo, parts.redo, ...parts.historyTips),
     summary: parts.summary
   }

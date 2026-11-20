@@ -1,4 +1,5 @@
 import { Effect } from "effect"
+import { AROUND_JOIN_SECONDS, aroundJoin, withAnswer } from "../shared/joins.ts"
 import { lengthOf } from "../shared/plan.ts"
 import {
   assemble, clipsOf, mergeEdits, NO_EDITS, playedSpans, withChoice, withDeleted, withManualPauses, within,
@@ -45,7 +46,8 @@ const editKey = (edits: Edits): string => JSON.stringify([
   edits.deleted,
   edits.chosen.map((one) => [one.block, one.video, one.from]),
   edits.pauses.map((one) => [one.video, one.after]),
-  (edits.kept ?? []).map((one) => [one.video, one.after])
+  (edits.kept ?? []).map((one) => [one.video, one.after]),
+  edits.joins.map((one) => [one.end.video, one.end.at, one.start.video, one.start.at, one.answer])
 ])
 
 const adoptServer = (local: Edits, acked: Edits, server: Edits): boolean =>
@@ -154,6 +156,7 @@ const redraw = ({ hooks, parts, player, state, ui, view }: Desk, actions: Action
   ui.empty.hidden = isReady
   ui.noPauses.hidden = isReady
   parts.pauseHolder.hidden = !isReady
+  parts.placeHolder.hidden = !isReady
   parts.strip.hidden = !isReady
   parts.detailHolder.hidden = !isReady
   ui.notes.replaceChildren(...notesOf(loaded, hooks.ask))
@@ -175,7 +178,8 @@ const redraw = ({ hooks, parts, player, state, ui, view }: Desk, actions: Action
   hooks.status({
     heard: loaded.transcripts.size,
     blocks: drawn === undefined ? undefined : view.placedNow().length,
-    pauses: drawn?.status ?? { removed: 0, total: 0 }
+    pauses: drawn?.status.pauses ?? { removed: 0, total: 0 },
+    places: drawn?.status.places ?? 0
   })
   refocus([ui.panels.viewer, ui.panels.tracks, ui.panels.takes, ui.panels.pauses], active)
 }
@@ -234,6 +238,8 @@ const actionsOf = (
       const window = { start: pause.start - PAUSE_AROUND_SECONDS, end: pause.end + PAUSE_AROUND_SECONDS }
       hear(within(takeClips(state.loaded, state.edits, one.block.id, one.take), window))
     },
+    hearJoin: (join) => { hear(aroundJoin(clipsOf(view.placedNow()), join, AROUND_JOIN_SECONDS)) },
+    answer: (join, answer) => { change(withAnswer(state.edits, join, answer)) },
     setDeleted: (block, deleted) => {
       state.selected = deleted && block === state.open?.block.id ? neighbourOf(view.placedNow(), block) : state.selected
       change(withDeleted(state.edits, block, deleted))

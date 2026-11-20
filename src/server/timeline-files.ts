@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Option, Result, Schema } from "effect"
 import type { Transcript, VideoView } from "../shared/plan.ts"
 import { Gathered } from "../shared/gather.ts"
-import { Blocks, Edits, NO_EDITS, soundBlocks, type Gaze, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
+import { Blocks, Edits, NO_EDITS, soundBlocks, type Gaze, type GazeFailure, type TimelineView, type VideoHeads } from "../shared/timeline.ts"
 import { places, readGaze, readTranscript } from "./media-jobs.ts"
 
 const decodeBlocks = Schema.decodeUnknownOption(Schema.fromJsonString(Blocks))
@@ -48,6 +48,7 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
   const transcripts = new Map<string, Transcript>()
   const gazes = new Map<string, Gaze>()
   const looks: Array<Look> = []
+  const heads: Array<VideoHeads> = []
   for (const name of names) {
     const place = places({ dir, name })
     if (!(yield* fs.exists(place.transcript))) continue
@@ -59,6 +60,7 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
       if (Result.isSuccess(decoded)) {
         measured = decoded.success
         gazes.set(name, measured)
+        if (measured.heads !== undefined) heads.push({ video: name, step: measured.step, heads: measured.heads })
       } else {
         yield* Effect.logError("the gaze is unreadable", place.gaze, decoded.failure)
       }
@@ -66,11 +68,11 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
     looks.push(lookOf(name, measured, written, unseen.get(place.source)))
   }
   const file = `${dir}/blocks.json`
-  if (!(yield* fs.exists(file))) return { looks, timeline: { state: "none" } } satisfies TimelineView
+  if (!(yield* fs.exists(file))) return { looks, heads, timeline: { state: "none" } } satisfies TimelineView
   const written = Option.getOrUndefined(decodeBlocks(yield* fs.readFileString(file)))
   if (written === undefined) {
     yield* Effect.logError("the blocks are unreadable", file)
-    return { looks, timeline: { state: "unreadable" } } satisfies TimelineView
+    return { looks, heads, timeline: { state: "unreadable" } } satisfies TimelineView
   }
-  return { looks, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir) } } satisfies TimelineView
+  return { looks, heads, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir) } } satisfies TimelineView
 })
