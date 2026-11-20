@@ -26,9 +26,9 @@ test("a plan changed after the yes waits for a new yes instead of showing as app
   expect(planView("  ", approval).state).toBe("none")
 })
 
-test("after the yes the studio shortens pauses without pinning its own pick as the person chose", () => {
+test("after the yes the studio pins the shown take as the person chose", () => {
   const { edits, done } = afterYes([advance, deposit], NO_EDITS, transcripts)
-  expect(edits.chosen).toEqual([])
+  expect(edits.chosen).toEqual([{ block: "advance", video: "a", from: 2 }, { block: "deposit", video: "a", from: 4 }]
   expect(edits.pauses).toEqual([{ video: "a", after: 3 }, { video: "a", after: 5 }])
   expect(done).toEqual([
     { kind: "take", block: "Аванс", take: 1, of: 2, reason: "Без запинок" },
@@ -47,6 +47,7 @@ test("after the yes a take the person chose stays chosen rather than going back 
 test("after the yes a pause the person returned stays long instead of being shortened again", () => {
   const returned = withManualPauses(NO_EDITS, [{ video: "a", after: 3 }], false)
   const { edits, done } = afterYes([advance], returned, transcripts)
+  expect(edits.chosen).toEqual([{ block: "advance", video: "a", from: 2 }])
   expect(edits.pauses).toEqual([])
   expect(done[done.length - 1]).toEqual({ kind: "pauses", count: 0, seconds: expect.closeTo(0, 6) })
 })

@@ -33,12 +33,17 @@ The first gathering ranks the takes by speech alone.
 When the gaze of every heard video is settled, the studio gathers once more, so the takes stand by speech and gaze.
 The stages «Дубли и блоки» and «Паузы и склейки» say that the studio is gathering the blocks meanwhile.
 Once the blocks are written, the page shows the take ranked first in every block the person has not chosen, and the studio shortens every pause of the shown takes to 0.2 s, except the pauses the person returned.
+After the yes the pinned takes stay while they still exist.
 A new heard video gathers the blocks again, and a gaze that settles after the last gathering gathers them once more.
 The studio keeps the heard videos and the settled gaze it last asked about in `gathered.json`.
-When a gathering ends without a ready row of blocks, the studio keeps the attempt with a failed mark in `gathered.json`, and the stage «Дубли и блоки» says that the studio could not gather the blocks and keeps the «Собрать блоки» button.
+When a gathering ends without a ready row of blocks, or leaves `blocks.json` unchanged, the studio keeps the attempt with a failed mark in `gathered.json`.
+The stage «Дубли и блоки» then says that the studio could not gather the blocks and keeps the «Собрать блоки» button.
 The next heard video or the next settled gaze tries again.
 The request and the answer do not show in the chat.
-A message the person sends stops the gathering, and the studio asks again once the answer ends.
+The gathering runs in its own session next to the chat.
+A message the person sends never stops, blocks or delays it, and it never blocks the person's message.
+Both may write `blocks.json`.
+The later valid file wins.
 The chat model reads the transcript and the gaze text of every video when it writes `blocks.json`.
 It puts the takes with one meaning into one block, from whichever videos they come.
 It orders the blocks by where each thought is first said, and the takes of a block from the best to the worst.

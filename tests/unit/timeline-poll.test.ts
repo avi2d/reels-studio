@@ -68,7 +68,7 @@ test("a returned pause stays out of the server check instead of being overwritte
   const kept = withManualPauses(NO_EDITS, [{ video: "a", after: 1 }], false)
   expect(takeServer(kept, NO_EDITS, kept, idle, 5, false)).toBe(true)
   expect(takeServer(NO_EDITS, NO_EDITS, kept, idle, 5, false)).toBe(true)
-  expect(takeServer(kept, kept, NO_EDITS, idle, 5, false)).toBe(false)
+  expect(takeServer(kept, NO_EDITS, NO_EDITS, idle, 5, false)).toBe(false)
 })
 
 test("a measured gaze does not change the played clips", () => {

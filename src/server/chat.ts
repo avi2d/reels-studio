@@ -258,26 +258,18 @@ interface GatherNeeds {
   readonly projects: Projects["Service"]
   readonly settings: Settings["Service"]
   readonly makeDirectory: (dir: string) => Effect.Effect<void, ApiError>
-  readonly claim: (id: string, turn: Turn) => Effect.Effect<Turn | undefined>
-  readonly release: (id: string, turn: Turn) => Effect.Effect<void>
   readonly run: Run
 }
 
-const gatherWith = ({ projects, settings, makeDirectory, claim, release, run }: GatherNeeds) =>
+const gatherWith = ({ projects, settings, makeDirectory, run }: GatherNeeds) =>
   Effect.fn("Chat.gather")(function*(id: string) {
     const dir = yield* projects.folder(id)
     const project = yield* projects.get(id)
     const model = project.model !== undefined && settings.models.includes(project.model) ? project.model : settings.models[0]
     if (model === undefined) return yield* new ApiError({ status: 500, message: "В студии не задана ни одна модель" })
-    const turn = yield* makeTurn("studio")
-    if ((yield* claim(id, turn)) !== undefined) return "busy"
-    yield* makeDirectory(dir).pipe(Effect.onError(() => release(id, turn)))
-    yield* run(id, dir, GATHER_PROMPT, [], model, project.effort ?? "medium", false, "studio").pipe(
-      Stream.interruptWhen(Deferred.await(turn.stop)),
-      Stream.runDrain,
-      Effect.ensuring(release(id, turn))
-    )
-    const gathering: Gathering = (yield* Deferred.isDone(turn.stop)) ? "stopped" : "gathered"
+    yield* makeDirectory(dir)
+    yield* run(id, dir, GATHER_PROMPT, [], model, project.effort ?? "medium", false, "studio").pipe(Stream.runDrain)
+    const gathering: Gathering = "gathered"
     return gathering
   })
 
@@ -304,7 +296,7 @@ export class Chat extends Context.Service<Chat, {
       const attachments = yield* Attachments
       const brief = yield* Brief
       const context = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>()
-      const { claim, release, takeOver, withoutTurn } = yield* makeTurns
+      const { claim, release, withoutTurn } = yield* makeTurns
       const systemPrompt = yield* fs.readFileString(path.join(settings.root, "prompts", "studio.md")).pipe(orBroken)
       const append = Effect.fn("Chat.append")(function*(dir: string, message: Message) {
         const line = yield* encodeLine(message).pipe(orBroken)
@@ -321,14 +313,14 @@ export class Chat extends Context.Service<Chat, {
         return videoLines(yield* media.videos(id), yield* media.timeline(id))
       }, orBroken)
       const attachedNote = (listed: string): string => listed === "" ? "" : `\nThe files the person attached in the chat:\n${listed}\n`
-      const command = (dir: string, text: string, files: ReadonlyArray<Shown>, model: string, effort: Effort, known: string) => {
+      const command = (dir: string, text: string, files: ReadonlyArray<Shown>, model: string, effort: Effort, known: string, asker: Asker) => {
         const images = files.flatMap((file) => file.images)
         const prompt = JSON.stringify({ id: "prompt", type: "prompt", message: promptText(text, files), ...(images.length === 0 ? {} : { images }) })
         return ChildProcess.make(settings.pi, [
           "--mode", "rpc",
           "--model", model,
           "--thinking", effort,
-          "--session-dir", path.join(dir, "chat"),
+          "--session-dir", path.join(dir, asker === "studio" ? "gather" : "chat"),
           "--continue",
           "--tools", TOOLS,
           "--no-approve",
@@ -356,7 +348,7 @@ export class Chat extends Context.Service<Chat, {
           const files = yield* attachments.show(dir, names)
           const task = briefNote((yield* brief.view(id)).brief) + (approving ? YES_NOTE : "")
           const known = `${yield* heardVideos(id)}\n${task}${attachedNote(yield* attachments.listed(dir, files))}`
-          const launched = yield* command(dir, text, files, model, effort, known).pipe(
+          const launched = yield* command(dir, text, files, model, effort, known, asker).pipe(
             Effect.tapError((error) => Effect.logError("pi did not start", error)),
             Effect.option
           )
@@ -376,9 +368,7 @@ export class Chat extends Context.Service<Chat, {
         const plan = approves(trimmed) && names.length === 0 ? yield* brief.plan(id) : undefined
         const approved = plan === undefined || plan.state === "none" ? undefined : plan.text
         const turn = yield* makeTurn("person")
-        const held = yield* claim(id, turn)
-        if (held?.asker === "studio") yield* takeOver(id, turn)
-        else if (held !== undefined) return yield* new ApiError({ status: 409, message: "Дождитесь ответа на прошлое сообщение" })
+        if ((yield* claim(id, turn)) !== undefined) return yield* new ApiError({ status: 409, message: "Дождитесь ответа на прошлое сообщение" })
         yield* Effect.gen(function*() {
           yield* fs.makeDirectory(path.join(dir, "chat"), { recursive: true }).pipe(orBroken)
           yield* projects.setChoice(id, model, effort)
@@ -392,7 +382,7 @@ export class Chat extends Context.Service<Chat, {
           Stream.ensuring(release(id, turn))
         )
       })
-      const gather = gatherWith({ projects, settings, makeDirectory: (dir) => fs.makeDirectory(path.join(dir, "chat"), { recursive: true }).pipe(orBroken), claim, release, run })
+      const gather = gatherWith({ projects, settings, makeDirectory: (dir) => fs.makeDirectory(path.join(dir, "gather"), { recursive: true }).pipe(orBroken), run })
       return Chat.of({ history, send, gather, withoutTurn })
     })
   )

@@ -1,5 +1,5 @@
 import { Context, Effect, Exit, FileSystem, Layer, Option, Path, Ref, Schema } from "effect"
-import { afterYes } from "../shared/brief.ts"
+import { shortenPlaced } from "../shared/brief.ts"
 import { Gathered, gatherStep } from "../shared/gather.ts"
 import { Chat } from "./chat.ts"
 import { Media } from "./media.ts"
@@ -30,13 +30,19 @@ export class Gather extends Context.Service<Gather, {
         return Option.getOrUndefined(decodeGathered(yield* fs.readFileString(file)))
       })
 
+      const readBlocks = Effect.fnUntraced(function*(dir: string) {
+        const file = path.join(dir, "blocks.json")
+        if (!(yield* fs.exists(file))) return undefined
+        return yield* fs.readFileString(file)
+      })
+
       const remember = Effect.fnUntraced(function*(dir: string, videos: ReadonlyArray<string>, settled: ReadonlyArray<string>, failed: boolean) {
         const file = path.join(dir, "gathered.json")
         yield* fs.writeFileString(`${file}.new`, yield* encodeGathered({ videos, gazed: [...settled], failed }))
         yield* fs.rename(`${file}.new`, file)
       })
 
-      const due = Effect.fnUntraced(function*(id: string) {
+      const stepOf = Effect.fnUntraced(function*(id: string) {
         const dir = yield* projects.folder(id)
         const gathered = yield* readGathered(dir)
         const videos = yield* media.videos(id)
@@ -44,30 +50,25 @@ export class Gather extends Context.Service<Gather, {
         const listening = videos.some((video) => video.state === "waiting")
         const view = yield* media.timeline(id)
         const settled = view.looks.flatMap((look) => look.state === "waiting" ? [] : [look.video])
-        return gatherStep(heard, settled, listening, gathered).kind !== "wait"
+        return { dir, step: gatherStep(heard, settled, listening, gathered) }
       })
 
       const visit = Effect.fnUntraced(function*(id: string) {
-        const dir = yield* projects.folder(id)
-        const gathered = yield* readGathered(dir)
-        const videos = yield* media.videos(id)
-        const heard = videos.flatMap((video) => video.state === "ready" ? [video.name] : [])
-        const listening = videos.some((video) => video.state === "waiting")
-        const view = yield* media.timeline(id)
-        const settled = view.looks.flatMap((look) => look.state === "waiting" ? [] : [look.video])
-        const step = gatherStep(heard, settled, listening, gathered)
+        const { dir, step } = yield* stepOf(id)
         if (step.kind === "wait") return
         yield* Ref.set(current, id)
         yield* Effect.gen(function*() {
+          const before = yield* readBlocks(dir)
           const outcome = yield* chat.gather(id)
           if (outcome !== "gathered") return
+          const after = yield* readBlocks(dir)
           const fresh = yield* media.timeline(id)
-          if (fresh.timeline.state !== "ready") {
+          if (before === after || fresh.timeline.state !== "ready") {
             yield* remember(dir, step.videos, step.settled, true)
             return
           }
           const heardVideos = yield* media.videos(id)
-          yield* media.saveEdits(id, afterYes(fresh.timeline.blocks, fresh.timeline.edits, readyTranscripts(heardVideos)).edits)
+          yield* media.saveEdits(id, shortenPlaced(fresh.timeline.blocks, fresh.timeline.edits, readyTranscripts(heardVideos)))
           yield* remember(dir, step.videos, step.settled, false)
         }).pipe(Effect.ensuring(Ref.set(current, undefined)))
       })
@@ -87,7 +88,8 @@ export class Gather extends Context.Service<Gather, {
 
       const running = (id: string): Effect.Effect<boolean> => Effect.gen(function*() {
         if ((yield* Ref.get(current)) === id) return true
-        return yield* due(id).pipe(Effect.orElseSucceed(() => false))
+        const { step } = yield* stepOf(id).pipe(Effect.orElseSucceed(() => ({ step: { kind: "wait" } as const })))
+        return step.kind !== "wait"
       })
       const failed = (id: string): Effect.Effect<boolean> => Effect.gen(function*() {
         const gathered = yield* readGathered(yield* projects.folder(id)).pipe(Effect.orElseSucceed(() => undefined))

@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { lengthOf, type Transcript } from "./plan.ts"
-import { assemble, keptOf, samePause, withPauses, type Block, type Edits } from "./timeline.ts"
+import { assemble, keptOf, samePause, withChoice, withPauses, type Block, type Edits } from "./timeline.ts"
 
 export const MAX_BRIEF = 4000
 
@@ -37,6 +37,17 @@ export const approves = (text: string): boolean => YES.has(text.trim().toLowerCa
 const playedLength = (blocks: ReadonlyArray<Block>, edits: Edits, transcripts: ReadonlyMap<string, Transcript>): number =>
   lengthOf(assemble(blocks, edits, transcripts).flatMap((one) => one.spans))
 
+export const shortenPlaced = (
+  blocks: ReadonlyArray<Block>,
+  edits: Edits,
+  transcripts: ReadonlyMap<string, Transcript>
+): Edits => {
+  const placed = assemble(blocks, edits, transcripts)
+  const kept = keptOf(edits)
+  const pauses = placed.flatMap((one) => one.pauses.filter((pause) => !pause.removed && !kept.some((hold) => samePause(hold, { video: one.take.video, after: pause.after }))).map((pause) => ({ video: one.take.video, after: pause.after })))
+  return withPauses(edits, pauses, true)
+}
+
 export const afterYes = (
   blocks: ReadonlyArray<Block>,
   edits: Edits,
@@ -44,9 +55,9 @@ export const afterYes = (
 ): { readonly edits: Edits; readonly done: ReadonlyArray<Done> } => {
   const placed = assemble(blocks, edits, transcripts)
   if (placed.length === 0) return { edits, done: [{ kind: "no-blocks" }] }
-  const kept = keptOf(edits)
-  const pauses = placed.flatMap((one) => one.pauses.filter((pause) => !pause.removed && !kept.some((hold) => samePause(hold, { video: one.take.video, after: pause.after }))).map((pause) => ({ video: one.take.video, after: pause.after })))
-  const next = withPauses(edits, pauses, true)
+  const pinned = placed.reduce((next, one) => withChoice(next, one.block.id, one.take), edits)
+  const next = shortenPlaced(blocks, pinned, transcripts)
+  const pauses = next.pauses.filter((pause) => !edits.pauses.some((old) => samePause(old, pause)))
   const takes = placed.map((one): Done => ({
     kind: "take",
     block: one.block.title,
