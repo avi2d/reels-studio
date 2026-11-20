@@ -38,12 +38,7 @@ export const focusWhenReady = (target: HTMLElement): void => {
 }
 
 export const setExpanded = (target: WaButton, expanded: boolean): void => {
-  const value = String(expanded)
-  const sync = (): void => {
-    target.renderRoot.querySelector(".button")?.setAttribute("aria-expanded", value)
-  }
-  sync()
-  void target.updateComplete.then(sync)
+  void target.updateComplete.then(() => { target.button.ariaExpanded = String(expanded) })
 }
 
 const TOOLTIP_TRIGGER = typeof globalThis.matchMedia === "function" && globalThis.matchMedia("(hover: hover)").matches

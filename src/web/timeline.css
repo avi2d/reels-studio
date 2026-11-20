@@ -1,10 +1,11 @@
 .overview { min-width: 0; }
-.map { display: flex; gap: 3px; min-width: 0; }
-.map-slot { flex: 1 1 8px; min-width: 0; display: flex; }
-.map-item { position: relative; flex: 1; min-width: 0; min-height: 20px; padding: 0; overflow: hidden; border-radius: 4px; background: var(--wa-color-surface-border); color: var(--wa-color-text-quiet); font-size: 11px; font-weight: 600; }
-.map-item::after { content: ""; position: absolute; inset: -8px 0; }
+.map { display: flex; gap: 4px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
+.map-slot { flex: 1 0 var(--tap); display: flex; }
+.map-item { position: relative; flex: 1; min-width: 0; min-height: var(--tap); padding: 0; overflow: hidden; border-radius: 4px; background: var(--wa-color-surface-border); color: var(--wa-color-text-quiet); font-size: 13px; font-weight: 600; }
+.map-item:focus-visible { outline-offset: -3px; }
 .map-item.selected { background: var(--wa-color-text-normal); color: var(--wa-color-surface-default); }
-.map-item.playing { box-shadow: inset 0 -3px 0 var(--wa-color-brand-fill-loud); }
+.map-item.playing { background: var(--wa-color-brand-fill-loud); color: var(--wa-color-brand-on-loud); }
+.map-item.playing::before { content: "▶" / ""; margin-right: 2px; }
 
 .timeline { --r-at: 18px; --r-said: 54px; --r-clip: 54px; --r-gaps: 34px; --gap-min: 44px; display: flex; flex-direction: column; min-width: 0; margin-bottom: 14px; }
 .timeline:not(:has(> :not([hidden], .error:empty))) { display: none; }
@@ -17,7 +18,9 @@
 .said { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; margin: 3px 6px; font-size: 12px; line-height: 16px; color: var(--wa-color-text-quiet); overflow-wrap: anywhere; }
 .clip { display: flex; min-width: 0; margin: 0 2px; overflow: hidden; border-radius: 10px; background: var(--wa-color-neutral-fill-normal); box-shadow: inset 0 0 0 1px var(--wa-color-surface-border); }
 .clip.selected { box-shadow: inset 0 0 0 2px var(--wa-color-brand-fill-loud); }
-.slot.playing .clip { background: var(--wa-color-surface-border); }
+.slot.playing .clip { background: var(--wa-color-brand-fill-loud); color: var(--wa-color-brand-on-loud); }
+.slot.playing :is(.handle, .pick .rank, .pick .name b) { color: inherit; }
+.slot.playing .at::before { content: "▶ " / ""; color: var(--wa-color-brand-fill-loud); }
 .slot.dragging { z-index: 2; }
 .slot.dragging .clip { opacity: 0.9; box-shadow: inset 0 0 0 2px var(--wa-color-brand-fill-loud), 0 6px 18px var(--wa-color-shadow); }
 
@@ -33,6 +36,9 @@
 .pause.removed { width: var(--gap-min); background: none; box-shadow: inset 0 0 0 1px var(--wa-color-surface-border); color: var(--wa-color-text-quiet); }
 
 .notes, .details, .detail { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.details, .detail { min-height: 0; }
+.details { flex: 1; }
+.takes, .pause-list, .detail .files { position: relative; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; }
 .notes:empty, .details:empty { display: none; }
 .detail + .detail { padding-top: 14px; border-top: 1px solid var(--wa-color-surface-border); }
 .detail-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -59,16 +65,22 @@ del.gap { color: var(--wa-color-text-quiet); }
 
 @media (hover: hover) and (pointer: fine) {
   .handle:hover, .pick:hover { background: var(--wa-color-overlay-inline); }
-  .map-item:not(.selected):hover { background: var(--wa-color-text-quiet); color: var(--wa-color-surface-default); }
+  .map-item:not(.selected, .playing):hover { background: var(--wa-color-text-quiet); color: var(--wa-color-surface-default); }
   .pause:not(.removed):hover { background: color-mix(in srgb, var(--wa-color-brand-fill-loud) 30%, var(--wa-color-surface-default)); }
   .pause.removed:hover { background: var(--wa-color-overlay-inline); }
 }
 
 @media (max-width: 820px) {
-  .map { gap: 4px; }
-  .map-item { min-height: 22px; }
-  .map-item::after { inset: -11px 0; }
   .timeline { --r-clip: 60px; --r-gaps: 48px; margin-right: -12px; }
   .handle { width: 40px; }
   .take .take-acts { padding-left: 0; }
+}
+
+@media (max-width: 820px) and (max-height: 740px) {
+  .timeline { --r-said: 22px; --r-clip: 44px; --r-gaps: 32px; }
+  .timeline .said { -webkit-line-clamp: 1; }
+  .stages > .timeline { margin-top: 4px; }
+  .stages wa-tab-panel { --padding: 6px 0 0; }
+  .stages wa-tab::part(tab) { padding: 0.7em 1em; }
+  .pane, .detail, .details { gap: 6px; }
 }

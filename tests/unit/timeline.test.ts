@@ -3,7 +3,7 @@ import { videoLines } from "../../src/server/chat.ts"
 import { gazeText } from "../../src/server/media-commands.ts"
 import type { Transcript } from "../../src/shared/plan.ts"
 import {
-  arrange, assemble, cameraShare, chosenTake, clipsOf, fadeGain, NO_EDITS, offsetIn, pausesOf, playedSpans, soundBlocks, withChoice, withDeleted, withNeighbours,
+  arrange, assemble, cameraShare, chosenTake, clipsOf, fadeGain, NO_EDITS, offsetIn, pausesOf, playedSpans, soundBlocks, withChoice, withDeleted,
   withPauses, within,
   type Block, type Gaze
 } from "../../src/shared/timeline.ts"
@@ -85,22 +85,6 @@ test("the montage plays the chosen take of each block in row order across videos
   ])
 })
 
-test("a take heard with its neighbours gets only the last seconds of the block before and the first seconds of the block after, not the whole blocks", () => {
-  const cut = [
-    { video: "a", block: "deposit", start: 6, end: 12 },
-    { video: "a", block: "advance", start: 1, end: 6 },
-    { video: "b", block: "thanks", start: 3, end: 5 }
-  ]
-  const own = [{ video: "b", block: "advance", start: 0.5, end: 1.5 }]
-  expect(withNeighbours(cut, "advance", own, 1)).toEqual([
-    { video: "a", block: "deposit", start: 11, end: 12 },
-    { video: "b", block: "advance", start: 0.5, end: 1.5 },
-    { video: "b", block: "thanks", start: 3, end: 4 }
-  ])
-  expect(withNeighbours(cut, "deposit", [], 4)).toEqual([{ video: "a", block: "advance", start: 1, end: 5 }])
-  expect(withNeighbours(cut, "thanks", [], 4)).toEqual([{ video: "a", block: "advance", start: 2, end: 6 }])
-})
-
 const gaze: Gaze = { step: 0.5, samples: ["away", "away", "camera", "camera", "camera", "away", "hidden", "camera"] }
 
 test("the camera share counts only the samples inside the span, and a hidden face is not a look into the camera", () => {
@@ -154,32 +138,6 @@ test("a time in the second played span sits after only the played seconds before
   expect(offsetIn(spans, 6)).toBe(3)
   expect(offsetIn(spans, 3)).toBe(2)
   expect(offsetIn(spans, 0)).toBe(0)
-})
-
-test("a take heard with neighbours that span a removed pause still plays two seconds from each side", () => {
-  const cut = [
-    { video: "a", block: "before", start: 10, end: 14 },
-    { video: "a", block: "before", start: 14.5, end: 15 },
-    { video: "b", block: "main", start: 30, end: 34 },
-    { video: "c", block: "after", start: 20, end: 20.5 },
-    { video: "c", block: "after", start: 21, end: 25 }
-  ]
-  const own = [{ video: "b", block: "main", start: 30, end: 34 }]
-  expect(withNeighbours(cut, "main", own, 2)).toEqual([
-    { video: "a", block: "before", start: 12.5, end: 14 },
-    { video: "a", block: "before", start: 14.5, end: 15 },
-    { video: "b", block: "main", start: 30, end: 34 },
-    { video: "c", block: "after", start: 20, end: 20.5 },
-    { video: "c", block: "after", start: 21, end: 22.5 }
-  ])
-})
-
-test("neighbours shorter than the requested seconds play whole, not padded", () => {
-  const cut = [
-    { video: "a", block: "before", start: 5, end: 5.5 },
-    { video: "b", block: "main", start: 30, end: 34 }
-  ]
-  expect(withNeighbours(cut, "main", [], 2)).toEqual([{ video: "a", block: "before", start: 5, end: 5.5 }])
 })
 
 test("a window keeps only the parts of the spans inside it, not every span it touches whole", () => {

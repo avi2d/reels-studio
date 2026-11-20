@@ -187,53 +187,6 @@ export interface Clip extends Span {
 export const clipsOf = (placed: ReadonlyArray<Placed>): ReadonlyArray<Clip> =>
   placed.flatMap((one) => one.spans.map((span) => ({ ...span, video: one.take.video, block: one.block.id })))
 
-const tailRun = (cut: ReadonlyArray<Clip>, first: number, id: string, seconds: number): ReadonlyArray<Clip> => {
-  const run: Array<Clip> = []
-  let total = 0
-  for (let index = first - 1; index >= 0; index -= 1) {
-    const clip = cut[index]
-    if (clip === undefined || clip.block !== id) break
-    run.unshift(clip)
-    total += clip.end - clip.start
-    if (total >= seconds) break
-  }
-  return trimHead(run, total - seconds)
-}
-
-const trimHead = (run: ReadonlyArray<Clip>, excess: number): ReadonlyArray<Clip> => {
-  const head = run[0]
-  return head === undefined || excess <= 0 ? [...run] : [{ ...head, start: head.start + excess }, ...run.slice(1)]
-}
-
-const headRun = (cut: ReadonlyArray<Clip>, last: number, id: string, seconds: number): ReadonlyArray<Clip> => {
-  const run: Array<Clip> = []
-  let total = 0
-  for (let index = last + 1; index < cut.length; index += 1) {
-    const clip = cut[index]
-    if (clip === undefined || clip.block !== id) break
-    run.push(clip)
-    total += clip.end - clip.start
-    if (total >= seconds) break
-  }
-  return trimTail(run, total - seconds)
-}
-
-const trimTail = (run: ReadonlyArray<Clip>, excess: number): ReadonlyArray<Clip> => {
-  const tail = run.at(-1)
-  return tail === undefined || excess <= 0 ? [...run] : [...run.slice(0, -1), { ...tail, end: tail.end - excess }]
-}
-
-export const withNeighbours = (cut: ReadonlyArray<Clip>, block: string, own: ReadonlyArray<Clip>, seconds: number): ReadonlyArray<Clip> => {
-  const blocks = cut.map((clip) => clip.block)
-  const first = blocks.indexOf(block)
-  const last = blocks.lastIndexOf(block)
-  const beforeId = first > 0 ? cut[first - 1]?.block : undefined
-  const before = beforeId === undefined ? [] : tailRun(cut, first, beforeId, seconds)
-  const afterId = first === -1 ? undefined : cut[last + 1]?.block
-  const after = afterId === undefined ? [] : headRun(cut, last, afterId, seconds)
-  return [...before, ...own, ...after]
-}
-
 export const withChoice = (edits: Edits, block: string, take: Take): Edits => ({
   ...edits,
   chosen: [...edits.chosen.filter((chosen) => chosen.block !== block), { block, video: take.video, from: take.from }]

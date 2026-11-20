@@ -8,7 +8,6 @@ import { blockDetail, deletedList, pauseList, type DetailActions } from "./timel
 import { cutMap } from "./timeline-map.ts"
 import { blockRow, type RowActions } from "./timeline-row.ts"
 
-export const PLAY = "Смотреть монтаж"
 export const STOP = "Остановить"
 export const GO = "Смотреть с этого блока"
 const STRIP = { label: "Убрать все паузы", hint: "Убирает все паузы в выбранных дублях" }
@@ -106,12 +105,10 @@ export interface Parts {
   readonly undo: WaButton
   readonly redo: WaButton
   readonly strip: WaButton
-  readonly play: WaButton
   readonly prev: WaButton
   readonly go: WaButton
   readonly goTip: HTMLElement
   readonly next: WaButton
-  readonly around: WaButton
   readonly historyTips: ReadonlyArray<HTMLElement>
   readonly transportTips: ReadonlyArray<HTMLElement>
   readonly tag: HTMLElement
@@ -123,10 +120,10 @@ export interface Parts {
 }
 
 export const partsOf = (): Parts => {
-  const undo = iconTool("tool-undo", "quiet", "undo", "Отменить. Клавиша Z")
+  const undo = iconTool("tool-undo", "quiet", "undo", "Отменить")
   const redo = iconTool("tool-redo", "quiet", "redo", "Повторить")
   const prev = iconTool("tool-prev", "plain", "previous", "Блок до этого")
-  const go = iconTool("tool-go", "bright", "play", `${GO}. Пробел`)
+  const go = iconTool("tool-go", "bright", "play", GO)
   const next = iconTool("tool-next", "plain", "next", "Блок после этого")
   prev.button.classList.add("prev")
   next.button.classList.add("next")
@@ -138,12 +135,10 @@ export const partsOf = (): Parts => {
   undo: undo.button,
   redo: redo.button,
   strip: tool(STRIP.label, STRIP.hint, { class: "end" }),
-  play: tool(PLAY, "Показывает монтаж с начала", { class: "play" }),
   prev: prev.button,
   go: go.button,
   goTip: go.tip,
   next: next.button,
-  around: tool("С соседями", "Конец блока до него, этот блок и начало блока после", { class: "around" }),
   historyTips: [undo.tip, redo.tip],
   transportTips: [prev.tip, go.tip, next.tip],
   tag: h("span", { class: "tag", hidden: true }),
@@ -169,6 +164,13 @@ export const textOf = (transcripts: ReadonlyMap<string, Transcript>, take: Take)
 
 export const startOf = (placed: ReadonlyArray<Placed>, index: number): number => lengthOf(placed.slice(0, index).flatMap((one) => one.spans))
 
+const replaceLists = (holder: HTMLElement, ...nodes: ReadonlyArray<HTMLElement>): void => {
+  const lists = () => holder.querySelectorAll<HTMLElement>("[data-scroll-key]")
+  const offsets = new Map([...lists()].map((list) => [list.dataset.scrollKey, list.scrollTop]))
+  holder.replaceChildren(...nodes)
+  for (const list of lists()) list.scrollTop = offsets.get(list.dataset.scrollKey) ?? 0
+}
+
 export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { readonly open: Placed | undefined; readonly status: Status["pauses"] } => {
   const { edits, loaded, selected, timeline } = drawn
   const placed = assemble(timeline.blocks, edits, loaded.transcripts)
@@ -188,15 +190,15 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { reado
   parts.prev.onclick = () => { actions.select(placed[index - 1]?.block.id ?? "") }
   parts.next.onclick = () => { actions.select(placed[index + 1]?.block.id ?? "") }
   parts.facts.textContent = open === undefined ? "" : `дубль ${open.block.takes.indexOf(open.take) + 1} из ${open.block.takes.length}`
-  const old = parts.rowHolder.firstElementChild
+  const scrollLeft = parts.rowHolder.firstElementChild?.scrollLeft ?? 0
   const row = blockRow(placed, open?.block.id, actions)
   parts.rowHolder.replaceChildren(row)
-  row.scrollLeft = old?.scrollLeft ?? 0
+  row.scrollLeft = scrollLeft
   parts.map.replaceChildren(...cutMap(placed, open?.block.id, actions.select))
-  parts.detailHolder.replaceChildren(
+  replaceLists(parts.detailHolder,
     ...(open === undefined ? [] : [blockDetail(open.block, index + 1, chosenTake(open.block, edits), loaded.transcripts, edits, actions)]),
     ...(deleted.length === 0 ? [] : [deletedList(deleted, actions)]))
-  parts.pauseHolder.replaceChildren(pauseList(placed, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
+  replaceLists(parts.pauseHolder, pauseList(placed, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
   return { open, status: { removed: pauses.filter((pause) => pause.removed).length, total: pauses.length } }
 }
 
@@ -234,7 +236,7 @@ export const frameOf = (parts: Parts): Frame => {
       h("div", { class: "viewbox" },
         h("div", { class: "stage" }, frame),
         overview,
-        h("div", { class: "transport" }, parts.clock, parts.prev, parts.go, parts.next, parts.around, parts.play, parts.facts, ...parts.transportTips))),
+        h("div", { class: "transport" }, parts.clock, parts.prev, parts.go, parts.next, parts.facts, ...parts.transportTips))),
     takes: h("div", { class: "pane" }, notes, parts.detailHolder),
     pauses: h("div", { class: "pane" }, noPauses, parts.strip, parts.pauseHolder),
     history: h("div", { class: "history", role: "group", "aria-label": "Правки монтажа" }, parts.undo, parts.redo, ...parts.historyTips),

@@ -136,7 +136,7 @@ export const chatDrawer = (
 ): ChatDrawer => {
   const empty = h("p", { class: "muted" }, NO_MESSAGES)
   const log = h("div", { class: "thread" }, ...(messages.length === 0 ? [empty] : messages.map(bubble)))
-  const text = h("wa-textarea", { name: "text", rows: "1", resize: "auto", appearance: "plain", placeholder: "Сообщение студии" },
+  const text = h("wa-textarea", { name: "text", rows: "1", resize: "auto", placeholder: "Сообщение студии" },
     h("span", { slot: "label", class: "visually-hidden" }, "Сообщение"))
   const firstModel = models.find((id) => id === project.model) ?? models[0] ?? ""
   const firstEffort = project.effort ?? "medium"

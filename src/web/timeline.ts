@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { lengthOf } from "../shared/plan.ts"
 import {
-  assemble, clipsOf, NO_EDITS, playedSpans, withChoice, withDeleted, withNeighbours, withPauses, within,
+  assemble, clipsOf, NO_EDITS, playedSpans, withChoice, withDeleted, withPauses, within,
   type Clip, type Edits, type Placed, type Take
 } from "../shared/timeline.ts"
 import * as Api from "./api.ts"
@@ -10,7 +10,7 @@ import { h } from "./dom.ts"
 import { formatLength } from "./format.ts"
 import { montage, type Playing } from "./montage.ts"
 import {
-  drawReady, frameOf, GO, notesOf, partsOf, PLAY, refocus, startOf, STOP, textOf,
+  drawReady, frameOf, GO, notesOf, partsOf, refocus, startOf, STOP, textOf,
   type Actions, type Frame, type Hooks, type Loaded, type Panels, type Parts
 } from "./timeline-draw.ts"
 import { onKeys } from "./timeline-keys.ts"
@@ -18,7 +18,6 @@ import { POLL_MS, saver } from "./timeline-save.ts"
 
 export type { Status } from "./timeline-draw.ts"
 
-const AROUND_SECONDS = 2
 const PAUSE_AROUND_SECONDS = 1.5
 
 const placedOf = (loaded: Loaded | undefined, edits: Edits): ReadonlyArray<Placed> => {
@@ -40,9 +39,6 @@ const clipsFrom = (clips: ReadonlyArray<Clip>, block: string): ReadonlyArray<Cli
   const first = clips.findIndex((clip) => clip.block === block)
   return first === -1 ? [] : clips.slice(first)
 }
-
-const aroundClips = (placed: ReadonlyArray<Placed>, own: ReadonlyArray<Clip>, block: string): ReadonlyArray<Clip> =>
-  withNeighbours(clipsOf(placed), block, own, AROUND_SECONDS)
 
 const editKey = (edits: Edits): string => JSON.stringify([
   edits.order,
@@ -78,6 +74,16 @@ interface State {
   pending: { readonly loaded: Loaded; readonly ticket: Ticket } | undefined
 }
 
+const revealWithinStrip = (root: HTMLElement, selector: string): void => {
+  const item = root.querySelector(selector)
+  const strip = item?.closest(".map, .blocks")
+  if (!item || !strip) return
+  const { left, right } = item.getBoundingClientRect()
+  const bounds = strip.getBoundingClientRect()
+  if (left < bounds.left) strip.scrollLeft += left - bounds.left
+  else if (right > bounds.right) strip.scrollLeft += right - bounds.right
+}
+
 const display = (parts: Parts, state: State) => {
   const placedNow = (): ReadonlyArray<Placed> => placedOf(state.loaded, state.edits)
 
@@ -111,15 +117,17 @@ const display = (parts: Parts, state: State) => {
   const markPlaying = (playing: Playing | undefined): void => {
     const before = state.playing?.clip.block
     state.playing = playing
-    parts.play.textContent = playing === undefined ? PLAY : STOP
-    const goLabel = playing === undefined ? `${GO}. Пробел` : `${STOP}. Пробел`
-    parts.go.replaceChildren(icon(playing === undefined ? "play" : "stop", goLabel))
-    parts.goTip.textContent = goLabel
     showClock()
     const now = playing?.clip.block
     if (before === now) return
+    if (before === undefined || now === undefined) {
+      const label = playing === undefined ? GO : STOP
+      parts.go.replaceChildren(icon(playing === undefined ? "play" : "stop", label))
+      parts.goTip.textContent = label
+    }
     paintPlaying()
-    parts.rowHolder.querySelector<HTMLElement>(".slot.playing")?.scrollIntoView({ block: "nearest", inline: "nearest" })
+    revealWithinStrip(parts.map, ".playing")
+    revealWithinStrip(parts.rowHolder, ".slot.playing")
   }
 
   return { placedNow, showTag, showClock, markPlaying, paintPlaying }
@@ -153,7 +161,7 @@ const redraw = ({ hooks, parts, player, state, ui, view }: Desk, actions: Action
     : undefined
   const open = drawn?.open
   state.open = open
-  for (const button of [parts.play, parts.go, parts.around]) button.disabled = open === undefined
+  parts.go.disabled = open === undefined
   if (open === undefined) for (const button of [parts.strip, parts.prev, parts.next]) button.disabled = true
   parts.undo.disabled = state.history.length === 0
   parts.redo.disabled = state.undone.length === 0
@@ -221,7 +229,6 @@ const actionsOf = (
     setPause: (video, after, removed) => { change(withPauses(state.edits, [{ video, after }], removed)) },
     choose: (block, take) => { change(withChoice(state.edits, block, take)) },
     hear: (block, take) => { hear(takeClips(state.loaded, state.edits, block, take)) },
-    hearAround: (block, take) => { hear(aroundClips(view.placedNow(), takeClips(state.loaded, state.edits, block, take), block)) },
     hearPause: (one, pause) => {
       const window = { start: pause.start - PAUSE_AROUND_SECONDS, end: pause.end + PAUSE_AROUND_SECONDS }
       hear(within(takeClips(state.loaded, state.edits, one.block.id, one.take), window))
@@ -279,9 +286,9 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
     player.play(clips)
   }
 
-  const watch = (from: string | undefined): void => {
+  const watch = (from: string): void => {
     const clips = clipsOf(view.placedNow())
-    const cut = from === undefined ? clips : clipsFrom(clips, from)
+    const cut = clipsFrom(clips, from)
     state.base = lengthOf(clips) - lengthOf(cut)
     player.play(cut)
   }
@@ -319,25 +326,21 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
     player.stop()
     state.selected = block
     draw()
-    parts.rowHolder.querySelector(".clip.selected")?.scrollIntoView({ block: "nearest", inline: "nearest" })
+    revealWithinStrip(parts.map, ".selected")
+    revealWithinStrip(parts.rowHolder, ".clip.selected")
   }
 
   const actions: Actions = actionsOf(card, change, hear, select)
 
-  const toggle = (from: string | undefined): void => {
+  const toggle = (): void => {
     if (state.playing !== undefined) player.stop()
-    else if (state.open !== undefined) watch(from)
+    else if (state.open !== undefined) watch(state.open.block.id)
   }
-  parts.play.addEventListener("click", () => { toggle(undefined) })
-  parts.go.addEventListener("click", () => { toggle(state.open?.block.id) })
+  parts.go.addEventListener("click", toggle)
   parts.undo.addEventListener("click", undo)
   parts.redo.addEventListener("click", redo)
-  parts.around.addEventListener("click", () => {
-    const open = state.open
-    if (open !== undefined) actions.hearAround(open.block.id, open.take)
-  })
   onKeys(ui.panels.tracks, () => ({ placed: view.placedNow(), open: state.open }),
-    { choose: actions.choose, setDeleted: actions.setDeleted, step: select, toggle: () => { toggle(state.open?.block.id) }, undo })
+    { choose: actions.choose, setDeleted: actions.setDeleted, step: select, toggle, undo })
 
   const show = (loaded: Loaded, ticket: Ticket): void => {
     showLoaded(card, draw, loaded, ticket)

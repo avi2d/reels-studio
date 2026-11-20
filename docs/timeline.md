@@ -11,9 +11,11 @@ Three stages work: «Видео и задание», «Дубли и блоки�
 A bar at the top holds the way back, the title, the undo and redo buttons and the chat.
 The player stands next to the stage tabs, the row of blocks and the open stage.
 The row of blocks sits between the tabs and the open stage, with the text, the clip and the pauses of each block.
-«Смотреть монтаж» sits under the player, and «Убрать все паузы» sits on its own stage.
+The round button under the player starts playback from the open block.
+Click the stop icon on that button to stop playback.
 The chat opens as a drawer over the page.
-On a phone the same parts follow one another down the page, under a sticky bar.
+On a phone the player sits above the tabs.
+The take and pause lists scroll without moving the player or the tabs.
 On a phone the tabs read «Видео», «Дубли» and «Паузы», so all three fit on one line.
 
 ## Terms
@@ -37,7 +39,7 @@ Each take carries a short reason in Russian.
 The person chooses a take, drags and deletes blocks, and removes pauses on the page.
 The studio keeps these choices in `timeline.json`, which the chat model cannot write.
 A deleted block and a removed pause stay listed on the page, and one tap returns each.
-«Смотреть монтаж» plays the chosen takes in the order of the row, from the previews, and skips the removed pauses.
+The player shows the chosen takes in order and skips the removed pauses.
 Each preview holds a key frame every half second.
 The studio re-encodes a preview made with the old key frame distance by itself in the background.
 The old preview stays playable until the new one is complete.
@@ -47,8 +49,9 @@ The sound fades over 0.06 s on each side of a cut.
 The undo button in the bar takes back the last change of the cut, and the redo button brings it back.
 A new change after an undo clears what redo could bring back.
 The buttons carry icons, and a tooltip names each when the mouse rests on it or the keyboard focuses it.
-«С соседями» plays a take with the last 2 s of the block before it and the first 2 s of the block after it.
-A strip of numbered blocks shows the whole cut, each as wide as its length, and a click opens that block.
+The numbered buttons under the player have equal widths.
+Scroll the strip to reach more blocks, or click a number to open the block.
+During playback, a play mark shows the current block in the numbered strip and the row of clips.
 The studio writes no video file from the row.
 
 ## Keys
