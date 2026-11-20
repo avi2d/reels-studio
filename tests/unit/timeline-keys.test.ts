@@ -10,7 +10,7 @@ class FakeElement {
     this.datakey = datakey
   }
   closest(selector: string): FakeElement | null {
-    return this.selectors.includes(selector) ? this : null
+    return selector.split(", ").some((part) => this.selectors.includes(part)) ? this : null
   }
   getAttribute(name: string): string | null {
     return name === "data-key" ? this.datakey ?? null : null
@@ -100,6 +100,15 @@ test("a key on a handle of another block acts on the handle block, not the open 
   expect(calls.deleted).toEqual(["deposit"])
   press(handle, "Digit1", "1")
   expect(calls.choose).toEqual(["deposit"])
+})
+
+test("a focused switch keeps Space and the arrow keys, so it neither plays the reel nor moves blocks", () => {
+  const { calls, press } = setup()
+  const control = new FakeElement(["wa-switch"])
+  press(control, "Space", " ")
+  expect(calls.toggle).toBe(0)
+  press(control, "ArrowRight", "ArrowRight")
+  expect(calls.step).toEqual([])
 })
 
 test("arrows away from a handle open the next block", () => {
