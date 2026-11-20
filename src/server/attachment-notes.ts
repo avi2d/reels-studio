@@ -49,24 +49,20 @@ const SPEECH_NOTES = {
 const speechNote = (speech: Speech): string =>
   speech.heard === "words" ? `What is said in it is in ${speech.file}.` : SPEECH_NOTES[speech.heard]
 
-const shownPages = (shown: number): string =>
-  shown === 0 ? "No page is shown to you." : shown === 1 ? "Its first page is shown to you as an image." : `Its first ${shown} pages are shown to you as images.`
-
 export const about = {
   picture: (width: number | undefined, height: number | undefined): string =>
     width === undefined || height === undefined
-      ? "A picture, shown to you as an image."
-      : `A picture of ${width}×${height} pixels, shown to you as an image.`,
-  document: (pages: number, shown: number, textFile: string | undefined): string =>
+      ? "A picture."
+      : `A picture of ${width}×${height} pixels.`,
+  document: (pages: number, textFile: string | undefined): string =>
     [
       `A PDF document of ${pages} ${pages === 1 ? "page" : "pages"}.`,
-      textFile === undefined ? "It holds no text layer, so it is likely a scan: read it from the page images." : `Its text is in ${textFile}.`,
-      shownPages(shown)
+      textFile === undefined ? "It holds no text layer, so it is likely a scan: read it from the page images." : `Its text is in ${textFile}.`
     ].join(" "),
   video: (duration: number | undefined, times: ReadonlyArray<number>, speech: Speech): string =>
     [
       duration === undefined ? "A video." : `A video of ${clock(duration)}.`,
-      `Frames at ${times.map(clock).join(", ")} are shown to you as images.`,
+      `Frames at ${times.map(clock).join(", ")} were rendered as images.`,
       speechNote(speech)
     ].join(" "),
   sound: (duration: number | undefined, speech: Speech): string =>
@@ -90,6 +86,22 @@ export interface Seen {
 
 export const attachedLines = (files: ReadonlyArray<Seen>): string =>
   files.map((file) => `- attached/${file.name}: ${file.about}`).join("\n")
+
+export const deliveryNote = (
+  kind: FileKind,
+  shared: string,
+  shown: ReadonlyArray<string>,
+  delivered: number,
+  unreadable: ReadonlyArray<string>
+): string => {
+  if (shown.length === 0) return ""
+  const noun = kind === "picture" ? "image" : kind === "document" ? "page images" : "frames"
+  const readable = shown.length - unreadable.length
+  const omitted = shown.filter((file) => !unreadable.includes(file)).slice(delivered).map((file) => `${shared}/${file}`)
+  const rest = omitted.length === 0 ? "" : delivered === 0 ? ` Read them at ${omitted.join(", ")}.` : ` Read the rest at ${omitted.join(", ")}.`
+  const missing = unreadable.length === 0 ? "" : ` ${unreadable.map((file) => `${shared}/${file}`).join(", ")} could not be read.`
+  return `${delivered} of ${readable} ${noun} attached to this message.${rest}${missing}`
+}
 
 export const promptText = (text: string, files: ReadonlyArray<Seen>): string => {
   if (files.length === 0) return text

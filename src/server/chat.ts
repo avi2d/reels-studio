@@ -307,7 +307,7 @@ export class Chat extends Context.Service<Chat, {
               Effect.catchTag("ApiError", (error) => Effect.logError("the reply was not saved", error.message))
             ))
           const files = yield* attachments.show(dir, names)
-          const known = `${yield* heardVideos(id)}\n${attachedNote(yield* attachments.listed(dir))}`
+          const known = `${yield* heardVideos(id)}\n${attachedNote(yield* attachments.listed(dir, files))}`
           const launched = yield* command(dir, text, files, model, effort, known).pipe(
             Effect.tapError((error) => Effect.logError("pi did not start", error)),
             Effect.option

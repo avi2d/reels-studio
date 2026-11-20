@@ -1,8 +1,8 @@
-import { Context, Effect, FileSystem, Layer, Schema } from "effect"
+import { Context, Effect, FileSystem, Layer, Option, Schema } from "effect"
 import type { ChildProcessSpawner } from "effect/process"
 import { kindOfName, type FileKind } from "../shared/chat.ts"
 import { ApiError, notFound, orUnavailable } from "./api-error.ts"
-import { about, attachedLines, fileProbeArgs, frameArgs, frameTimes, pagesText, pictureArgs, type Seen, SHOWN_PAGES, soundArgs, type Speech, speechText } from "./attachment-notes.ts"
+import { about, attachedLines, deliveryNote, fileProbeArgs, frameArgs, frameTimes, pagesText, pictureArgs, type Seen, SHOWN_PAGES, soundArgs, type Speech, speechText } from "./attachment-notes.ts"
 import { isHdr } from "./media-commands.ts"
 import { decodeTranscript, tool } from "./media-jobs.ts"
 import { Projects } from "./projects.ts"
@@ -10,7 +10,7 @@ import { Settings } from "./settings.ts"
 
 const Kind = Schema.Literals(["picture", "document", "video", "sound", "other"])
 
-const Look = Schema.Struct({ kind: Kind, about: Schema.String, shown: Schema.Array(Schema.String) })
+const Look = Schema.Struct({ version: Schema.Literal(2), kind: Kind, summary: Schema.String, shown: Schema.Array(Schema.String) })
 type Look = typeof Look.Type
 const LookFile = Schema.fromJsonString(Look)
 const decodeLook = Schema.decodeUnknownEffect(LookFile)
@@ -95,11 +95,11 @@ const lookAtPicture = Effect.fnUntraced(function*(place: Place) {
   const settings = yield* Settings
   const picture = streamOf(yield* probe(place.file), "video")
   yield* tool("ffmpeg", pictureArgs(place.file, `${place.view}/picture.jpg`), settings.heavy)
-  return { kind: "picture", about: about.picture(picture?.width, picture?.height), shown: ["picture.jpg"] } satisfies Look
+  return { version: 2, kind: "picture", summary: about.picture(picture?.width, picture?.height), shown: ["picture.jpg"] } satisfies Look
 })
 
 const lookAtSound = Effect.fnUntraced(function*(place: Place, facts: Probe) {
-  return { kind: "sound", about: about.sound(durationOf(facts), yield* listenIf(place, facts)), shown: [] } satisfies Look
+  return { version: 2, kind: "sound", summary: about.sound(durationOf(facts), yield* listenIf(place, facts)), shown: [] } satisfies Look
 })
 
 const lookAtVideo = Effect.fnUntraced(function*(place: Place) {
@@ -113,7 +113,7 @@ const lookAtVideo = Effect.fnUntraced(function*(place: Place) {
   const hdr = isHdr(picture.color_transfer)
   yield* Effect.forEach(times, (at, index) =>
     tool("ffmpeg", frameArgs(place.file, at, hdr, `${place.view}/${shown[index] ?? "frame.jpg"}`), settings.heavy), { discard: true })
-  return { kind: "video", about: about.video(duration, times, yield* listenIf(place, facts)), shown } satisfies Look
+  return { version: 2, kind: "video", summary: about.video(duration, times, yield* listenIf(place, facts)), shown } satisfies Look
 })
 
 const lookAtDocument = Effect.fnUntraced(function*(place: Place) {
@@ -126,7 +126,7 @@ const lookAtDocument = Effect.fnUntraced(function*(place: Place) {
   const hasText = facts.texts.some((text) => text !== "")
   if (hasText) yield* fs.writeFileString(`${place.view}/text.txt`, pagesText(facts.texts))
   const shown = Array.from({ length: Math.min(facts.pages, SHOWN_PAGES) }, (_, index) => `page-${index + 1}.jpg`)
-  return { kind: "document", about: about.document(facts.pages, shown.length, hasText ? `${place.shared}/text.txt` : undefined), shown } satisfies Look
+  return { version: 2, kind: "document", summary: about.document(facts.pages, hasText ? `${place.shared}/text.txt` : undefined), shown } satisfies Look
 })
 
 const lookAtSoundFile = Effect.fnUntraced(function*(place: Place) {
@@ -138,7 +138,7 @@ const LOOKS = {
   document: lookAtDocument,
   video: lookAtVideo,
   sound: lookAtSoundFile,
-  other: () => Effect.succeed({ kind: "other", about: about.other(), shown: [] } satisfies Look)
+  other: () => Effect.succeed({ version: 2, kind: "other", summary: about.other(), shown: [] } satisfies Look)
 } satisfies Readonly<Record<FileKind, unknown>>
 
 const savedLook = Effect.fnUntraced(function*(place: Place) {
@@ -162,20 +162,22 @@ const lookAt = Effect.fnUntraced(function*(dir: string, name: string) {
   const kind = kindOfName(name)
   return yield* freshLook(place, kind).pipe(
     Effect.tapError((error) => Effect.logError("an attached file was not looked at", name, error)),
-    Effect.orElseSucceed((): Look => ({ kind, about: about.failed(kind), shown: [] }))
+    Effect.orElseSucceed((): Look => ({ version: 2, kind, summary: about.failed(kind), shown: [] }))
   )
 })
 
 const imagesOf = Effect.fnUntraced(function*(dir: string, name: string, look: Look) {
   const fs = yield* FileSystem.FileSystem
   const place = placeOf(dir, name)
-  return yield* Effect.forEach(look.shown, (file) =>
-    Effect.map(fs.readFile(`${place.view}/${file}`), (bytes): Image => ({
-      type: "image",
-      data: Buffer.from(bytes).toString("base64"),
-      mimeType: "image/jpeg"
-    })))
-}, Effect.orElseSucceed((): ReadonlyArray<Image> => []))
+  const readable: Array<{ readonly file: string; readonly image: Image }> = []
+  const unreadable: Array<string> = []
+  for (const file of look.shown) {
+    const bytes = yield* Effect.option(fs.readFile(`${place.view}/${file}`))
+    if (Option.isNone(bytes)) unreadable.push(file)
+    else readable.push({ file, image: { type: "image", data: Buffer.from(bytes.value).toString("base64"), mimeType: "image/jpeg" } })
+  }
+  return { readable, unreadable }
+})
 
 const attachedNames = Effect.fnUntraced(function*(dir: string) {
   const fs = yield* FileSystem.FileSystem
@@ -188,7 +190,7 @@ const UNAVAILABLE = "Файл недоступен. Попробуйте отк�
 
 export class Attachments extends Context.Service<Attachments, {
   readonly show: (dir: string, names: ReadonlyArray<string>) => Effect.Effect<ReadonlyArray<Shown>>
-  readonly listed: (dir: string) => Effect.Effect<string>
+  readonly listed: (dir: string, current: ReadonlyArray<Shown>) => Effect.Effect<string>
   readonly cover: (id: string, name: string) => Effect.Effect<string, ApiError>
 }>()("reels-studio/Attachments") {
   static readonly layer = Layer.effect(
@@ -198,32 +200,32 @@ export class Attachments extends Context.Service<Attachments, {
       const context = yield* Effect.context<FileSystem.FileSystem | Settings | ChildProcessSpawner.ChildProcessSpawner>()
 
       const show = Effect.fn("Attachments.show")(function*(dir: string, names: ReadonlyArray<string>) {
-        const loaded = yield* Effect.forEach(names, (name) => Effect.gen(function*() {
+        const examined = yield* Effect.forEach(names, (name) => Effect.gen(function*() {
           const look = yield* lookAt(dir, name)
-          return { name, look, shared: placeOf(dir, name).shared, images: yield* imagesOf(dir, name, look) }
+          const read = yield* imagesOf(dir, name, look)
+          return { name, look, shared: placeOf(dir, name).shared, read }
         }))
         let left = MOST_IMAGES
-        return loaded.map(({ name, look, shared, images }) => {
-          const delivered = images.slice(0, left)
+        return examined.map(({ name, look, shared, read }) => {
+          const delivered = read.readable.slice(0, left)
           left -= delivered.length
-          const total = look.shown.length
-          const omitted = look.shown.slice(delivered.length).map((file) => `${shared}/${file}`)
-          const noun = look.kind === "picture" ? "image" : look.kind === "document" ? "page images" : "frames"
-          const about = total === 0 || delivered.length === total
-            ? look.about
-            : delivered.length === 0
-              ? `${look.about} Included with this message: 0 of ${total} ${noun}. Read them at ${omitted.join(", ")}.`
-              : `${look.about} Included with this message: ${delivered.length} of ${total} ${noun}. Read the rest at ${omitted.join(", ")}.`
-          return { name, about, images: delivered }
+          const note = deliveryNote(look.kind, shared, look.shown, delivered.length, read.unreadable)
+          return { name, about: note === "" ? look.summary : `${look.summary} ${note}`, images: delivered.map((pair) => pair.image) }
         })
       }, Effect.provideContext(context))
 
-      const listed = Effect.fn("Attachments.listed")(function*(dir: string) {
+      const listed = Effect.fn("Attachments.listed")(function*(dir: string, current: ReadonlyArray<Shown>) {
         const names = yield* attachedNames(dir)
-        const seen = yield* Effect.forEach(names, (name) => Effect.map(savedLook(placeOf(dir, name)), (look): Seen => ({
-          name,
-          about: look?.about ?? about.failed(kindOfName(name))
-        })))
+        const sent = new Map(current.map((file) => [file.name, file.about]))
+        const seen = yield* Effect.forEach(names, (name) => Effect.gen(function*() {
+          const hit = sent.get(name)
+          if (hit !== undefined) return { name, about: hit }
+          const place = placeOf(dir, name)
+          const look = yield* savedLook(place)
+          if (look === undefined) return { name, about: about.failed(kindOfName(name)) }
+          const views = look.shown.length === 0 ? "" : ` Not attached to this message. Views: ${look.shown.map((file) => `${place.shared}/${file}`).join(", ")}.`
+          return { name, about: `${look.summary}${views}` }
+        }))
         return attachedLines(seen)
       }, Effect.orElseSucceed(() => ""), Effect.provideContext(context))
 

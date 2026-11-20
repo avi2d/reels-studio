@@ -136,7 +136,27 @@ export const attachTray = (projectId: string, onProblem: (message: string) => vo
           Effect.tapError(() => Effect.sync(() => { entry.status.textContent = formatSize(entry.file.size) }))
         )))
 
-  const sentView = (): HTMLElement => fileList(picked.map((entry) => fileItem(entry.file.name, HAS_COVER.has(kindOfName(entry.file.name)) ? Api.coverUrl(projectId, entry.file.name) : undefined)))
+  const sentView = (): HTMLElement => {
+    const owned: Array<string> = []
+    const view = fileList(picked.map((entry) => {
+      const kind = kindOfName(entry.file.name)
+      const source = kind === "picture" ? URL.createObjectURL(entry.file) : undefined
+      if (source !== undefined) owned.push(source)
+      return fileItem(entry.file.name, source)
+    }))
+    if (typeof document !== "undefined" && owned.length > 0) {
+      const shown = { seen: false }
+      const observer = new MutationObserver(() => {
+        if (view.isConnected) shown.seen = true
+        else if (shown.seen) {
+          for (const source of owned) URL.revokeObjectURL(source)
+          observer.disconnect()
+        }
+      })
+      observer.observe(document.body, { childList: true, subtree: true })
+    }
+    return view
+  }
 
   const clear = (): void => {
     for (const entry of picked) {
