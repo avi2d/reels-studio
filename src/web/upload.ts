@@ -25,8 +25,8 @@ const resumeOffset = Effect.fnUntraced(function*(url: string) {
   return yield* offsetFrom(response)
 })
 
-const start = Effect.fnUntraced(function*(projectId: string, file: File) {
-  const response = yield* send(`/api/projects/${projectId}/uploads`, {
+const start = Effect.fnUntraced(function*(endpoint: string, file: File) {
+  const response = yield* send(endpoint, {
     method: "POST",
     headers: { ...TUS, "upload-length": String(file.size), "upload-metadata": encodeMetadata(file.name) }
   })
@@ -59,19 +59,29 @@ const sendRest = (
     yield* sendRest(url, file, next, onProgress)
   })
 
+export interface Shelf {
+  readonly endpoint: string
+  readonly key: string
+}
+
+export const videoShelf = (projectId: string): Shelf => ({ endpoint: `/api/projects/${projectId}/uploads`, key: projectId })
+
+export const attachmentShelf = (projectId: string): Shelf => ({ endpoint: `/api/projects/${projectId}/attachments`, key: `${projectId}:attached` })
+
 export const upload = (
-  projectId: string,
+  { endpoint, key: shelfKey }: Shelf,
   file: File,
   onProgress: (progress: Progress) => void
-): Effect.Effect<void, Failed> => {
-  const key = `reels-upload:${projectId}:${file.name}:${file.size}:${file.lastModified}`
+): Effect.Effect<string, Failed> => {
+  const key = `reels-upload:${shelfKey}:${file.name}:${file.size}:${file.lastModified}`
   const attempt = Effect.gen(function*() {
     const saved = localStorage.getItem(key)
     const known = saved === null ? undefined : yield* resumeOffset(saved)
-    const url = saved !== null && known !== undefined ? saved : yield* start(projectId, file)
+    const url = saved !== null && known !== undefined ? saved : yield* start(endpoint, file)
     localStorage.setItem(key, url)
     yield* sendRest(url, file, known ?? 0, onProgress)
     localStorage.removeItem(key)
+    return url
   })
   if (file.size === 0) return Effect.fail(new Failed({ message: "Этот файл пустой. Выберите другой." }))
   return attempt.pipe(

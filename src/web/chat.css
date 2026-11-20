@@ -26,18 +26,30 @@
 .bubble .note { display: block; margin-top: 6px; font-size: 13px; }
 .bubble.assistant .note { color: var(--wa-color-danger-on-quiet); }
 .step { align-self: flex-start; }
+.bubble:has(.attached) { display: flex; flex-direction: column; gap: 6px; }
+.attached { display: flex; flex-wrap: wrap; gap: 6px; white-space: normal; }
+.attached li { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; padding: 4px 10px 4px 4px; border-radius: 10px; background: color-mix(in srgb, currentColor 14%, transparent); font-size: 13px; }
+.attached .name, .tray .name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.thumb { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 7px; object-fit: cover; background: var(--wa-color-neutral-fill-quiet); color: var(--wa-color-text-quiet); font-size: 18px; }
+
+.tray { display: flex; flex-direction: column; gap: 4px; max-height: 168px; overflow-y: auto; overscroll-behavior: contain; }
+.tray li { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 4px 2px 4px 4px; border-radius: 12px; background: var(--wa-color-surface-default); border: 1px solid var(--wa-color-surface-border); font-size: 13px; }
+.tray .name { flex: 1; }
+.tray .size { flex: none; color: var(--wa-color-text-quiet); font-variant-numeric: tabular-nums; }
+.tray.sending .remove { visibility: hidden; }
 
 .say { display: flex; flex-direction: column; gap: 8px; padding: 0 12px calc(12px + env(safe-area-inset-bottom, 0px)); }
 .engine { color: var(--wa-color-text-quiet); font-size: 13px; }
 .engine summary { display: flex; align-items: center; min-height: 32px; padding: 0 4px; cursor: pointer; }
 .engine[open] { display: flex; flex-direction: column; gap: 8px; padding-bottom: 4px; }
-.composer { position: relative; display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 14px; border: 1px solid var(--wa-color-surface-border); border-radius: 18px; background: var(--wa-color-surface-default); }
+.composer { position: relative; display: flex; align-items: center; gap: 2px; padding: 6px; border: 1px solid var(--wa-color-surface-border); border-radius: 18px; background: var(--wa-color-surface-default); }
 .composer:has(wa-textarea:focus-within) { outline: var(--wa-focus-ring-width) solid var(--wa-color-focus); }
 .engine wa-select[name="model"] { flex-basis: 200px; }
 .composer wa-textarea { flex: 1; min-width: 0; max-height: 130px; overflow-y: auto; }
 
 .composer wa-textarea::part(form-control-label) { position: absolute; }
 .composer wa-textarea::part(textarea-wrapper) { border: 0; background: transparent; outline: none; }
+.composer wa-textarea::part(textarea) { padding-inline-start: 2px; }
 
 @media (hover: hover) and (pointer: fine) {
   .engine summary:hover { color: var(--wa-color-text-normal); }
