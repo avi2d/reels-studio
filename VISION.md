@@ -40,5 +40,5 @@ It owns the path from an uploaded original to a separate video for each platform
 - Publishing is refused, and the person does it in each app.
 - Storing videos in a cloud is refused, and the owner's own backup holds them.
 
-A change aligns when it lets the person get a correct reel with fewer words and no technical knowledge.
+A change aligns when it lets the person get a correct video with fewer words and no technical knowledge.
 A change should be resisted when it sends a video to a cloud service other than the chat model, alters an original or shows the person a technical term.
