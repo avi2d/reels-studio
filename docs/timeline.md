@@ -28,10 +28,15 @@ On a phone the tabs read «Видео», «Дубли» and «Паузы», so a
 
 ## Who decides what
 
-As soon as the studio has heard every uploaded video, it asks the chat model by itself to write `blocks.json`, without waiting for the plan or the yes.
+As soon as the studio has heard every uploaded video, it asks the chat model by itself to write `blocks.json`, without waiting for the plan, the gaze or the yes.
+The first gathering ranks the takes by speech alone.
+When the gaze of every heard video is settled, the studio gathers once more, so the takes stand by speech and gaze.
 The stages «Дубли и блоки» and «Паузы и склейки» say that the studio is gathering the blocks meanwhile.
-Once the blocks are written, the studio chooses the take ranked first in every block the person has not chosen and shortens every pause of the chosen takes to 0.2 s.
-It does the same again after a new video is heard, and keeps the videos it last asked about in `gathered.json`.
+Once the blocks are written, the page shows the take ranked first in every block the person has not chosen, and the studio shortens every pause of the shown takes to 0.2 s, except the pauses the person returned.
+A new heard video gathers the blocks again, and a gaze that settles after the last gathering gathers them once more.
+The studio keeps the heard videos and the settled gaze it last asked about in `gathered.json`.
+When a gathering ends without a ready row of blocks, the studio keeps the attempt with a failed mark in `gathered.json`, and the stage «Дубли и блоки» says that the studio could not gather the blocks and keeps the «Собрать блоки» button.
+The next heard video or the next settled gaze tries again.
 The request and the answer do not show in the chat.
 A message the person sends stops the gathering, and the studio asks again once the answer ends.
 The chat model reads the transcript and the gaze text of every video when it writes `blocks.json`.
@@ -44,6 +49,8 @@ Each take carries a short reason in Russian.
 
 The person chooses a take, drags and deletes blocks, and removes pauses on the page.
 The studio keeps these choices in `timeline.json`, which the chat model cannot write.
+A pause the person returns stays in the `kept` list of `timeline.json`, and the studio never shortens it by itself, neither after a gathering nor after the yes.
+Removing the pause by hand drops it from that list.
 A deleted block and a removed pause stay listed on the page, and one tap returns each.
 The player shows the chosen takes in order and skips the removed pauses.
 Each preview holds a key frame every half second.
@@ -92,5 +99,5 @@ Each video folder holds these next to `plan.json`:
 | `gaze/<video>.json` | One sample per 0.2 s: `camera`, `away` or `hidden` |
 | `gaze/<video>.txt` | The share of looks into the camera for each stretch of speech, which the chat model reads |
 | `blocks.json` | The blocks and their takes, written by the chat model |
-| `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes and the removed pauses |
-| `gathered.json` | The heard videos the studio last asked the chat model to gather blocks from |
+| `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses and the returned pauses |
+| `gathered.json` | The heard videos and the settled gaze the studio last asked the chat model to gather blocks from, with a failed mark when the last gathering left no ready row |

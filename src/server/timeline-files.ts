@@ -1,5 +1,5 @@
 import { Effect, FileSystem, Option, Result, Schema } from "effect"
-import type { Transcript } from "../shared/plan.ts"
+import type { Transcript, VideoView } from "../shared/plan.ts"
 import { Blocks, Edits, NO_EDITS, soundBlocks, type Gaze, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
 import { places, readGaze, readTranscript } from "./media-jobs.ts"
 
@@ -14,6 +14,9 @@ const readEdits = Effect.fnUntraced(function*(dir: string) {
   if (!(yield* fs.exists(file))) return NO_EDITS
   return Option.getOrElse(decodeEdits(yield* fs.readFileString(file)), () => NO_EDITS)
 })
+
+export const readyTranscripts = (videos: ReadonlyArray<VideoView>): ReadonlyMap<string, Transcript> =>
+  new Map(videos.flatMap((video): ReadonlyArray<readonly [string, Transcript]> => video.state === "ready" ? [[video.name, video.transcript]] : []))
 
 export const writeEdits = Effect.fnUntraced(function*(dir: string, edits: Edits) {
   const fs = yield* FileSystem.FileSystem

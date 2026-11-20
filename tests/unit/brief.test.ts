@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { afterYes, approves, planView } from "../../src/shared/brief.ts"
 import type { Transcript } from "../../src/shared/plan.ts"
-import { NO_EDITS, withChoice, type Block } from "../../src/shared/timeline.ts"
+import { NO_EDITS, withChoice, withManualPauses, type Block } from "../../src/shared/timeline.ts"
 
 const word = (start: number, end: number, text: string) => ({ start, end, text })
 
@@ -26,9 +26,9 @@ test("a plan changed after the yes waits for a new yes instead of showing as app
   expect(planView("  ", approval).state).toBe("none")
 })
 
-test("after the yes the first ranked take is chosen and a long pause leaves 0.2 s, not the whole silence", () => {
+test("after the yes the studio shortens pauses without pinning its own pick as the person chose", () => {
   const { edits, done } = afterYes([advance, deposit], NO_EDITS, transcripts)
-  expect(edits.chosen).toEqual([{ block: "advance", video: "a", from: 2 }, { block: "deposit", video: "a", from: 4 }])
+  expect(edits.chosen).toEqual([])
   expect(edits.pauses).toEqual([{ video: "a", after: 3 }, { video: "a", after: 5 }])
   expect(done).toEqual([
     { kind: "take", block: "Аванс", take: 1, of: 2, reason: "Без запинок" },
@@ -39,8 +39,16 @@ test("after the yes the first ranked take is chosen and a long pause leaves 0.2 
 
 test("after the yes a take the person chose stays chosen rather than going back to the first ranked", () => {
   const picked = withChoice(NO_EDITS, "advance", take(0, 1, "Смотрит в сторону"))
-  const { done } = afterYes([advance], picked, transcripts)
+  const { edits, done } = afterYes([advance], picked, transcripts)
+  expect(edits.chosen).toEqual(picked.chosen)
   expect(done[0]).toEqual({ kind: "take", block: "Аванс", take: 2, of: 2, reason: "Смотрит в сторону" })
+})
+
+test("after the yes a pause the person returned stays long instead of being shortened again", () => {
+  const returned = withManualPauses(NO_EDITS, [{ video: "a", after: 3 }], false)
+  const { edits, done } = afterYes([advance], returned, transcripts)
+  expect(edits.pauses).toEqual([])
+  expect(done[done.length - 1]).toEqual({ kind: "pauses", count: 0, seconds: expect.closeTo(0, 6) })
 })
 
 test("a yes with no blocks changes nothing and says so instead of listing an empty cut", () => {

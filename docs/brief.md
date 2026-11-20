@@ -19,9 +19,8 @@ The plan covers every stage the studio can do, the takes, the pauses, the player
 The person agrees by pressing «Согласна» under the plan, or by writing «Согласна» or «Согласен» as the whole message.
 After the chat model answers that message, the studio works without another question:
 
-- It chooses the current take of every block, which is the take ranked first unless the person chose another.
-  The studio already chose these takes when it gathered the blocks, as [docs/timeline.md](timeline.md) says, so the yes mostly confirms them.
-- It shortens every pause of half a second or more in the chosen takes to 0.2 s.
+- It shows the current take of every block, which is the take ranked first unless the person chose another, as [docs/timeline.md](timeline.md) says.
+- It shortens every pause of half a second or more in the shown takes to 0.2 s, except the pauses the person returned.
 - It saves the yes with the plan text and a list of what it did to `approval.json`.
 
 The card then lists every chosen take with its reason and the seconds the pauses took off.

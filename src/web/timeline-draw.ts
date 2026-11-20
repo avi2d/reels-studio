@@ -1,5 +1,5 @@
 import { lengthOf, type Transcript } from "../shared/plan.ts"
-import { arrange, assemble, chosenTake, withPauses, type Edits, type GazeFailure, type Placed, type Take, type TimelinePage, type TimelineView } from "../shared/timeline.ts"
+import { arrange, assemble, chosenTake, withManualPauses, type Edits, type GazeFailure, type Placed, type Take, type TimelinePage, type TimelineView } from "../shared/timeline.ts"
 import type WaButton from "@awesome.me/webawesome/dist/components/button/button.js"
 import { button, focusWhenReady, iconButton, tooltip } from "./controls.ts"
 import { h } from "./dom.ts"
@@ -56,7 +56,7 @@ const looksNote = (looks: TimelineView["looks"]): ReadonlyArray<HTMLElement> => 
   }
   return [
     ...(waiting === "" ? [] : [h("p", { class: "muted", role: "status" },
-      `Студия ещё измеряет взгляд в камеру в видео: ${waiting}. Когда закончит, попросите в чате расставить дубли заново.`)]),
+      `Студия ещё измеряет взгляд в камеру в видео: ${waiting}. Когда закончит, студия соберёт блоки заново сама.`)]),
     ...[...failures].map(([reason, videos]) => h("p", { class: "muted" },
       `Взгляд в камеру не удалось измерить в видео: ${videos.join(", ")}. Дубли из них расставлены только по речи. ${GAZE_CAUSE[reason]}`))
   ]
@@ -69,9 +69,9 @@ export const notesOf = ({ transcripts, view }: Loaded, ask: (text: string) => vo
   if (view.gathering && timeline.state !== "ready") return [h("p", { class: "muted", role: "status" }, GATHERING)]
   const regathering = view.gathering ? [h("p", { class: "muted", role: "status" }, REGATHERING)] : []
   if (timeline.state !== "ready") {
-    return timeline.state === "none"
-      ? [h("p", { class: "muted" }, NO_BLOCKS), gather("Собрать блоки")]
-      : [h("p", { class: "error" }, "Блоки не прочитались. Попросите студию собрать их заново."), gather("Собрать блоки заново")]
+    if (timeline.state === "unreadable") return [h("p", { class: "error" }, "Блоки не прочитались. Попросите студию собрать их заново."), gather("Собрать блоки заново")]
+    if (view.gatherFailed) return [h("p", { class: "error" }, "Студия не смогла собрать блоки. Новое видео или измеренный взгляд попробуют ещё раз."), gather("Собрать блоки")]
+    return [h("p", { class: "muted" }, NO_BLOCKS), gather("Собрать блоки")]
   }
   const dropped = timeline.dropped === 0 ? [] : [h("p", { class: "muted" },
     `Студия пропустила дубли, которые не нашла в видео: ${timeline.dropped}. Попросите в чате собрать блоки заново.`)]
@@ -188,7 +188,7 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { reado
   const strip = stripWords(allRemoved)
   parts.strip.textContent = strip.label
   parts.strip.title = strip.hint
-  parts.strip.onclick = () => { actions.change(withPauses(edits, pauses, !allRemoved)) }
+  parts.strip.onclick = () => { actions.change(withManualPauses(edits, pauses, !allRemoved)) }
   parts.prev.disabled = index === 0
   parts.next.disabled = index >= placed.length - 1
   parts.prev.onclick = () => { actions.select(placed[index - 1]?.block.id ?? "") }

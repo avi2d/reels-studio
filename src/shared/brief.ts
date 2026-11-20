@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { lengthOf, type Transcript } from "./plan.ts"
-import { assemble, withChoice, withPauses, type Block, type Edits } from "./timeline.ts"
+import { assemble, keptOf, samePause, withPauses, type Block, type Edits } from "./timeline.ts"
 
 export const MAX_BRIEF = 4000
 
@@ -44,9 +44,9 @@ export const afterYes = (
 ): { readonly edits: Edits; readonly done: ReadonlyArray<Done> } => {
   const placed = assemble(blocks, edits, transcripts)
   if (placed.length === 0) return { edits, done: [{ kind: "no-blocks" }] }
-  const chosen = placed.reduce((next, one) => withChoice(next, one.block.id, one.take), edits)
-  const pauses = placed.flatMap((one) => one.pauses.filter((pause) => !pause.removed).map((pause) => ({ video: one.take.video, after: pause.after })))
-  const next = withPauses(chosen, pauses, true)
+  const kept = keptOf(edits)
+  const pauses = placed.flatMap((one) => one.pauses.filter((pause) => !pause.removed && !kept.some((hold) => samePause(hold, { video: one.take.video, after: pause.after }))).map((pause) => ({ video: one.take.video, after: pause.after })))
+  const next = withPauses(edits, pauses, true)
   const takes = placed.map((one): Done => ({
     kind: "take",
     block: one.block.title,

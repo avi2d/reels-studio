@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { lengthOf } from "../shared/plan.ts"
 import {
-  assemble, clipsOf, NO_EDITS, playedSpans, withChoice, withDeleted, withPauses, within,
+  assemble, clipsOf, NO_EDITS, playedSpans, withChoice, withDeleted, withManualPauses, within,
   type Clip, type Edits, type Placed, type Take
 } from "../shared/timeline.ts"
 import * as Api from "./api.ts"
@@ -44,7 +44,8 @@ const editKey = (edits: Edits): string => JSON.stringify([
   edits.order,
   edits.deleted,
   edits.chosen.map((one) => [one.block, one.video, one.from]),
-  edits.pauses.map((one) => [one.video, one.after])
+  edits.pauses.map((one) => [one.video, one.after]),
+  (edits.kept ?? []).map((one) => [one.video, one.after])
 ])
 
 const adoptServer = (local: Edits, acked: Edits, server: Edits): boolean =>
@@ -226,7 +227,7 @@ const actionsOf = (
       hooks.openTakes()
     },
     reorder: (blocks) => { change({ ...state.edits, order: [...blocks] }) },
-    setPause: (video, after, removed) => { change(withPauses(state.edits, [{ video, after }], removed)) },
+    setPause: (video, after, removed) => { change(withManualPauses(state.edits, [{ video, after }], removed)) },
     choose: (block, take) => { change(withChoice(state.edits, block, take)) },
     hear: (block, take) => { hear(takeClips(state.loaded, state.edits, block, take)) },
     hearPause: (one, pause) => {

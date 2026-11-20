@@ -31,17 +31,18 @@ const Block = Schema.Struct({ ...blockFields, takes: Schema.NonEmptyArray(Take) 
 export type Block = typeof Block.Type
 
 const PauseRef = Schema.Struct({ video: Schema.String, after: Schema.Int })
-type PauseRef = typeof PauseRef.Type
+export type PauseRef = typeof PauseRef.Type
 
 export const Edits = Schema.Struct({
   order: Schema.Array(Schema.String),
   deleted: Schema.Array(Schema.String),
   chosen: Schema.Array(Schema.Struct({ block: Schema.String, video: Schema.String, from: Schema.Int })),
-  pauses: Schema.Array(PauseRef)
+  pauses: Schema.Array(PauseRef),
+  kept: Schema.optionalKey(Schema.Array(PauseRef))
 })
 export type Edits = typeof Edits.Type
 
-export const NO_EDITS: Edits = { order: [], deleted: [], chosen: [], pauses: [] }
+export const NO_EDITS: Edits = { order: [], deleted: [], chosen: [], pauses: [], kept: [] }
 
 export const GazeFailure = Schema.Literals(["no-tool", "tool-failed", "file-unreadable", "video-unreadable"])
 export type GazeFailure = typeof GazeFailure.Type
@@ -60,7 +61,7 @@ export const TimelineView = Schema.Struct({
 })
 export type TimelineView = typeof TimelineView.Type
 
-export const TimelinePage = Schema.Struct({ ...TimelineView.fields, gathering: Schema.Boolean })
+export const TimelinePage = Schema.Struct({ ...TimelineView.fields, gathering: Schema.Boolean, gatherFailed: Schema.Boolean })
 export type TimelinePage = typeof TimelinePage.Type
 
 type Transcripts = ReadonlyMap<string, Transcript>
@@ -126,7 +127,9 @@ export interface Pause extends Span {
   readonly removed: boolean
 }
 
-const samePause = (left: PauseRef, right: PauseRef): boolean => left.video === right.video && left.after === right.after
+export const samePause = (left: PauseRef, right: PauseRef): boolean => left.video === right.video && left.after === right.after
+
+export const keptOf = (edits: Edits): ReadonlyArray<PauseRef> => edits.kept ?? []
 
 // A word ends where the silence after it starts, so the stretch of a take runs to the next word of its video.
 export const pausesOf = (transcript: Transcript, take: Take, edits: Edits): ReadonlyArray<Pause> =>
@@ -201,6 +204,12 @@ export const withDeleted = (edits: Edits, id: string, deleted: boolean): Edits =
 })
 
 export const withPauses = (edits: Edits, pauses: ReadonlyArray<PauseRef>, removed: boolean): Edits => {
-  const kept = edits.pauses.filter((old) => !pauses.some((pause) => samePause(old, pause)))
-  return { ...edits, pauses: removed ? [...kept, ...pauses] : kept }
+  const left = edits.pauses.filter((old) => !pauses.some((pause) => samePause(old, pause)))
+  return { ...edits, pauses: removed ? [...left, ...pauses] : left }
+}
+
+export const withManualPauses = (edits: Edits, pauses: ReadonlyArray<PauseRef>, removed: boolean): Edits => {
+  const withCut = withPauses(edits, pauses, removed)
+  const keptNow = keptOf(edits).filter((old) => !pauses.some((pause) => samePause(old, pause)))
+  return removed ? { ...withCut, kept: keptNow } : { ...withCut, kept: [...keptNow, ...pauses.filter((pause) => !keptNow.some((old) => samePause(old, pause)))] }
 }

@@ -176,7 +176,7 @@ const videos = Layer.mergeAll(
     const gather = yield* Gather
     const id = yield* param("id")
     const view = yield* media.timeline(id)
-    return json({ ...view, gathering: yield* gather.running(id) } satisfies TimelinePage)
+    return json({ ...view, gathering: yield* gather.running(id), gatherFailed: yield* gather.failed(id) } satisfies TimelinePage)
   }))),
   HttpRouter.add("PUT", "/api/projects/:id/timeline", reply(Effect.gen(function*() {
     const media = yield* Media

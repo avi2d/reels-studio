@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { NO_EDITS, soundBlocks, withChoice, withPauses, type Block, type Blocks, type Edits } from "../../src/shared/timeline.ts"
+import { NO_EDITS, soundBlocks, withChoice, withManualPauses, withPauses, type Block, type Blocks, type Edits } from "../../src/shared/timeline.ts"
 import type { Transcript } from "../../src/shared/plan.ts"
 import { playedKey, takeServer, type Ticket } from "../../src/web/timeline.ts"
 import type { Loaded } from "../../src/web/timeline-draw.ts"
@@ -28,7 +28,8 @@ const loaded = (blocks: ReadonlyArray<Block>, names: ReadonlyArray<string>, look
     view: {
       looks: names.map((video) => ({ video, state: looks })),
       timeline: { state: "ready", blocks: [...blocks], dropped: 0, edits: NO_EDITS },
-      gathering: false
+      gathering: false,
+      gatherFailed: false
     }
   }
 }
@@ -59,8 +60,15 @@ test("a poll answer that started before an undo is kept out", () => {
 })
 
 test("the edits check does not depend on the order of the fields", () => {
-  const reordered = { pauses: [], chosen: [], deleted: [], order: [] }
+  const reordered = { pauses: [], chosen: [], deleted: [], order: [], kept: [] }
   expect(takeServer(NO_EDITS, NO_EDITS, reordered, idle, 5, false)).toBe(true)
+})
+
+test("a returned pause stays out of the server check instead of being overwritten by the next poll", () => {
+  const kept = withManualPauses(NO_EDITS, [{ video: "a", after: 1 }], false)
+  expect(takeServer(kept, NO_EDITS, kept, idle, 5, false)).toBe(true)
+  expect(takeServer(NO_EDITS, NO_EDITS, kept, idle, 5, false)).toBe(true)
+  expect(takeServer(kept, kept, NO_EDITS, idle, 5, false)).toBe(false)
 })
 
 test("a measured gaze does not change the played clips", () => {

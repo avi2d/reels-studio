@@ -1,7 +1,7 @@
 import { Context, DateTime, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
 import { afterYes, Approval, MAX_BRIEF, planView, type BriefView, type PlanView } from "../shared/brief.ts"
-import type { Transcript } from "../shared/plan.ts"
 import { NO_EDITS } from "../shared/timeline.ts"
+import { readyTranscripts } from "./timeline-files.ts"
 import { type ApiError, badRequest, orUnavailable } from "./api-error.ts"
 import { Media } from "./media.ts"
 import { Projects } from "./projects.ts"
@@ -62,8 +62,7 @@ export class Brief extends Context.Service<Brief, {
         const dir = yield* projects.folder(id)
         const { timeline } = yield* media.timeline(id)
         const videos = yield* media.videos(id)
-        const transcripts = new Map(videos.flatMap((video): ReadonlyArray<readonly [string, Transcript]> =>
-          video.state === "ready" ? [[video.name, video.transcript]] : []))
+        const transcripts = readyTranscripts(videos)
         const outcome = timeline.state === "ready"
           ? afterYes(timeline.blocks, timeline.edits, transcripts)
           : afterYes([], NO_EDITS, transcripts)
