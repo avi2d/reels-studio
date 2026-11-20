@@ -47,7 +47,7 @@ Each setting is an environment variable read at start.
 | `REELS_PROJECTS_DIR` | `projects` | The folder that holds one folder per video |
 | `REELS_PI` | `pi` | The pi command the chat starts |
 | `REELS_MODELS` | Claude Opus 5.5, Claude Sonnet 5.5 and GPT 6.1 Sol | The models the page offers, separated by commas, each as `provider/model` |
-| `REELS_HEAVY` | empty | A command, split at spaces, that the studio puts before each ffmpeg and recognizer run, such as a queue for heavy work |
+| `REELS_HEAVY` | empty | A command, split at spaces, that the studio puts before each ffmpeg, speech recognizer, gaze and PDF run, such as a queue for heavy work |
 | `REELS_ENCODER` | `libx264` | The ffmpeg video encoder, such as `h264_nvenc` on a computer with an NVIDIA card |
 
 ## Keep the studio running

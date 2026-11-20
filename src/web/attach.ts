@@ -70,34 +70,45 @@ export interface Tray {
 
 const uploadId = (url: string): string => url.split("/").at(-1) ?? ""
 
+interface Previews {
+  readonly previewOf: (file: File) => string | undefined
+  readonly release: (url: string | undefined) => void
+  readonly dispose: () => void
+}
+
+const makePreviews = (isDisposed: () => boolean): Previews => {
+  const owned = new Set<string>()
+  const keep = (url: string): string => {
+    owned.add(url)
+    return url
+  }
+  const release = (url: string | undefined): void => {
+    if (url === undefined) return
+    owned.delete(url)
+    URL.revokeObjectURL(url)
+  }
+  const previewOf = (file: File): string | undefined =>
+    isDisposed() || kindOfName(file.name) !== "picture" ? undefined : keep(URL.createObjectURL(file))
+  const dispose = (): void => {
+    for (const url of owned) URL.revokeObjectURL(url)
+    owned.clear()
+  }
+  return { previewOf, release, dispose }
+}
+
 export const attachTray = (projectId: string, onProblem: (message: string) => void): Tray => {
   const list = h("ul", { class: "tray", "aria-label": "Файлы к сообщению", hidden: true })
   const input = h("input", { class: "visually-hidden", type: "file", accept: ACCEPTED_FILES, multiple: true, tabindex: "-1", "aria-hidden": "true" })
   const opener = iconButton("plain", "attach", "Приложить файлы", { class: "attach" })
   opener.addEventListener("click", () => { input.click() })
   const picked: Array<Picked> = []
-  const owned = new Set<string>()
   const state = { locked: false, disposed: false }
-
-  const keep = (url: string): string => {
-    owned.add(url)
-    return url
-  }
-
-  const release = (url: string | undefined): void => {
-    if (url === undefined) return
-    owned.delete(url)
-    URL.revokeObjectURL(url)
-  }
-
-  const previewOf = (file: File): string | undefined =>
-    state.disposed || kindOfName(file.name) !== "picture" ? undefined : keep(URL.createObjectURL(file))
+  const previews = makePreviews(() => state.disposed)
 
   const dispose = (): void => {
     if (state.disposed) return
     state.disposed = true
-    for (const url of owned) URL.revokeObjectURL(url)
-    owned.clear()
+    previews.dispose()
   }
 
   const refresh = (): void => { list.hidden = picked.length === 0 }
@@ -106,14 +117,14 @@ export const attachTray = (projectId: string, onProblem: (message: string) => vo
     const index = picked.indexOf(entry)
     if (index >= 0) picked.splice(index, 1)
     entry.node.remove()
-    release(entry.preview)
+    previews.release(entry.preview)
     refresh()
     opener.focus()
   }
 
   const chip = (file: File): Picked => {
     const kind = kindOfName(file.name)
-    const preview = previewOf(file)
+    const preview = previews.previewOf(file)
     const status = h("span", { class: "size" }, formatSize(file.size))
     const remove = iconButton("plain", "close", `Убрать ${file.name}`, { class: "remove" })
     const node = h("li", {}, thumb(kind, preview), h("span", { class: "name", title: file.name }, file.name), status, remove)
@@ -160,10 +171,10 @@ export const attachTray = (projectId: string, onProblem: (message: string) => vo
         )))
 
   const sentView = (): HTMLElement =>
-    fileList(picked.map((entry) => fileItem(entry.file.name, previewOf(entry.file))))
+    fileList(picked.map((entry) => fileItem(entry.file.name, previews.previewOf(entry.file))))
 
   const clear = (): void => {
-    for (const entry of picked) release(entry.preview)
+    for (const entry of picked) previews.release(entry.preview)
     picked.splice(0, picked.length)
     list.replaceChildren()
     refresh()

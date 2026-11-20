@@ -88,29 +88,27 @@ const chat = Layer.mergeAll(
   })))
 )
 
+const startUpload = (segment: string, into: Tus.Folder) => (request: HttpServerRequest.HttpServerRequest) => reply(Effect.gen(function*() {
+  const store = yield* Projects
+  const id = yield* param("id")
+  const dir = yield* store.folder(id)
+  if (request.method === "POST") return yield* Tus.create(request, dir, `/api/projects/${id}/${segment}`, into)
+  return yield* new ApiError({ status: 405, message: "Так загрузку не начать" })
+}))
+
+const resumeUpload = (request: HttpServerRequest.HttpServerRequest) => reply(Effect.gen(function*() {
+  const store = yield* Projects
+  const dir = yield* store.folder(yield* param("id"))
+  const upload = yield* param("upload")
+  if (request.method === "HEAD") return yield* Tus.head(request, dir, upload)
+  if (request.method === "PATCH") return yield* Tus.patch(request, dir, upload)
+  return yield* new ApiError({ status: 405, message: "Так загрузку не продолжить" })
+}))
+
 const uploads = Layer.mergeAll(
-  HttpRouter.add("*", "/api/projects/:id/uploads", (request) => reply(Effect.gen(function*() {
-    const store = yield* Projects
-    const id = yield* param("id")
-    const dir = yield* store.folder(id)
-    if (request.method === "POST") return yield* Tus.create(request, dir, `/api/projects/${id}/uploads`, "source")
-    return yield* new ApiError({ status: 405, message: "Так загрузку не начать" })
-  }))),
-  HttpRouter.add("*", "/api/projects/:id/attachments", (request) => reply(Effect.gen(function*() {
-    const store = yield* Projects
-    const id = yield* param("id")
-    const dir = yield* store.folder(id)
-    if (request.method === "POST") return yield* Tus.create(request, dir, `/api/projects/${id}/attachments`, "attached")
-    return yield* new ApiError({ status: 405, message: "Так загрузку не начать" })
-  }))),
-  HttpRouter.add("*", "/api/projects/:id/attachments/:upload", (request) => reply(Effect.gen(function*() {
-    const store = yield* Projects
-    const dir = yield* store.folder(yield* param("id"))
-    const upload = yield* param("upload")
-    if (request.method === "HEAD") return yield* Tus.head(request, dir, upload)
-    if (request.method === "PATCH") return yield* Tus.patch(request, dir, upload)
-    return yield* new ApiError({ status: 405, message: "Так загрузку не продолжить" })
-  }))),
+  HttpRouter.add("*", "/api/projects/:id/uploads", startUpload("uploads", "source")),
+  HttpRouter.add("*", "/api/projects/:id/attachments", startUpload("attachments", "attached")),
+  HttpRouter.add("*", "/api/projects/:id/attachments/:upload", resumeUpload),
   HttpRouter.add("GET", "/api/projects/:id/attachments/:name/cover", reply(Effect.gen(function*() {
     const attachments = yield* Attachments
     const target = yield* attachments.cover(yield* param("id"), yield* param("name"))
@@ -118,14 +116,7 @@ const uploads = Layer.mergeAll(
       Effect.mapError(() => new ApiError({ status: 500, message: "Файл недоступен. Попробуйте открыть страницу ещё раз." }))
     )
   }))),
-  HttpRouter.add("*", "/api/projects/:id/uploads/:upload", (request) => reply(Effect.gen(function*() {
-    const store = yield* Projects
-    const dir = yield* store.folder(yield* param("id"))
-    const upload = yield* param("upload")
-    if (request.method === "HEAD") return yield* Tus.head(request, dir, upload)
-    if (request.method === "PATCH") return yield* Tus.patch(request, dir, upload)
-    return yield* new ApiError({ status: 405, message: "Так загрузку не продолжить" })
-  })))
+  HttpRouter.add("*", "/api/projects/:id/uploads/:upload", resumeUpload)
 )
 
 const UNREADABLE = new ApiError({ status: 500, message: "Видео недоступно. Попробуйте открыть страницу ещё раз." })
