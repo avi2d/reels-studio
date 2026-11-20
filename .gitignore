@@ -1,3 +1,4 @@
 node_modules/
 projects/
 __pycache__/
+.venv/

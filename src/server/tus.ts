@@ -6,9 +6,13 @@ const TUS_VERSION = "1.0.0"
 const OFFSET_TYPE = "application/offset+octet-stream"
 const TUS_HEADERS = { "tus-resumable": TUS_VERSION }
 
+const Folder = Schema.Literals(["source", "attached"])
+export type Folder = typeof Folder.Type
+
 const UploadMeta = Schema.fromJsonString(Schema.Struct({
   length: Schema.Finite,
   filename: Schema.String,
+  into: Schema.optionalKey(Folder),
   completed: Schema.optionalKey(Schema.String)
 }))
 type UploadMeta = typeof UploadMeta.Type
@@ -17,7 +21,7 @@ const encodeMeta = Schema.encodeEffect(UploadMeta)
 
 const UPLOAD_ID = /^[0-9a-f-]{36}$/
 
-const UNAVAILABLE = "Не удалось записать видео."
+const UNAVAILABLE = "Не удалось записать файл."
 
 const orBroken = orUnavailable("the upload failed", UNAVAILABLE)
 
@@ -83,7 +87,8 @@ const offsetOf = Effect.fnUntraced(function*(part: string, meta: UploadMeta) {
 export const create = Effect.fn("tus.create")(function*(
   request: HttpServerRequest.HttpServerRequest,
   dir: string,
-  location: string
+  location: string,
+  into: Folder
 ) {
   yield* requireVersion(request)
   const fs = yield* FileSystem.FileSystem
@@ -94,7 +99,7 @@ export const create = Effect.fn("tus.create")(function*(
   const files = yield* paths(dir, uploadId)
   const filename = safeFileName(parseMetadata(request.headers["upload-metadata"]).get("filename"))
   yield* fs.writeFile(files.part, new Uint8Array()).pipe(orBroken)
-  yield* writeMeta(files.meta, { length, filename })
+  yield* writeMeta(files.meta, { length, filename, into })
   return HttpServerResponse.empty({ status: 201, headers: { ...TUS_HEADERS, location: `${location}/${uploadId}` } })
 })
 
@@ -130,10 +135,18 @@ const freeName = (source: string, name: string, attempt: number): Effect.Effect<
 const finish = Effect.fnUntraced(function*(dir: string, files: { meta: string; part: string }, meta: UploadMeta) {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
-  const source = path.join(dir, "source")
-  const name = yield* freeName(source, meta.filename, 0)
-  yield* fs.rename(files.part, path.join(source, name)).pipe(orBroken)
+  const target = path.join(dir, meta.into ?? "source")
+  yield* fs.makeDirectory(target, { recursive: true }).pipe(orBroken)
+  const name = yield* freeName(target, meta.filename, 0)
+  yield* fs.rename(files.part, path.join(target, name)).pipe(orBroken)
   yield* writeMeta(files.meta, { ...meta, completed: name })
+})
+
+export const completedName = Effect.fn("tus.completedName")(function*(dir: string, uploadId: string, into: Folder) {
+  const files = yield* paths(dir, uploadId)
+  const meta = yield* readMeta(files.meta)
+  if ((meta.into ?? "source") !== into || meta.completed === undefined) return yield* badRequest("Файл ещё не загружен. Прикрепите его ещё раз.")
+  return meta.completed
 })
 
 export const patch = Effect.fn("tus.patch")(function*(
