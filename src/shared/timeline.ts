@@ -164,7 +164,7 @@ export const assemble = (blocks: ReadonlyArray<Block>, edits: Edits, transcripts
     return [{ block, take, pauses: pausesOf(transcript, take, edits), spans: playedSpans(transcript, take, edits) }]
   })
 
-const FADE = 0.06
+export const FADE = 0.06
 
 export const fadeGain = (span: Span, time: number): number =>
   Math.max(0, Math.min(1, (time - span.start) / FADE, (span.end - time) / FADE))

@@ -56,17 +56,31 @@ const markPreviewFresh = Effect.fnUntraced(function*(job: Job) {
   yield* fs.writeFileString(previewFlag(job), `${KEY_FRAME_EVERY}\n`)
 })
 
-const tool = Effect.fnUntraced(function*(command: string, args: ReadonlyArray<string>, prefix: ReadonlyArray<string>) {
+export const tool = Effect.fnUntraced(function*(
+  command: string,
+  args: ReadonlyArray<string>,
+  prefix: ReadonlyArray<string>,
+  onLine: (line: string) => Effect.Effect<void> = () => Effect.void
+) {
   const [head = command, ...rest] = [...prefix, command, ...args]
   const handle = yield* ChildProcess.make(head, rest)
-  const [output, complaints, code] = yield* Effect.all([
-    handle.stdout.pipe(Stream.decodeText(), Stream.mkString),
+  const lines: Array<string> = []
+  const [, complaints, code] = yield* Effect.all([
+    handle.stdout.pipe(Stream.decodeText(), Stream.splitLines, Stream.runForEach((line) => {
+      lines.push(line)
+      return onLine(line)
+    })),
     handle.stderr.pipe(Stream.decodeText(), Stream.mkString),
     handle.exitCode
   ], { concurrency: 3 })
   if (code !== 0) return yield* new ToolFailed({ command, code, output: complaints.slice(-2000) })
-  return output
+  return lines.join("\n")
 }, Effect.scoped)
+
+export const isHdrVideo = Effect.fnUntraced(function*(source: string) {
+  const probe = yield* decodeProbe(yield* tool("ffprobe", probeArgs(source), []))
+  return isHdr(probe.streams[0]?.color_transfer)
+})
 
 export const readTranscript = Effect.fnUntraced(function*(job: Job) {
   const fs = yield* FileSystem.FileSystem
@@ -98,8 +112,7 @@ export const listen = Effect.fn("Media.listen")(function*(job: Job) {
   const wav = `${place.work}/sound.wav`
   const preview = `${place.work}/preview.mp4`
   const words = `${place.work}/words.json`
-  const probe = yield* decodeProbe(yield* tool("ffprobe", probeArgs(place.source), []))
-  const hdr = isHdr(probe.streams[0]?.color_transfer)
+  const hdr = yield* isHdrVideo(place.source)
   yield* tool("ffmpeg", prepareArgs({ source: place.source, wav, preview }, hdr, settings.encoder), settings.heavy)
   const transcriber = `${settings.root}/tools/transcribe`
   yield* tool("uv", ["run", "--project", transcriber, "python", `${transcriber}/transcribe.py`, wav, words], settings.heavy)
@@ -115,8 +128,7 @@ export const refreshPreview = Effect.fn("Media.refreshPreview")(function*(job: J
   const fs = yield* FileSystem.FileSystem
   const settings = yield* Settings
   const place = places(job)
-  const probe = yield* decodeProbe(yield* tool("ffprobe", probeArgs(place.source), []))
-  const hdr = isHdr(probe.streams[0]?.color_transfer)
+  const hdr = yield* isHdrVideo(place.source)
   const next = `${place.preview}.new`
   yield* tool("ffmpeg", refreshArgs(place.source, next, hdr, settings.encoder), settings.heavy).pipe(
     Effect.catch((error) => fs.remove(next).pipe(Effect.orElseSucceed(() => undefined), Effect.andThen(Effect.fail(error))))

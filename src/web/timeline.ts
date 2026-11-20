@@ -263,7 +263,7 @@ const showLoaded = (card: Card, draw: () => void, loaded: Loaded, ticket: Ticket
   draw()
 }
 
-export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels: Panels; readonly refresh: () => void } => {
+export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels: Panels; readonly refresh: () => void; readonly stop: () => void } => {
   const parts = partsOf()
   const ui = frameOf(parts)
   const state: State =
@@ -346,5 +346,5 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
     showLoaded(card, draw, loaded, ticket)
   }
 
-  return { panels: ui.panels, refresh: loader(projectId, ui.panels.tracks, show, () => ({ changes: state.changes, busy: saving.busy() })) }
+  return { panels: ui.panels, refresh: loader(projectId, ui.panels.tracks, show, () => ({ changes: state.changes, busy: saving.busy() })), stop: player.stop }
 }

@@ -4,7 +4,8 @@ Reels studio is a web page served from a home computer, where a person prepares 
 The person uploads a video, writes in a chat in plain words, and the studio answers with a plan before it changes anything.
 The studio writes down every word of an uploaded video with its time, and the chat model reads that text.
 The page shows the text with the planned removals struck through, and its player skips them.
-It does not cut, caption, crop, restyle or publish a video yet.
+The studio builds the chosen takes into one 1080 by 1920 file to watch and download.
+It does not caption, restyle or publish a video yet.
 
 ## Before you begin
 

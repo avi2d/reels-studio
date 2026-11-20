@@ -1,6 +1,6 @@
 import { Effect, FileSystem, Option, Result, Schema } from "effect"
 import type { Transcript } from "../shared/plan.ts"
-import { Blocks, Edits, NO_EDITS, soundBlocks, type Gaze, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
+import { assemble, Blocks, clipsOf, Edits, NO_EDITS, soundBlocks, type Gaze, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
 import { places, readGaze, readTranscript } from "./media-jobs.ts"
 
 const decodeBlocks = Schema.decodeUnknownOption(Schema.fromJsonString(Blocks))
@@ -31,6 +31,16 @@ const lookOf = (video: string, measured: Gaze | undefined, written: boolean, fai
   return { video, state: "waiting" }
 }
 
+const readBlocks = Effect.fnUntraced(function*(dir: string) {
+  const fs = yield* FileSystem.FileSystem
+  const file = `${dir}/blocks.json`
+  if (!(yield* fs.exists(file))) return "none" as const
+  const written = Option.getOrUndefined(decodeBlocks(yield* fs.readFileString(file)))
+  if (written !== undefined) return written
+  yield* Effect.logError("the blocks are unreadable", file)
+  return "unreadable" as const
+})
+
 export const readTimeline = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>, unseen: ReadonlyMap<string, GazeFailure>) {
   const fs = yield* FileSystem.FileSystem
   const transcripts = new Map<string, Transcript>()
@@ -53,12 +63,19 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
     }
     looks.push(lookOf(name, measured, written, unseen.get(place.source)))
   }
-  const file = `${dir}/blocks.json`
-  if (!(yield* fs.exists(file))) return { looks, timeline: { state: "none" } } satisfies TimelineView
-  const written = Option.getOrUndefined(decodeBlocks(yield* fs.readFileString(file)))
-  if (written === undefined) {
-    yield* Effect.logError("the blocks are unreadable", file)
-    return { looks, timeline: { state: "unreadable" } } satisfies TimelineView
-  }
+  const written = yield* readBlocks(dir)
+  if (written === "none" || written === "unreadable") return { looks, timeline: { state: written } } satisfies TimelineView
   return { looks, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir) } } satisfies TimelineView
+})
+
+export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>) {
+  const fs = yield* FileSystem.FileSystem
+  const transcripts = new Map<string, Transcript>()
+  for (const name of names) {
+    if (yield* fs.exists(places({ dir, name }).transcript)) transcripts.set(name, yield* readTranscript({ dir, name }))
+  }
+  const written = yield* readBlocks(dir)
+  if (written === "none" || written === "unreadable") return []
+  const { blocks } = soundBlocks(written, transcripts, new Map())
+  return clipsOf(assemble(blocks, yield* readEdits(dir), transcripts))
 })

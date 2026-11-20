@@ -11,6 +11,7 @@ import { shrinkWhenScrolledPast } from "./mini.ts"
 import { oneAfterAnother } from "./queue.ts"
 import { askToRemove } from "./remove.ts"
 import { run } from "./run.ts"
+import { reelPane } from "./reel.ts"
 import { stageRail, type StageId, type StageNote } from "./stages.ts"
 import { timelineCard, type Status } from "./timeline.ts"
 import { upload, type Progress } from "./upload.ts"
@@ -127,7 +128,7 @@ const videoCard = (project: Api.ProjectView, onUploaded: () => void): HTMLElemen
 
 const countNote = (count: number): string => count === 0 ? "" : String(count)
 
-const stageNotes = ({ blocks, heard, pauses }: Status): Readonly<Record<StageId, StageNote>> => ({
+const stageNotes = ({ blocks, heard, pauses }: Status): Readonly<Record<Exclude<StageId, "file">, StageNote>> => ({
   brief: { note: countNote(heard), done: heard > 0 },
   takes: { note: countNote(blocks ?? 0), done: blocks !== undefined },
   pauses: {
@@ -156,9 +157,14 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
         seen.first = false
       }
     })
+    const built = reelPane(project.id, {
+      note: (note) => { stages.note("file", note) },
+      playing: () => { timeline.stop() }
+    })
     const refresh = (): void => {
       videos.refresh()
       timeline.refresh()
+      built.refresh()
     }
     const chat = chatDrawer(project, messages, models, refresh)
     const remove = button("quiet", {
@@ -168,9 +174,14 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
     const back = iconButton("plain", "back", "Все ролики", { class: "back", href: "#/" })
     const { panels } = timeline
     const stages = stageRail(
-      { brief: h("div", { class: "pane" }, videoCard(project, refresh), videos.node, remove), takes: panels.takes, pauses: panels.pauses },
+      { brief: h("div", { class: "pane" }, videoCard(project, refresh), videos.node, remove), takes: panels.takes, pauses: panels.pauses, file: built.node },
       panels.tracks,
-      (stage) => { reel.dataset.stage = stage })
+      (stage) => {
+        reel.dataset.stage = stage
+        if (stage !== "file") return built.pause()
+        timeline.stop()
+        built.refresh()
+      })
     reel.append(
       h("header", { class: "bar" },
         back, tooltip(back, "bar-back", "Все ролики"), h("h1", {}, project.title),

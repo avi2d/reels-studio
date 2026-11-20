@@ -102,11 +102,11 @@ const uploads = Layer.mergeAll(
 
 const UNREADABLE = new ApiError({ status: 500, message: "Видео недоступно. Попробуйте открыть страницу ещё раз." })
 
-const sendFile = Effect.fnUntraced(function*(target: string, contentType: string, rangeHeader: string | undefined) {
+const sendFile = Effect.fnUntraced(function*(target: string, contentType: string, rangeHeader: string | undefined, extra: Readonly<Record<string, string>> = {}) {
   const fs = yield* FileSystem.FileSystem
   const size = Number((yield* fs.stat(target)).size)
   const range = parseRange(rangeHeader, size)
-  const headers = { "accept-ranges": "bytes", "cache-control": "no-store" }
+  const headers = { "accept-ranges": "bytes", "cache-control": "no-store", ...extra }
   if (range.kind === "outside") {
     return HttpServerResponse.empty({ status: 416, headers: { ...headers, "content-range": `bytes */${size}` } })
   }
@@ -119,6 +119,36 @@ const sendFile = Effect.fnUntraced(function*(target: string, contentType: string
     headers: { ...headers, "content-range": `bytes ${range.start}-${range.end}/${size}` }
   })
 }, Effect.mapError((cause) => cause instanceof ApiError ? cause : UNREADABLE))
+
+// The ASCII name serves a browser that ignores filename*, which alone carries the Russian title.
+export const attachment = (title: string): string => {
+  const name = `${title.trim() || "reel"}.mp4`
+  return `attachment; filename="reel.mp4"; filename*=UTF-8''${encodeURIComponent(name)}`
+}
+
+const reel = Layer.mergeAll(
+  HttpRouter.add("GET", "/api/projects/:id/reel", reply(Effect.gen(function*() {
+    const media = yield* Media
+    return json(yield* media.reel(yield* param("id")))
+  }))),
+  HttpRouter.add("POST", "/api/projects/:id/reel", reply(Effect.gen(function*() {
+    const media = yield* Media
+    return json(yield* media.buildReel(yield* param("id")), 202)
+  }))),
+  HttpRouter.add("GET", "/api/projects/:id/reel/file", (request) => reply(Effect.gen(function*() {
+    const media = yield* Media
+    const target = yield* media.reelFile(yield* param("id"))
+    return yield* sendFile(target, "video/mp4", request.headers["range"])
+  }))),
+  HttpRouter.add("GET", "/api/projects/:id/reel/download", (request) => reply(Effect.gen(function*() {
+    const media = yield* Media
+    const store = yield* Projects
+    const id = yield* param("id")
+    const target = yield* media.reelFile(id)
+    const { title } = yield* store.get(id)
+    return yield* sendFile(target, "video/mp4", request.headers["range"], { "content-disposition": attachment(title) })
+  })))
+)
 
 const NewVideos = Schema.Struct({ videos: Schema.Array(Pick).check(Schema.isMinLength(1)) })
 
@@ -182,4 +212,4 @@ const homeOnly = HttpRouter.middleware(
   { global: true }
 )
 
-export const apiRoutes = Layer.mergeAll(projects, chat, uploads, videos, homeOnly)
+export const apiRoutes = Layer.mergeAll(projects, chat, uploads, videos, reel, homeOnly)
