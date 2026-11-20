@@ -169,6 +169,13 @@ export const textOf = (transcripts: ReadonlyMap<string, Transcript>, take: Take)
 
 export const startOf = (placed: ReadonlyArray<Placed>, index: number): number => lengthOf(placed.slice(0, index).flatMap((one) => one.spans))
 
+const replaceLists = (holder: HTMLElement, ...nodes: ReadonlyArray<HTMLElement>): void => {
+  const lists = () => holder.querySelectorAll<HTMLElement>("[data-scroll-key]")
+  const offsets = new Map([...lists()].map((list) => [list.dataset.scrollKey, list.scrollTop]))
+  holder.replaceChildren(...nodes)
+  for (const list of lists()) list.scrollTop = offsets.get(list.dataset.scrollKey) ?? 0
+}
+
 export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { readonly open: Placed | undefined; readonly status: Status["pauses"] } => {
   const { edits, loaded, selected, timeline } = drawn
   const placed = assemble(timeline.blocks, edits, loaded.transcripts)
@@ -188,15 +195,15 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { reado
   parts.prev.onclick = () => { actions.select(placed[index - 1]?.block.id ?? "") }
   parts.next.onclick = () => { actions.select(placed[index + 1]?.block.id ?? "") }
   parts.facts.textContent = open === undefined ? "" : `дубль ${open.block.takes.indexOf(open.take) + 1} из ${open.block.takes.length}`
-  const old = parts.rowHolder.firstElementChild
+  const scrollLeft = parts.rowHolder.firstElementChild?.scrollLeft ?? 0
   const row = blockRow(placed, open?.block.id, actions)
   parts.rowHolder.replaceChildren(row)
-  row.scrollLeft = old?.scrollLeft ?? 0
+  row.scrollLeft = scrollLeft
   parts.map.replaceChildren(...cutMap(placed, open?.block.id, actions.select))
-  parts.detailHolder.replaceChildren(
+  replaceLists(parts.detailHolder,
     ...(open === undefined ? [] : [blockDetail(open.block, index + 1, chosenTake(open.block, edits), loaded.transcripts, edits, actions)]),
     ...(deleted.length === 0 ? [] : [deletedList(deleted, actions)]))
-  parts.pauseHolder.replaceChildren(pauseList(placed, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
+  replaceLists(parts.pauseHolder, pauseList(placed, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
   return { open, status: { removed: pauses.filter((pause) => pause.removed).length, total: pauses.length } }
 }
 

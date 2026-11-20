@@ -78,6 +78,16 @@ interface State {
   pending: { readonly loaded: Loaded; readonly ticket: Ticket } | undefined
 }
 
+const revealWithinStrip = (root: HTMLElement, selector: string): void => {
+  const item = root.querySelector(selector)
+  const strip = item?.closest(".map, .blocks")
+  if (!item || !strip) return
+  const { left, right } = item.getBoundingClientRect()
+  const bounds = strip.getBoundingClientRect()
+  if (left < bounds.left) strip.scrollLeft += left - bounds.left
+  else if (right > bounds.right) strip.scrollLeft += right - bounds.right
+}
+
 const display = (parts: Parts, state: State) => {
   const placedNow = (): ReadonlyArray<Placed> => placedOf(state.loaded, state.edits)
 
@@ -119,7 +129,8 @@ const display = (parts: Parts, state: State) => {
     const now = playing?.clip.block
     if (before === now) return
     paintPlaying()
-    parts.rowHolder.querySelector<HTMLElement>(".slot.playing")?.scrollIntoView({ block: "nearest", inline: "nearest" })
+    revealWithinStrip(parts.map, ".playing")
+    revealWithinStrip(parts.rowHolder, ".slot.playing")
   }
 
   return { placedNow, showTag, showClock, markPlaying, paintPlaying }
@@ -319,7 +330,8 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
     player.stop()
     state.selected = block
     draw()
-    parts.rowHolder.querySelector(".clip.selected")?.scrollIntoView({ block: "nearest", inline: "nearest" })
+    revealWithinStrip(parts.map, ".selected")
+    revealWithinStrip(parts.rowHolder, ".clip.selected")
   }
 
   const actions: Actions = actionsOf(card, change, hear, select)

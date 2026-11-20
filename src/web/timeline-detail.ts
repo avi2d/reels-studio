@@ -69,7 +69,7 @@ export const blockDetail = (
       h("h3", {}, `Блок ${number}. ${block.title}`),
       button("quiet", { "data-key": `delete:${block.id}`, click: () => { actions.setDeleted(block.id, true) } }, "Удалить блок")),
     h("p", { class: "muted" }, block.takes.length === 1 ? "У этого блока один дубль." : "Дубли идут от лучшего к худшему. Отметьте тот, что пойдёт в монтаж."),
-    h("ol", { class: "takes" }, ...block.takes.flatMap((take) => {
+    h("ol", { class: "takes", "data-scroll-key": `takes:${block.id}` }, ...block.takes.flatMap((take) => {
       const transcript = transcripts.get(take.video)
       return transcript === undefined ? [] : [takeItem(block, take, chosen, transcript, edits, actions)]
     })))
@@ -77,7 +77,7 @@ export const blockDetail = (
 export const deletedList = (deleted: ReadonlyArray<Block>, actions: DetailActions): HTMLElement =>
   h("div", { class: "detail" },
     h("h3", {}, "Удалённые блоки"),
-    h("ul", { class: "files" }, ...deleted.map((block) =>
+    h("ul", { class: "files", "data-scroll-key": "deleted" }, ...deleted.map((block) =>
       h("li", {}, h("span", {}, block.title),
         button("normal", {
           "data-key": `restore:${block.id}`,
@@ -115,5 +115,5 @@ export const pauseList = (placed: ReadonlyArray<Placed>, wordAt: (video: string,
     h("p", { class: "did" }, "Студия нашла паузы в выбранных дублях. Уберите лишние по одной или все сразу кнопкой выше."),
     h("div", { class: "rules" }, ...RULES.map((rule) => h("span", {}, rule))),
     h("p", { class: "muted", role: "status" }, count),
-    h("ol", { class: "pause-list" }, ...all.map(({ number, one, pause }) => pauseItem(one, number, pause, wordAt, actions))))
+    h("ol", { class: "pause-list", "data-scroll-key": "pauses" }, ...all.map(({ number, one, pause }) => pauseItem(one, number, pause, wordAt, actions))))
 }

@@ -13,7 +13,8 @@ The player stands next to the stage tabs, the row of blocks and the open stage.
 The row of blocks sits between the tabs and the open stage, with the text, the clip and the pauses of each block.
 «Смотреть монтаж» sits under the player, and «Убрать все паузы» sits on its own stage.
 The chat opens as a drawer over the page.
-On a phone the same parts follow one another down the page, under a sticky bar.
+On a phone the player sits above the tabs.
+The take and pause lists scroll without moving the player or the tabs.
 On a phone the tabs read «Видео», «Дубли» and «Паузы», so all three fit on one line.
 
 ## Terms
@@ -48,7 +49,9 @@ The undo button in the bar takes back the last change of the cut, and the redo b
 A new change after an undo clears what redo could bring back.
 The buttons carry icons, and a tooltip names each when the mouse rests on it or the keyboard focuses it.
 «С соседями» plays a take with the last 2 s of the block before it and the first 2 s of the block after it.
-A strip of numbered blocks shows the whole cut, each as wide as its length, and a click opens that block.
+The numbered buttons under the player have equal widths.
+Scroll the strip to reach more blocks, or click a number to open the block.
+During playback, a play mark shows the current block in the numbered strip and the row of clips.
 The studio writes no video file from the row.
 
 ## Keys

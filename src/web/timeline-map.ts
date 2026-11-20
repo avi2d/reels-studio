@@ -6,7 +6,7 @@ import { formatLength } from "./format.ts"
 export const cutMap = (placed: ReadonlyArray<Placed>, selected: string | undefined, select: (block: string) => void): ReadonlyArray<HTMLElement> =>
   placed.map((one, index) => {
     const length = lengthOf(one.spans)
-    return h("li", { class: "map-slot", style: `flex-grow: ${Math.max(length, 1).toFixed(1)}` },
+    return h("li", { class: "map-slot" },
       h("button", {
         type: "button",
         class: one.block.id === selected ? "map-item selected" : "map-item",

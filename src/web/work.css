@@ -36,14 +36,21 @@
 .dock { grid-area: dock; padding-bottom: 8px; color: var(--wa-color-text-quiet); font-size: 13px; }
 .dock:has(.sum:empty) { display: none; }
 
-.board { grid-area: board; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 6px 40px 2px; scrollbar-width: thin; }
+.board { grid-area: board; min-width: 0; min-height: 0; padding: 0 6px 12px 2px; }
+.reel[data-stage="brief"] .board { position: relative; overflow-y: auto; overscroll-behavior: contain; }
 .stages { --track-color: var(--wa-color-surface-border); }
+.reel:not([data-stage="brief"]) .stages, .stages::part(tab-group) { height: 100%; }
+.stages::part(body) { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.stages wa-tab-panel[active]:not([name="brief"]) { flex: 1; min-height: 0; }
+.stages wa-tab-panel::part(tab-panel) { box-sizing: border-box; height: 100%; }
+.stages wa-tab-panel:not([name="brief"]) .pane { height: 100%; min-height: 0; }
 .stages wa-tab { font-size: 13.5px; }
+.stages wa-tab:focus-visible { outline: none; }
 .stages wa-tab-panel { --padding: 14px 0 0; }
 .stages wa-tab em { margin-left: 6px; font-style: normal; font-weight: 600; color: var(--wa-color-brand-fill-loud); }
 .stages wa-tab em:empty, .stages .short { display: none; }
 .stages::part(nav) { position: sticky; top: 0; z-index: 3; background: var(--wa-color-surface-default); }
-.stages > .timeline { margin-top: 14px; margin-bottom: 0; }
+.stages > .timeline { flex: none; margin-top: 14px; margin-bottom: 0; }
 .stages wa-tab.done em { color: var(--wa-color-success-on-quiet); }
 
 .pane { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
@@ -63,6 +70,22 @@
   .frame { border-radius: 12px; }
   .dock { padding: 0 12px 10px; }
   .board { overflow: visible; padding: 0 12px; }
+  .reel:not([data-stage="brief"]) {
+    display: grid;
+    height: 100dvh;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    grid-template: "bar" var(--bar) "viewer" auto "dock" auto "board" minmax(0, 1fr) / minmax(0, 1fr);
+  }
+  .reel:not([data-stage="brief"]) .viewbox {
+    display: grid;
+    grid-template: "stage map" auto "stage transport" auto / minmax(52px, 1fr) minmax(0, 3fr);
+    align-items: center;
+    gap: 4px 8px;
+  }
+  .reel:not([data-stage="brief"]) .stage { grid-area: stage; height: clamp(108px, 18dvh, 168px); }
+  .reel:not([data-stage="brief"]) .overview { grid-area: map; }
+  .reel:not([data-stage="brief"]) .transport { grid-area: transport; gap: 4px; }
+  .reel:not([data-stage="brief"]) .board { padding-bottom: 8px; }
   .stages .long { display: none; }
   .stages .short { display: inline; }
 
