@@ -193,7 +193,7 @@ const loader = (projectId: string, anchor: HTMLElement, show: (loaded: Loaded, t
       Effect.map(([{ videos }, view]) => {
         const heard = videos.flatMap((video) => video.state === "ready" ? [[video.name, video.transcript] as const] : [])
         show({ transcripts: new Map(heard), view }, ticket)
-        if (videos.some((video) => video.state === "waiting") || view.looks.some((look) => look.state === "waiting")) later()
+        if (view.gathering || videos.some((video) => video.state === "waiting") || view.looks.some((look) => look.state === "waiting")) later()
       }),
       Effect.catchTag("Failed", () => Effect.sync(later))
     ))

@@ -20,6 +20,7 @@ The person agrees by pressing «Согласна» under the plan, or by writing
 After the chat model answers that message, the studio works without another question:
 
 - It chooses the current take of every block, which is the take ranked first unless the person chose another.
+  The studio already chose these takes when it gathered the blocks, as [docs/timeline.md](timeline.md) says, so the yes mostly confirms them.
 - It shortens every pause of half a second or more in the chosen takes to 0.2 s.
 - It saves the yes with the plan text and a list of what it did to `approval.json`.
 

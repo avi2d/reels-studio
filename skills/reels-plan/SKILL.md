@@ -27,7 +27,8 @@ When a video is listed as the studio could not hear it, say that the person can 
 5. Ask what must stay in the video, when neither the brief nor the chat says it.
    Ask one question at a time.
 6. Write one plan for the whole reel to `plan.md` in Russian, and the pieces to remove to `plan.json`.
-   Gather the blocks into `blocks.json` at the same time, so the plan can name the take of each block.
+   The studio asks you to gather the blocks into `blocks.json` as soon as it has heard every video, so they usually exist already.
+   Gather them yourself when `blocks.json` is missing or no longer matches the heard videos, so the plan can name the take of each block.
 7. Show the plan in the chat: quote the words you remove and say why, in the order they are spoken.
    Say that the page now shows the removed words struck through, and that the player under them skips these words.
 8. Change the files when the person asks, and show the plan again.
@@ -57,7 +58,8 @@ A repeated take shows as the same sentence said twice or more: keep the last com
 
 The person films one thought several times, in one video or across several.
 A block is one thought of the reel, and a take is one attempt to say it.
-Write `blocks.json` when the person asks to gather the blocks, and write it again after a new video is heard.
+Write `blocks.json` when the studio or the person asks to gather the blocks, and write it again after a new video is heard.
+When the studio asks, write only `blocks.json` and ask nothing, since the person does not see that message.
 The page then shows the blocks as a row, with the first take of each block chosen.
 The person chooses another take, moves and deletes blocks and removes pauses on the page, and you never write those choices.
 

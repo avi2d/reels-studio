@@ -1,11 +1,12 @@
 import { Effect, FileSystem, Layer, Option, Schema, Stream } from "effect"
 import { Pick } from "../shared/library.ts"
-import { Edits } from "../shared/timeline.ts"
+import { Edits, type TimelinePage } from "../shared/timeline.ts"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { ApiError, badRequest } from "./api-error.ts"
 import { Attachments } from "./attachments.ts"
 import { Brief } from "./brief.ts"
 import { Chat } from "./chat.ts"
+import { Gather } from "./gather.ts"
 import { allowedHosts, isAllowedHost, isHomeAddress, isSameOrigin } from "./home-network.ts"
 import { Media } from "./media.ts"
 import { Effort, Projects } from "./projects.ts"
@@ -172,7 +173,10 @@ const videos = Layer.mergeAll(
   }))),
   HttpRouter.add("GET", "/api/projects/:id/timeline", reply(Effect.gen(function*() {
     const media = yield* Media
-    return json(yield* media.timeline(yield* param("id")))
+    const gather = yield* Gather
+    const id = yield* param("id")
+    const view = yield* media.timeline(id)
+    return json({ ...view, gathering: yield* gather.running(id) } satisfies TimelinePage)
   }))),
   HttpRouter.add("PUT", "/api/projects/:id/timeline", reply(Effect.gen(function*() {
     const media = yield* Media

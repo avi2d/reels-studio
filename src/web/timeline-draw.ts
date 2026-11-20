@@ -1,5 +1,5 @@
 import { lengthOf, type Transcript } from "../shared/plan.ts"
-import { arrange, assemble, chosenTake, withPauses, type Edits, type GazeFailure, type Placed, type Take, type TimelineView } from "../shared/timeline.ts"
+import { arrange, assemble, chosenTake, withPauses, type Edits, type GazeFailure, type Placed, type Take, type TimelinePage, type TimelineView } from "../shared/timeline.ts"
 import type WaButton from "@awesome.me/webawesome/dist/components/button/button.js"
 import { button, focusWhenReady, iconButton, tooltip } from "./controls.ts"
 import { h } from "./dom.ts"
@@ -16,6 +16,8 @@ const UNSTRIP = { label: "Вернуть все паузы", hint: "Возвра
 export const stripWords = (allRemoved: boolean): typeof STRIP => allRemoved ? UNSTRIP : STRIP
 const GATHER = "Собери блоки из всех видео и расставь дубли от лучшего к худшему."
 const NO_SPEECH = "Блоки появятся, когда студия услышит первое видео."
+const GATHERING = "Студия собирает блоки из всех видео. Потом сама выберет лучший дубль в каждом блоке и сократит паузы."
+const REGATHERING = "Студия собирает блоки заново вместе с новым видео. Дубли и паузы обновятся сами."
 const NO_BLOCKS = "Блоков пока нет. Студия соберёт их из текста всех видео: дубли с одним смыслом попадут в один блок, лучший дубль встанет первым."
 const NO_ROW = "Здесь появятся блоки ролика и паузы в них."
 const NO_PAUSES = "Паузы появятся, когда студия соберёт блоки."
@@ -24,7 +26,7 @@ type Ready = Extract<TimelineView["timeline"], { readonly state: "ready" }>
 
 export interface Loaded {
   readonly transcripts: ReadonlyMap<string, Transcript>
-  readonly view: TimelineView
+  readonly view: TimelinePage
 }
 
 export interface Status {
@@ -64,6 +66,8 @@ export const notesOf = ({ transcripts, view }: Loaded, ask: (text: string) => vo
   if (transcripts.size === 0) return [h("p", { class: "muted" }, NO_SPEECH)]
   const gather = (label: string): HTMLElement => button("primary", { class: "end", click: () => { ask(GATHER) } }, label)
   const { timeline } = view
+  if (view.gathering && timeline.state !== "ready") return [h("p", { class: "muted", role: "status" }, GATHERING)]
+  const regathering = view.gathering ? [h("p", { class: "muted", role: "status" }, REGATHERING)] : []
   if (timeline.state !== "ready") {
     return timeline.state === "none"
       ? [h("p", { class: "muted" }, NO_BLOCKS), gather("Собрать блоки")]
@@ -71,7 +75,7 @@ export const notesOf = ({ transcripts, view }: Loaded, ask: (text: string) => vo
   }
   const dropped = timeline.dropped === 0 ? [] : [h("p", { class: "muted" },
     `Студия пропустила дубли, которые не нашла в видео: ${timeline.dropped}. Попросите в чате собрать блоки заново.`)]
-  return [...dropped, ...looksNote(view.looks)]
+  return [...regathering, ...dropped, ...looksNote(view.looks)]
 }
 
 const summaryOf = (placed: ReadonlyArray<Placed>): string => {

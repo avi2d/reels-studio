@@ -28,7 +28,13 @@ On a phone the tabs read «Видео», «Дубли» and «Паузы», so a
 
 ## Who decides what
 
-The chat model reads the transcript and the gaze text of every video and writes `blocks.json`.
+As soon as the studio has heard every uploaded video, it asks the chat model by itself to write `blocks.json`, without waiting for the plan or the yes.
+The stages «Дубли и блоки» and «Паузы и склейки» say that the studio is gathering the blocks meanwhile.
+Once the blocks are written, the studio chooses the take ranked first in every block the person has not chosen and shortens every pause of the chosen takes to 0.2 s.
+It does the same again after a new video is heard, and keeps the videos it last asked about in `gathered.json`.
+The request and the answer do not show in the chat.
+A message the person sends stops the gathering, and the studio asks again once the answer ends.
+The chat model reads the transcript and the gaze text of every video when it writes `blocks.json`.
 It puts the takes with one meaning into one block, from whichever videos they come.
 It orders the blocks by where each thought is first said, and the takes of a block from the best to the worst.
 A take ranks higher when the speaker does not stumble and when the speaker looks into the camera.
@@ -87,3 +93,4 @@ Each video folder holds these next to `plan.json`:
 | `gaze/<video>.txt` | The share of looks into the camera for each stretch of speech, which the chat model reads |
 | `blocks.json` | The blocks and their takes, written by the chat model |
 | `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes and the removed pauses |
+| `gathered.json` | The heard videos the studio last asked the chat model to gather blocks from |

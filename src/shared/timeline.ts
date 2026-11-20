@@ -60,6 +60,9 @@ export const TimelineView = Schema.Struct({
 })
 export type TimelineView = typeof TimelineView.Type
 
+export const TimelinePage = Schema.Struct({ ...TimelineView.fields, gathering: Schema.Boolean })
+export type TimelinePage = typeof TimelinePage.Type
+
 type Transcripts = ReadonlyMap<string, Transcript>
 
 const speechOf = (transcript: Transcript, take: { readonly from: number; readonly to: number }): Span | undefined => {

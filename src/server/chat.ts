@@ -33,6 +33,7 @@ const modelFailed = (reason: string): string => {
 const UNAVAILABLE = "Чат недоступен. Отправьте сообщение ещё раз."
 const LOOKING: ChatEvent = { type: "step", text: "Смотрю приложенные файлы" }
 const INTERRUPTED = "студия остановилась раньше, чем ответила. Отправьте сообщение ещё раз."
+const GATHER_PROMPT = "The studio has heard every uploaded video and asks you to gather the blocks now. Write blocks.json as «Blocks and takes» in the reels-plan skill says, from every heard video. Write no plan and ask nothing. The person does not see this message or your answer."
 const YES_NOTE = "\nWith this message the person agrees with the whole plan in plan.md. Follow «After the yes» in the reels-plan skill now, and leave plan.md as it is.\n"
 
 const briefNote = (brief: string): string => brief === ""
@@ -79,12 +80,16 @@ const brokenStream = <A, E, R>(stream: Stream.Stream<A, E, R>): Stream.Stream<A,
     Stream.mapError(() => new ApiError({ status: 500, message: UNAVAILABLE }))
   )
 
+type Asker = "person" | "studio" | "removal"
+
 interface Turn {
+  readonly asker: Asker
   readonly stop: Deferred.Deferred<void>
   readonly finished: Deferred.Deferred<void>
 }
 
-const makeTurn = Effect.all({ stop: Deferred.make<void>(), finished: Deferred.make<void>() })
+const makeTurn = (asker: Asker): Effect.Effect<Turn> =>
+  Effect.all({ stop: Deferred.make<void>(), finished: Deferred.make<void>() }).pipe(Effect.map((deferreds) => ({ asker, ...deferreds })))
 
 const makeTurns = Effect.gen(function*() {
   const turns = yield* Ref.make<ReadonlyMap<string, Turn>>(new Map())
@@ -107,12 +112,14 @@ const makeTurns = Effect.gen(function*() {
     })
   const withoutTurn = <A, E, R>(id: string, use: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     Effect.acquireUseRelease(
-      Effect.tap(makeTurn, (turn) => takeOver(id, turn)),
+      Effect.tap(makeTurn("removal"), (turn) => takeOver(id, turn)),
       () => use,
       (turn) => release(id, turn)
     )
-  return { claim, release, withoutTurn }
+  return { claim, release, takeOver, withoutTurn }
 })
+
+export type Gathering = "gathered" | "busy" | "stopped"
 
 interface RunState {
   readonly text: string
@@ -245,6 +252,35 @@ const piStream = <E>(
     Stream.concat(stopped)
   )
 
+type Run = (id: string, dir: string, text: string, names: ReadonlyArray<string>, model: string, effort: Effort, approving: boolean, asker: Asker) => Stream.Stream<ChatEvent, ApiError>
+
+interface GatherNeeds {
+  readonly projects: Projects["Service"]
+  readonly settings: Settings["Service"]
+  readonly makeDirectory: (dir: string) => Effect.Effect<void, ApiError>
+  readonly claim: (id: string, turn: Turn) => Effect.Effect<Turn | undefined>
+  readonly release: (id: string, turn: Turn) => Effect.Effect<void>
+  readonly run: Run
+}
+
+const gatherWith = ({ projects, settings, makeDirectory, claim, release, run }: GatherNeeds) =>
+  Effect.fn("Chat.gather")(function*(id: string) {
+    const dir = yield* projects.folder(id)
+    const project = yield* projects.get(id)
+    const model = project.model !== undefined && settings.models.includes(project.model) ? project.model : settings.models[0]
+    if (model === undefined) return yield* new ApiError({ status: 500, message: "В студии не задана ни одна модель" })
+    const turn = yield* makeTurn("studio")
+    if ((yield* claim(id, turn)) !== undefined) return "busy"
+    yield* makeDirectory(dir).pipe(Effect.onError(() => release(id, turn)))
+    yield* run(id, dir, GATHER_PROMPT, [], model, project.effort ?? "medium", false, "studio").pipe(
+      Stream.interruptWhen(Deferred.await(turn.stop)),
+      Stream.runDrain,
+      Effect.ensuring(release(id, turn))
+    )
+    const gathering: Gathering = (yield* Deferred.isDone(turn.stop)) ? "stopped" : "gathered"
+    return gathering
+  })
+
 export class Chat extends Context.Service<Chat, {
   readonly history: (id: string) => Effect.Effect<ReadonlyArray<Message>, ApiError>
   readonly send: (
@@ -254,6 +290,7 @@ export class Chat extends Context.Service<Chat, {
     model: string,
     effort: Effort
   ) => Effect.Effect<Stream.Stream<ChatEvent, ApiError>, ApiError>
+  readonly gather: (id: string) => Effect.Effect<Gathering, ApiError>
   readonly withoutTurn: <A, E, R>(id: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }>()("reels-studio/Chat") {
   static readonly layer = Layer.effect(
@@ -267,7 +304,7 @@ export class Chat extends Context.Service<Chat, {
       const attachments = yield* Attachments
       const brief = yield* Brief
       const context = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>()
-      const { claim, release, withoutTurn } = yield* makeTurns
+      const { claim, release, takeOver, withoutTurn } = yield* makeTurns
       const systemPrompt = yield* fs.readFileString(path.join(settings.root, "prompts", "studio.md")).pipe(orBroken)
       const append = Effect.fn("Chat.append")(function*(dir: string, message: Message) {
         const line = yield* encodeLine(message).pipe(orBroken)
@@ -307,13 +344,15 @@ export class Chat extends Context.Service<Chat, {
           stdin: Stream.concat(Stream.make(new TextEncoder().encode(prompt + "\n")), Stream.never),
         })
       }
-      const run = (id: string, dir: string, text: string, names: ReadonlyArray<string>, model: string, effort: Effort, approving: boolean): Stream.Stream<ChatEvent, ApiError> =>
+      const run: Run = (id, dir, text, names, model, effort, approving, asker) =>
         Stream.concat(names.length === 0 ? Stream.empty : Stream.make(LOOKING), Stream.unwrap(Effect.gen(function*() {
           const state = yield* Ref.make<RunState>({ text: "", base: "", pending: undefined, failed: undefined, settled: false })
-          yield* Effect.addFinalizer(() =>
-            Ref.get(state).pipe(Effect.flatMap((last) => append(dir, lastWords(last))),
-              Effect.catchTag("ApiError", (error) => Effect.logError("the reply was not saved", error.message))
-            ))
+          if (asker === "person") {
+            yield* Effect.addFinalizer(() =>
+              Ref.get(state).pipe(Effect.flatMap((last) => append(dir, lastWords(last))),
+                Effect.catchTag("ApiError", (error) => Effect.logError("the reply was not saved", error.message))
+              ))
+          }
           const files = yield* attachments.show(dir, names)
           const task = briefNote((yield* brief.view(id)).brief) + (approving ? YES_NOTE : "")
           const known = `${yield* heardVideos(id)}\n${task}${attachedNote(yield* attachments.listed(dir, files))}`
@@ -336,10 +375,10 @@ export class Chat extends Context.Service<Chat, {
         const names = Arr.dedupe(yield* Effect.forEach(uploads, (upload) => completedName(dir, upload, "attached").pipe(Effect.provideService(FileSystem.FileSystem, fs), Effect.provideService(Path.Path, path))))
         const plan = approves(trimmed) && names.length === 0 ? yield* brief.plan(id) : undefined
         const approved = plan === undefined || plan.state === "none" ? undefined : plan.text
-        const turn = yield* makeTurn
-        if ((yield* claim(id, turn)) !== undefined) {
-          return yield* new ApiError({ status: 409, message: "Дождитесь ответа на прошлое сообщение" })
-        }
+        const turn = yield* makeTurn("person")
+        const held = yield* claim(id, turn)
+        if (held?.asker === "studio") yield* takeOver(id, turn)
+        else if (held !== undefined) return yield* new ApiError({ status: 409, message: "Дождитесь ответа на прошлое сообщение" })
         yield* Effect.gen(function*() {
           yield* fs.makeDirectory(path.join(dir, "chat"), { recursive: true }).pipe(orBroken)
           yield* projects.setChoice(id, model, effort)
@@ -348,12 +387,13 @@ export class Chat extends Context.Service<Chat, {
         const work = approved === undefined ? Stream.empty : Stream.fromEffect(brief.workAlone(id, approved).pipe(
           Effect.catchTag("ApiError", (error) => Effect.logError("the work after the yes failed", error.message))
         )).pipe(Stream.drain)
-        return Stream.concat(run(id, dir, trimmed, names, model, effort, approved !== undefined), work).pipe(
+        return Stream.concat(run(id, dir, trimmed, names, model, effort, approved !== undefined, "person"), work).pipe(
           Stream.interruptWhen(Deferred.await(turn.stop)),
           Stream.ensuring(release(id, turn))
         )
       })
-      return Chat.of({ history, send, withoutTurn })
+      const gather = gatherWith({ projects, settings, makeDirectory: (dir) => fs.makeDirectory(path.join(dir, "chat"), { recursive: true }).pipe(orBroken), claim, release, run })
+      return Chat.of({ history, send, gather, withoutTurn })
     })
   )
 }
