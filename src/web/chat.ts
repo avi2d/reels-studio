@@ -136,6 +136,7 @@ export interface ChatDrawer {
   readonly node: HTMLElement
   readonly opener: HTMLElement
   readonly ask: (message: string) => void
+  readonly dispose: () => void
 }
 
 export const chatDrawer = (
@@ -209,5 +210,5 @@ export const chatDrawer = (
     form.requestSubmit()
     log.scrollTop = log.scrollHeight
   }
-  return { node: drawer.node, opener: drawer.opener, ask }
+  return { node: drawer.node, opener: drawer.opener, ask, dispose: () => { tray.dispose() } }
 }

@@ -18,7 +18,13 @@ import { videosCard } from "./videos.ts"
 
 const app = document.querySelector("#app") ?? document.body
 
-const show = (...nodes: ReadonlyArray<Node>): void => { app.replaceChildren(...nodes) }
+let disposeChat: (() => void) | undefined
+
+const show = (...nodes: ReadonlyArray<Node>): void => {
+  disposeChat?.()
+  disposeChat = undefined
+  app.replaceChildren(...nodes)
+}
 
 const showFailure = (message: string): void => {
   show(h("div", { class: "home" }, h("p", { class: "error", role: "alert" }, message), h("a", { class: "back", href: "#/" }, "← Все ролики")))
@@ -180,6 +186,7 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
       h("div", { class: "board" }, stages.rail),
       chat.node)
     show(reel)
+    disposeChat = chat.dispose
     shrinkWhenScrolledPast(panels.viewer)
     refresh()
   })

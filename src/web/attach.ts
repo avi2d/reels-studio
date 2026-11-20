@@ -65,6 +65,7 @@ export interface Tray {
   readonly sentView: () => HTMLElement
   readonly clear: () => void
   readonly lock: (locked: boolean) => void
+  readonly dispose: () => void
 }
 
 const uploadId = (url: string): string => url.split("/").at(-1) ?? ""
@@ -75,7 +76,29 @@ export const attachTray = (projectId: string, onProblem: (message: string) => vo
   const opener = iconButton("plain", "attach", "Приложить файлы", { class: "attach" })
   opener.addEventListener("click", () => { input.click() })
   const picked: Array<Picked> = []
-  const state = { locked: false }
+  const owned = new Set<string>()
+  const state = { locked: false, disposed: false }
+
+  const keep = (url: string): string => {
+    owned.add(url)
+    return url
+  }
+
+  const release = (url: string | undefined): void => {
+    if (url === undefined) return
+    owned.delete(url)
+    URL.revokeObjectURL(url)
+  }
+
+  const previewOf = (file: File): string | undefined =>
+    state.disposed || kindOfName(file.name) !== "picture" ? undefined : keep(URL.createObjectURL(file))
+
+  const dispose = (): void => {
+    if (state.disposed) return
+    state.disposed = true
+    for (const url of owned) URL.revokeObjectURL(url)
+    owned.clear()
+  }
 
   const refresh = (): void => { list.hidden = picked.length === 0 }
 
@@ -83,14 +106,14 @@ export const attachTray = (projectId: string, onProblem: (message: string) => vo
     const index = picked.indexOf(entry)
     if (index >= 0) picked.splice(index, 1)
     entry.node.remove()
-    if (entry.preview !== undefined) URL.revokeObjectURL(entry.preview)
+    release(entry.preview)
     refresh()
     opener.focus()
   }
 
   const chip = (file: File): Picked => {
     const kind = kindOfName(file.name)
-    const preview = kind === "picture" ? URL.createObjectURL(file) : undefined
+    const preview = previewOf(file)
     const status = h("span", { class: "size" }, formatSize(file.size))
     const remove = iconButton("plain", "close", `Убрать ${file.name}`, { class: "remove" })
     const node = h("li", {}, thumb(kind, preview), h("span", { class: "name", title: file.name }, file.name), status, remove)
@@ -136,32 +159,11 @@ export const attachTray = (projectId: string, onProblem: (message: string) => vo
           Effect.tapError(() => Effect.sync(() => { entry.status.textContent = formatSize(entry.file.size) }))
         )))
 
-  const sentView = (): HTMLElement => {
-    const owned: Array<string> = []
-    const view = fileList(picked.map((entry) => {
-      const kind = kindOfName(entry.file.name)
-      const source = kind === "picture" ? URL.createObjectURL(entry.file) : undefined
-      if (source !== undefined) owned.push(source)
-      return fileItem(entry.file.name, source)
-    }))
-    if (typeof document !== "undefined" && owned.length > 0) {
-      const shown = { seen: false }
-      const observer = new MutationObserver(() => {
-        if (view.isConnected) shown.seen = true
-        else if (shown.seen) {
-          for (const source of owned) URL.revokeObjectURL(source)
-          observer.disconnect()
-        }
-      })
-      observer.observe(document.body, { childList: true, subtree: true })
-    }
-    return view
-  }
+  const sentView = (): HTMLElement =>
+    fileList(picked.map((entry) => fileItem(entry.file.name, previewOf(entry.file))))
 
   const clear = (): void => {
-    for (const entry of picked) {
-      if (entry.preview !== undefined) URL.revokeObjectURL(entry.preview)
-    }
+    for (const entry of picked) release(entry.preview)
     picked.splice(0, picked.length)
     list.replaceChildren()
     refresh()
@@ -174,17 +176,5 @@ export const attachTray = (projectId: string, onProblem: (message: string) => vo
     list.classList.toggle("sending", locked)
   }
 
-  if (typeof document !== "undefined") {
-    const observer = new MutationObserver(() => {
-      if (!list.isConnected) {
-        for (const entry of picked) {
-          if (entry.preview !== undefined) URL.revokeObjectURL(entry.preview)
-        }
-        observer.disconnect()
-      }
-    })
-    observer.observe(document.body, { childList: true, subtree: true })
-  }
-
-  return { node: list, opener, input, add, count: () => picked.length, send, sentView, clear, lock }
+  return { node: list, opener, input, add, count: () => picked.length, send, sentView, clear, lock, dispose }
 }
