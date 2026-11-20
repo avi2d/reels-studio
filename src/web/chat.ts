@@ -75,7 +75,7 @@ const talk = (projectId: string, { effort, empty, log, model, text, tray }: Talk
     if (!response.ok || response.body === null) return yield* Effect.flatMap(Api.failure(response), Effect.fail)
     empty.remove()
     log.append(bubble({ role: "user", text: message }, files.length === 0 ? undefined : tray.sentView()), step)
-    text.value = ""
+    if ((text.value ?? "").trim() === message) text.value = ""
     tray.clear()
     step.scrollIntoView({ block: "nearest" })
     yield* readReply(response.body.getReader(), (event) => {

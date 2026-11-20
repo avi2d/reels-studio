@@ -52,6 +52,7 @@ interface Picked {
   readonly node: HTMLElement
   readonly status: HTMLElement
   readonly preview: string | undefined
+  done: string | undefined
 }
 
 export interface Tray {
@@ -93,12 +94,16 @@ export const attachTray = (projectId: string, onProblem: (message: string) => vo
     const status = h("span", { class: "size" }, formatSize(file.size))
     const remove = iconButton("plain", "close", `Убрать ${file.name}`, { class: "remove" })
     const node = h("li", {}, thumb(kind, preview), h("span", { class: "name", title: file.name }, file.name), status, remove)
-    const entry: Picked = { file, node, status, preview }
+    const entry: Picked = { file, node, status, preview, done: undefined }
     remove.addEventListener("click", () => { if (!state.locked) drop(entry) })
     return entry
   }
 
   const add = (files: ReadonlyArray<File>): void => {
+    if (state.locked) {
+      onProblem("Дождитесь отправки сообщения.")
+      return
+    }
     const fresh = files.filter((file) => !picked.some((entry) => entry.file === file))
     const room = MAX_FILES - picked.length
     if (fresh.length > room) onProblem(`К одному сообщению можно приложить не больше ${MAX_FILES} файлов.`)
@@ -117,18 +122,26 @@ export const attachTray = (projectId: string, onProblem: (message: string) => vo
 
   const send: Effect.Effect<ReadonlyArray<string>, Api.Failed> = Effect.suspend(() =>
     Effect.forEach([...picked], (entry) =>
-      upload(attachmentShelf(projectId), entry.file, (progress) => {
-        entry.status.textContent = progress.waiting
-          ? "ждёт связи"
-          : `${Math.floor((progress.sent / progress.total) * 100)}%`
-      }).pipe(
-        Effect.map(uploadId),
-        Effect.tapError(() => Effect.sync(() => { entry.status.textContent = formatSize(entry.file.size) }))
-      )))
+      entry.done !== undefined
+        ? Effect.succeed(uploadId(entry.done))
+        : upload(attachmentShelf(projectId), entry.file, (progress) => {
+          entry.status.textContent = progress.waiting
+            ? "ждёт связи"
+            : `${Math.floor((progress.sent / progress.total) * 100)}%`
+        }).pipe(
+          Effect.tap((url) => Effect.sync(() => {
+            entry.done = url
+          })),
+          Effect.map(uploadId),
+          Effect.tapError(() => Effect.sync(() => { entry.status.textContent = formatSize(entry.file.size) }))
+        )))
 
-  const sentView = (): HTMLElement => fileList(picked.map((entry) => fileItem(entry.file.name, entry.preview)))
+  const sentView = (): HTMLElement => fileList(picked.map((entry) => fileItem(entry.file.name, HAS_COVER.has(kindOfName(entry.file.name)) ? Api.coverUrl(projectId, entry.file.name) : undefined)))
 
   const clear = (): void => {
+    for (const entry of picked) {
+      if (entry.preview !== undefined) URL.revokeObjectURL(entry.preview)
+    }
     picked.splice(0, picked.length)
     list.replaceChildren()
     refresh()
@@ -137,7 +150,20 @@ export const attachTray = (projectId: string, onProblem: (message: string) => vo
   const lock = (locked: boolean): void => {
     state.locked = locked
     opener.toggleAttribute("disabled", locked)
+    input.toggleAttribute("disabled", locked)
     list.classList.toggle("sending", locked)
+  }
+
+  if (typeof document !== "undefined") {
+    const observer = new MutationObserver(() => {
+      if (!list.isConnected) {
+        for (const entry of picked) {
+          if (entry.preview !== undefined) URL.revokeObjectURL(entry.preview)
+        }
+        observer.disconnect()
+      }
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
   }
 
   return { node: list, opener, input, add, count: () => picked.length, send, sentView, clear, lock }

@@ -198,15 +198,23 @@ export class Attachments extends Context.Service<Attachments, {
       const context = yield* Effect.context<FileSystem.FileSystem | Settings | ChildProcessSpawner.ChildProcessSpawner>()
 
       const show = Effect.fn("Attachments.show")(function*(dir: string, names: ReadonlyArray<string>) {
-        const shown = yield* Effect.forEach(names, (name) => Effect.gen(function*() {
+        const loaded = yield* Effect.forEach(names, (name) => Effect.gen(function*() {
           const look = yield* lookAt(dir, name)
-          return { name, about: look.about, images: yield* imagesOf(dir, name, look) }
+          return { name, look, shared: placeOf(dir, name).shared, images: yield* imagesOf(dir, name, look) }
         }))
-        const room = { left: MOST_IMAGES }
-        return shown.map((file) => {
-          const images = file.images.slice(0, room.left)
-          room.left -= images.length
-          return { ...file, images }
+        let left = MOST_IMAGES
+        return loaded.map(({ name, look, shared, images }) => {
+          const delivered = images.slice(0, left)
+          left -= delivered.length
+          const total = look.shown.length
+          const omitted = look.shown.slice(delivered.length).map((file) => `${shared}/${file}`)
+          const noun = look.kind === "picture" ? "image" : look.kind === "document" ? "page images" : "frames"
+          const about = total === 0 || delivered.length === total
+            ? look.about
+            : delivered.length === 0
+              ? `${look.about} Included with this message: 0 of ${total} ${noun}. Read them at ${omitted.join(", ")}.`
+              : `${look.about} Included with this message: ${delivered.length} of ${total} ${noun}. Read the rest at ${omitted.join(", ")}.`
+          return { name, about, images: delivered }
         })
       }, Effect.provideContext(context))
 
