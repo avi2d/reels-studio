@@ -5,7 +5,7 @@ import { Gaze, type GazeFailure } from "../shared/timeline.ts"
 import { gazeText, isHdr, KEY_FRAME_EVERY, prepareArgs, probeArgs, refreshArgs, transcriptText } from "./media-commands.ts"
 import { Settings } from "./settings.ts"
 
-class ToolFailed extends Data.TaggedError("ToolFailed")<{ readonly command: string; readonly code: number; readonly output: string }> {}
+export class ToolFailed extends Data.TaggedError("ToolFailed")<{ readonly command: string; readonly code: number; readonly output: string }> {}
 
 export class GazeFailed extends Data.TaggedError("GazeFailed")<{ readonly reason: GazeFailure; readonly detail: string }> {}
 
@@ -21,7 +21,7 @@ const Probe = Schema.fromJsonString(Schema.Struct({
   streams: Schema.Array(Schema.Struct({ color_transfer: Schema.optionalKey(Schema.String) }))
 }))
 const decodeProbe = Schema.decodeUnknownEffect(Probe)
-const decodeTranscript = Schema.decodeUnknownEffect(Schema.fromJsonString(Transcript))
+export const decodeTranscript = Schema.decodeUnknownEffect(Schema.fromJsonString(Transcript))
 const decodePlan = Schema.decodeUnknownOption(Schema.fromJsonString(Plan))
 const decodeGaze = Schema.decodeUnknownEffect(Schema.fromJsonString(Gaze))
 
@@ -56,7 +56,7 @@ const markPreviewFresh = Effect.fnUntraced(function*(job: Job) {
   yield* fs.writeFileString(previewFlag(job), `${KEY_FRAME_EVERY}\n`)
 })
 
-const tool = Effect.fnUntraced(function*(command: string, args: ReadonlyArray<string>, prefix: ReadonlyArray<string>) {
+export const tool = Effect.fnUntraced(function*(command: string, args: ReadonlyArray<string>, prefix: ReadonlyArray<string>) {
   const [head = command, ...rest] = [...prefix, command, ...args]
   const handle = yield* ChildProcess.make(head, rest)
   const [output, complaints, code] = yield* Effect.all([
