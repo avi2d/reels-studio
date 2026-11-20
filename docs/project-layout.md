@@ -28,3 +28,4 @@ The studio keeps its code, skills and per-video folders in these places.
 | `prompts/studio.md` | The system prompt of the chat model |
 | `projects/` | One folder per video with the originals, the files attached in the chat, the chat, the transcripts and the plan, kept out of git |
 | `tests/unit/` | The unit tests |
+| `tests/e2e/browser/` | The browser scenarios and their GitHub Actions runner |
