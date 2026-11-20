@@ -83,7 +83,7 @@ const verifyPlayback = async (page: Page): Promise<void> => {
   const first = map.getByRole("button", { name: "Блок 1. Конец" })
   await first.click()
   const seeks = "browser-check-seek"
-  await page.locator("video.player").evaluate((node, name) => {
+  await page.getByRole("region", { name: "Просмотр" }).locator("video.player").evaluate((node, name) => {
     if (!(node instanceof HTMLVideoElement)) throw new Error("The player is not a video")
     node.addEventListener("seeked", () => performance.mark(name, { detail: node.currentTime }))
   }, seeks)
