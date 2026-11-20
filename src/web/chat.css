@@ -32,9 +32,11 @@
 .engine summary { display: flex; align-items: center; min-height: 32px; padding: 0 4px; cursor: pointer; }
 .engine[open] { display: flex; flex-direction: column; gap: 8px; padding-bottom: 4px; }
 .composer { display: flex; align-items: flex-end; gap: 6px; padding: 6px 6px 6px 14px; border: 1px solid var(--wa-color-surface-border); border-radius: 18px; background: var(--wa-color-surface-default); }
-.composer:focus-within { border-color: var(--wa-color-brand-fill-loud); }
+.composer:has(wa-textarea:focus-within) { outline: var(--wa-focus-ring-width) solid var(--wa-color-focus); }
 .engine wa-select[name="model"] { flex-basis: 200px; }
 .composer wa-textarea { flex: 1; min-width: 0; max-height: 130px; overflow-y: auto; }
+
+.composer wa-textarea::part(textarea-wrapper) { border: 0; background: transparent; outline: none; }
 
 @media (hover: hover) and (pointer: fine) {
   .engine summary:hover { color: var(--wa-color-text-normal); }

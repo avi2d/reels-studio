@@ -112,7 +112,7 @@ const display = (parts: Parts, state: State) => {
     const before = state.playing?.clip.block
     state.playing = playing
     parts.play.textContent = playing === undefined ? PLAY : STOP
-    const goLabel = playing === undefined ? `${GO}. Пробел` : `${STOP}. Пробел`
+    const goLabel = playing === undefined ? GO : STOP
     parts.go.replaceChildren(icon(playing === undefined ? "play" : "stop", goLabel))
     parts.goTip.textContent = goLabel
     showClock()

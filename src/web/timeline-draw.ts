@@ -123,10 +123,10 @@ export interface Parts {
 }
 
 export const partsOf = (): Parts => {
-  const undo = iconTool("tool-undo", "quiet", "undo", "Отменить. Клавиша Z")
+  const undo = iconTool("tool-undo", "quiet", "undo", "Отменить")
   const redo = iconTool("tool-redo", "quiet", "redo", "Повторить")
   const prev = iconTool("tool-prev", "plain", "previous", "Блок до этого")
-  const go = iconTool("tool-go", "bright", "play", `${GO}. Пробел`)
+  const go = iconTool("tool-go", "bright", "play", GO)
   const next = iconTool("tool-next", "plain", "next", "Блок после этого")
   prev.button.classList.add("prev")
   next.button.classList.add("next")

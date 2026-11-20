@@ -12,7 +12,6 @@ import { oneAfterAnother } from "./queue.ts"
 import { askToRemove } from "./remove.ts"
 import { run } from "./run.ts"
 import { stageRail, type StageId, type StageNote } from "./stages.ts"
-import { KEYS } from "./timeline-keys.ts"
 import { timelineCard, type Status } from "./timeline.ts"
 import { upload, type Progress } from "./upload.ts"
 import { videosCard } from "./videos.ts"
@@ -137,9 +136,6 @@ const stageNotes = ({ blocks, heard, pauses }: Status): Readonly<Record<StageId,
   }
 })
 
-const keysBar = (): HTMLElement =>
-  h("footer", { class: "keys" }, ...KEYS.map(([key, does]) => h("span", {}, h("kbd", {}, key), does)))
-
 const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
   Effect.gen(function*() {
     const [{ project }, { messages }, { models }] = yield* Effect.all([Api.getProject(id), Api.getChat(id), Api.getModels], { concurrency: 3 })
@@ -182,7 +178,6 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
       panels.viewer,
       h("div", { class: "dock" }, panels.summary),
       h("div", { class: "board" }, stages.rail),
-      keysBar(),
       chat.node)
     show(reel)
     shrinkWhenScrolledPast(panels.viewer)

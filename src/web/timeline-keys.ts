@@ -1,13 +1,5 @@
 import type { Placed, Take } from "../shared/timeline.ts"
 
-export const KEYS: ReadonlyArray<readonly [string, string]> = [
-  ["Пробел", "смотреть с блока"],
-  ["← →", "блок"],
-  ["1–9", "дубль"],
-  ["Delete", "удалить блок"],
-  ["Z", "отменить"]
-]
-
 export interface KeyActions {
   readonly toggle: () => void
   readonly step: (block: string) => void
