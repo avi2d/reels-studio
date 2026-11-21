@@ -79,8 +79,6 @@ input[type="text"] {
   font-size: 16px;
 }
 
-.file-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
-
 .row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
 .row > .grow { flex: 1 1 160px; min-width: 0; }
 

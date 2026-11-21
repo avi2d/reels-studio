@@ -4,6 +4,7 @@ import * as Api from "./api.ts"
 import type WaButton from "@awesome.me/webawesome/dist/components/button/button.js"
 import { button, setExpanded } from "./controls.ts"
 import { h } from "./dom.ts"
+import { onLibrarySettled } from "./uploaded.ts"
 import { addLabel, formatLength, formatSize, fromProjects, listeningNote } from "./format.ts"
 
 const POLL_MS = 4000
@@ -39,7 +40,7 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
     h("legend", {}, "Загруженные видео"),
     h("p", { class: "muted" }, "Студия уже прослушала эти видео. Отмеченные появятся в ролике сразу, вместе с текстом."),
     list, listening, h("div", { class: "row" }, add, cancel), problem)
-  const state = { chosen: new Map<HTMLInputElement, LibraryVideo>(), shown: false, timer: 0 }
+  const state = { chosen: new Map<HTMLInputElement, LibraryVideo>(), shown: false, timer: 0, failed: false }
   const recount = (): void => {
     const count = [...state.chosen.keys()].filter((box) => box.checked).length
     add.textContent = addLabel(count)
@@ -62,7 +63,12 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
     const offered = videos.length > 0 || waiting > 0
     open.hidden = !offered
     hint.hidden = offered
-    if (!offered && problem.textContent === "") show(false)
+    if (state.failed) {
+      state.failed = false
+      problem.textContent = ""
+      panel.hidden = !state.shown
+    }
+    if (!offered) show(false)
     recount()
   }
   const reload = (): void => {
@@ -70,11 +76,24 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
     Effect.runFork(Api.getLibrary(projectId).pipe(
       Effect.map((offer) => {
         fill(offer)
+        globalThis.clearTimeout(state.timer)
         if (offer.listening > 0 && open.isConnected) state.timer = Number(globalThis.setTimeout(reload, POLL_MS))
       }),
-      Effect.catchTag("Failed", () => Effect.void)
+      Effect.catchTag("Failed", (error) => Effect.sync(() => {
+        state.failed = true
+        problem.textContent = error.message
+        panel.hidden = false
+        hint.hidden = false
+        globalThis.clearTimeout(state.timer)
+        if (open.isConnected) state.timer = Number(globalThis.setTimeout(reload, POLL_MS))
+      }))
     ))
   }
+  let stop: (() => void) | undefined
+  stop = onLibrarySettled(() => {
+    if (open.isConnected) reload()
+    else stop?.()
+  })
   open.addEventListener("click", () => { show(!state.shown) })
   cancel.addEventListener("click", () => { show(false) })
   add.addEventListener("click", () => {

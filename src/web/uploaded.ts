@@ -12,6 +12,16 @@ const POLL_MS = 4000
 const enqueue = oneAfterAnother((work: Effect.Effect<void>) => work)
 const rows: Array<HTMLElement> = []
 const mounted: { reload: () => Effect.Effect<void, Api.Failed> } = { reload: () => Effect.void }
+const settled = new Set<() => void>()
+export const onLibrarySettled = (listener: () => void): (() => void) => {
+  settled.add(listener)
+  return () => {
+    settled.delete(listener)
+  }
+}
+const notifySettled = (): void => {
+  for (const listener of [...settled]) listener()
+}
 
 const uploadKey = (file: File): string => `${file.name}:${file.size}:${file.lastModified}`
 
@@ -47,10 +57,14 @@ const uploadRow = (file: File) => {
   }
   const work = upload(libraryShelf, file, onProgress).pipe(
     Effect.flatMap(() => mounted.reload().pipe(
-      Effect.map(() => { forget((row) => row === node || row.dataset.uploaded === "true") }),
+      Effect.map(() => {
+        forget((row) => row === node || row.dataset.uploaded === "true")
+        notifySettled()
+      }),
       Effect.catchTag("Failed", () => Effect.sync(() => {
         node.dataset.uploaded = "true"
         status.textContent = "Видео загружено. Список обновится при следующей загрузке."
+        notifySettled()
       }))
     )),
     Effect.catch((error) => Effect.sync(() => {
@@ -105,6 +119,7 @@ export const uploadedPanel = (): UploadedPanel => {
   const show = (videos: ReadonlyArray<UploadedVideo>): void => {
     known.replaceChildren(...videos.map((video) => uploadedItem(video, retry)))
     node.hidden = videos.length === 0 && rows.length === 0
+    globalThis.clearTimeout(state.timer)
     if (videos.some((video) => video.state === "waiting")) state.timer = Number(globalThis.setTimeout(refresh, POLL_MS))
   }
   const reload = (): Effect.Effect<void, Api.Failed> => Effect.suspend(() => {
@@ -114,6 +129,7 @@ export const uploadedPanel = (): UploadedPanel => {
   })
   function refresh(): void {
     Effect.runFork(reload().pipe(Effect.catchTag("Failed", () => Effect.sync(() => {
+      globalThis.clearTimeout(state.timer)
       state.timer = Number(globalThis.setTimeout(refresh, POLL_MS))
     }))))
   }

@@ -169,8 +169,8 @@ const makeShelves = (projects: Projects["Service"], unheard: Unheard, context: C
       Effect.flatMap(projects.folder(project.id), (dir) => heardIn(dir, { from: "reel", project: project.id, titles: [project.title] })).pipe(
         Effect.tapError((error) => error instanceof ApiError && error.status === 404 ? Effect.void : Effect.logError("the library skipped a folder", error)),
         Effect.orElseSucceed(() => [])))
-    const inLibrary = yield* heardIn(shared, { from: "library" }).pipe(Effect.orElseSucceed(() => []))
-    const waiting = yield* videosIn(unheard, shared).pipe(Effect.orElseSucceed((): ReadonlyArray<VideoView> => []))
+    const inLibrary = yield* heardIn(shared, { from: "library" }).pipe(Effect.tapError((error) => Effect.logError("the library skipped the shared list", error)), Effect.orElseSucceed(() => []))
+    const waiting = yield* videosIn(unheard, shared).pipe(Effect.tapError((error) => Effect.logError("the library skipped the shared list", error)), Effect.orElseSucceed((): ReadonlyArray<VideoView> => []))
     const offer: Offer = {
       videos: gatherLibrary(here, [...inLibrary, ...inReels.flat()]),
       listening: waiting.filter((video) => video.state === "waiting").length
