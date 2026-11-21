@@ -126,6 +126,7 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
       Effect.map(() => {
         for (const box of state.chosen.keys()) box.checked = false
         state.adding = false
+        recount()
         show(false)
         reload()
       }),
