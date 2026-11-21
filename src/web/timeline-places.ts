@@ -15,16 +15,34 @@ interface AnswerText {
 }
 
 const ANSWERS: ReadonlyArray<readonly [JoinAnswer, AnswerText]> = [
-  ["leave", { label: "Оставить скачок", does: "Склейка остаётся как есть, и голова на ней прыгает.", done: "скачок остаётся" }],
-  ["shot", {
-    label: "Сменить план",
-    does: "После склейки кадр становится крупнее, а если он уже крупный, снова общим, и скачок выглядит как переход на другую камеру.",
-    done: "план меняется"
-  }]
+  ["trim", {
+    label: "Обрезать",
+    does: "Студия убирает кадры с опущенным взглядом у склейки. Она режет только картинку над тишиной, а слова не трогает.",
+    done: "опущенный взгляд обрезан"
+  }],
+  ["leave", { label: "Оставить как есть", does: "Склейка остаётся такой, как сейчас.", done: "склейка остаётся" }]
 ]
 
-const doneOf = (answer: JoinAnswer | undefined): ReadonlyArray<string> =>
-  ANSWERS.flatMap(([one, text]) => one === answer ? [text.done] : [])
+const seconds = (value: number): string => `${value.toFixed(1).replace(".", ",")} с`
+
+const doneOf = ({ answer, trim }: Place): ReadonlyArray<string> =>
+  ANSWERS.flatMap(([one, text]) => one !== answer ? [] : [one === "trim" ? `${text.done}: ${seconds(trim.cut)}` : text.done])
+
+const bare = (word: string): string => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")
+
+const wordNote = ({ trim }: Place): string | undefined =>
+  trim.spoken === undefined ? undefined : `взгляд опущен и на слове «${bare(trim.spoken)}», а слова студия не режет`
+
+const trimNote = (place: Place): string => {
+  const word = wordNote(place)
+  if (place.answer !== undefined) return word ?? ""
+  if (place.trim.cut === 0) return word === undefined ? "опущенного взгляда нет, обрезать нечего" : `${word}, поэтому обрезать нечего`
+  const can = `опущенный взгляд можно обрезать: ${seconds(place.trim.cut)}`
+  return word === undefined ? can : `${can}, но ${word}`
+}
+
+const offered = (place: Place): ReadonlyArray<readonly [JoinAnswer, AnswerText]> =>
+  ANSWERS.filter(([answer]) => answer !== "trim" || place.trim.cut > 0)
 
 const blockNumber = (placed: ReadonlyArray<Placed>, block: string): number => placed.findIndex((one) => one.block.id === block) + 1
 
@@ -42,14 +60,15 @@ const placeItem = (place: Place, number: number, placed: ReadonlyArray<Placed>, 
   return h("li", { class: place.answer === undefined ? "pause-row place" : "pause-row place answered" },
     h("span", { class: "where" },
       h("b", {}, `Склейка ${number}`),
-      h("span", {}, [where, ...doneOf(place.answer)].join(" · "))),
+      h("span", {}, [where, ...doneOf(place)].join(" · ")),
+      ...[trimNote(place)].filter((note) => note !== "").map((note) => h("span", { class: "muted" }, note))),
     h("div", { class: "take-acts" },
       button("normal", {
         title: "Полторы секунды до склейки и полторы после, как в ролике",
         "data-key": `hear-join:${key}`,
         click: () => { actions.hearJoin(place.join) }
       }, ...spoken("Посмотреть", `Посмотреть склейку ${number}, ${where}`)),
-      ...ANSWERS.map(([answer, { label, does }]) => button(place.answer === answer ? "primary" : "quiet", {
+      ...offered(place).map(([answer, { label, does }]) => button(place.answer === answer ? "primary" : "quiet", {
         title: does,
         "data-key": `answer-join:${answer}:${key}`,
         "aria-pressed": String(place.answer === answer),

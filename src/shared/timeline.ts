@@ -13,10 +13,11 @@ export type Head = typeof Head.Type
 
 const Step = Schema.Finite.check(Schema.isGreaterThan(0))
 const HeadSamples = Schema.Array(Schema.NullOr(Head))
+const GazeSamples = Schema.Array(Schema.Literals(["camera", "away", "hidden"]))
 
 export const Gaze = Schema.Struct({
   step: Step,
-  samples: Schema.Array(Schema.Literals(["camera", "away", "hidden"])),
+  samples: GazeSamples,
   heads: Schema.optionalKey(HeadSamples)
 })
 export type Gaze = typeof Gaze.Type
@@ -46,7 +47,7 @@ export type PauseRef = typeof PauseRef.Type
 
 const ClipEdge = Schema.Struct({ video: Schema.String, at: Schema.Finite })
 
-export const JoinAnswer = Schema.Literals(["leave", "shot"])
+export const JoinAnswer = Schema.Literals(["trim", "leave"])
 export type JoinAnswer = typeof JoinAnswer.Type
 
 const AnsweredJoin = Schema.Struct({ end: ClipEdge, start: ClipEdge, answer: JoinAnswer })
@@ -72,12 +73,12 @@ const Look = Schema.Union([
   Schema.Struct({ video: Schema.String, state: Schema.Literal("failed"), reason: GazeFailure })
 ])
 
-export const VideoHeads = Schema.Struct({ video: Schema.String, step: Step, heads: HeadSamples })
-export type VideoHeads = typeof VideoHeads.Type
+export const VideoFaces = Schema.Struct({ video: Schema.String, step: Step, gaze: GazeSamples, heads: HeadSamples })
+export type VideoFaces = typeof VideoFaces.Type
 
 export const TimelineView = Schema.Struct({
   looks: Schema.Array(Look),
-  heads: Schema.Array(VideoHeads),
+  faces: Schema.Array(VideoFaces),
   timeline: Schema.Union([
     Schema.Struct({ state: Schema.Literals(["none", "unreadable"]) }),
     Schema.Struct({ state: Schema.Literal("ready"), blocks: Schema.Array(Block), dropped: Schema.Int, edits: Edits })
@@ -209,14 +210,9 @@ export const within = <S extends Span>(spans: ReadonlyArray<S>, window: Span): R
     return end > start ? [{ ...span, start, end }] : []
   })
 
-export interface Close {
-  readonly eyes: Head | undefined
-}
-
 export interface Clip extends Span {
   readonly video: string
   readonly block: string
-  readonly close?: Close
 }
 
 export const clipsOf = (placed: ReadonlyArray<Placed>): ReadonlyArray<Clip> =>

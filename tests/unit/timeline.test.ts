@@ -116,7 +116,7 @@ test("the chat model is told where the gaze file is, or to rank by speech alone 
   const videos = [{ name: "a", state: "ready" as const, transcript: first }, { name: "b", state: "ready" as const, transcript: second }]
   const lines = videoLines(videos, {
     looks: [{ video: "a", state: "measured" }, { video: "b", state: "waiting" }],
-    heads: [],
+    faces: [],
     timeline: { state: "unreadable" }
   })
   expect(lines).toContain("gaze/a.txt")

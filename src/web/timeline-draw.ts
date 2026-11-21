@@ -1,5 +1,5 @@
 import { lengthOf, type Transcript } from "../shared/plan.ts"
-import { headsByVideo, openPlaces, placesOf } from "../shared/joins.ts"
+import { facesByVideo, openPlaces, placesOf } from "../shared/joins.ts"
 import { arrange, assemble, chosenTake, clipsOf, withManualPauses, type Edits, type GazeFailure, type Placed, type Take, type TimelinePage, type TimelineView } from "../shared/timeline.ts"
 import type WaButton from "@awesome.me/webawesome/dist/components/button/button.js"
 import { button, focusWhenReady, iconButton, tooltip } from "./controls.ts"
@@ -188,7 +188,7 @@ const replaceLists = (holder: HTMLElement, ...nodes: ReadonlyArray<HTMLElement>)
 }
 
 const measuringHeads = (view: TimelineView, placed: ReadonlyArray<Placed>): boolean => {
-  const measured = new Set(view.heads.map((one) => one.video))
+  const measured = new Set(view.faces.map((one) => one.video))
   const failed = new Set(view.looks.flatMap((look) => look.state === "failed" ? [look.video] : []))
   return placed.some((one) => !measured.has(one.take.video) && !failed.has(one.take.video))
 }
@@ -225,7 +225,7 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { reado
   replaceLists(parts.detailHolder,
     ...(open === undefined ? [] : [blockDetail(open.block, index + 1, chosenTake(open.block, edits), loaded.transcripts, edits, actions)]),
     ...(deleted.length === 0 ? [] : [deletedList(deleted, actions)]))
-  const places = placesOf(clipsOf(placed), headsByVideo(loaded.view.heads), edits)
+  const places = placesOf(clipsOf(placed), facesByVideo(loaded.view.faces), loaded.transcripts, edits)
   parts.placeHolder.replaceChildren(placeList(places, placed, measuringHeads(loaded.view, placed), actions))
   replaceLists(parts.pauseHolder, pauseList(placed, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
   return { open, status: { pauses: { removed: pauses.filter((pause) => pause.removed).length, total: pauses.length }, places: openPlaces(places) } }

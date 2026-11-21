@@ -115,14 +115,16 @@ It sums the shift of the eyes and the change of the face height, and divides tha
 A join whose sum is above 0.08 becomes a place to check in the «Паузы и склейки» stage.
 A join with no face on one side is not a place.
 The tab of that stage shows how many places are left unanswered.
-«Посмотреть» plays 1.5 s before the join and 1.5 s after it, framed as the reel plays it.
+«Посмотреть» plays 1.5 s before the join and 1.5 s after it, as the reel plays it.
 Either answer takes the place off the count:
 
-- «Оставить скачок» keeps the join as it is, so the head jumps on it.
-- «Сменить план» changes the frame at the join, like a cut to a second camera.
+- «Обрезать» cuts the frames at the join where the eyes are off the camera.
+- «Оставить как есть» keeps the join as it is.
 
-After a change of shot, the player shows the frame 1.3 times closer, centred on the eyes, up to the next change of shot.
-If the frame before the join is already close, the change of shot goes back to the wide frame.
+The cut takes picture only over silence and never cuts into a word.
+Before the join it stops at the end of the last word, and after the join at the start of the next word.
+Each place says how many seconds it can cut, or names the word that keeps the eyes down.
+A place with nothing to cut offers only «Оставить как есть».
 The answer is kept in `timeline.json` with the two ends of the join, so a change of the cut that moves the join opens it again.
 The studio re-measures by itself, in the background, a video whose gaze file holds no head positions.
 This runs on the home computer and does not ask the chat model.

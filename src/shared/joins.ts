@@ -1,4 +1,5 @@
-import type { AnsweredJoin, Clip, Close, Edits, Head, JoinAnswer, VideoHeads } from "./timeline.ts"
+import type { Transcript } from "./plan.ts"
+import type { AnsweredJoin, Clip, Edits, Head, JoinAnswer, VideoFaces } from "./timeline.ts"
 
 export const JUMP_STEP = 0.08
 export const AROUND_JOIN_SECONDS = 1.5
@@ -20,7 +21,7 @@ export const joinsOf = (clips: ReadonlyArray<Clip>): ReadonlyArray<Join> =>
     return [{ after, end, start }]
   })
 
-export const headAt = (measured: VideoHeads, time: number, side: "before" | "after"): Head | undefined => {
+export const headAt = (measured: VideoFaces, time: number, side: "before" | "after"): Head | undefined => {
   const reach = Math.floor(HEAD_REACH / measured.step + SAME_MOMENT)
   const nearest = side === "before" ? Math.floor(time / measured.step + SAME_MOMENT) : Math.ceil(time / measured.step - SAME_MOMENT)
   for (let offset = 0; offset <= reach; offset += 1) {
@@ -40,40 +41,93 @@ const sameEdge = (left: Edge, right: Edge): boolean => left.video === right.vide
 const isJoin = (answered: AnsweredJoin, join: Join): boolean =>
   sameEdge(answered.end, { video: join.end.video, at: join.end.end }) && sameEdge(answered.start, { video: join.start.video, at: join.start.start })
 
+const answerAt = (edits: Edits, join: Join): JoinAnswer | undefined => edits.joins.find((answered) => isJoin(answered, join))?.answer
+
 export interface Place {
   readonly join: Join
   readonly shift: number
+  readonly trim: JoinTrim
   readonly answer: JoinAnswer | undefined
 }
 
-export const placesOf = (clips: ReadonlyArray<Clip>, heads: ReadonlyMap<string, VideoHeads>, edits: Edits): ReadonlyArray<Place> =>
+export const placesOf = (
+  clips: ReadonlyArray<Clip>, faces: ReadonlyMap<string, VideoFaces>, transcripts: ReadonlyMap<string, Transcript>, edits: Edits
+): ReadonlyArray<Place> =>
   joinsOf(clips).flatMap((join): ReadonlyArray<Place> => {
-    const before = heads.get(join.end.video)
-    const after = heads.get(join.start.video)
+    const before = faces.get(join.end.video)
+    const after = faces.get(join.start.video)
     const left = before === undefined ? undefined : headAt(before, join.end.end, "before")
     const right = after === undefined ? undefined : headAt(after, join.start.start, "after")
     if (left === undefined || right === undefined) return []
     const shift = headShift(left, right)
     if (shift <= JUMP_STEP) return []
-    return [{ join, shift, answer: answerAt(edits, join) }]
+    return [{ join, shift, trim: trimOf(join, faces, transcripts), answer: answerAt(edits, join) }]
   })
 
-export const headsByVideo = (heads: ReadonlyArray<VideoHeads>): ReadonlyMap<string, VideoHeads> =>
-  new Map(heads.map((one) => [one.video, one]))
+export const facesByVideo = (faces: ReadonlyArray<VideoFaces>): ReadonlyMap<string, VideoFaces> =>
+  new Map(faces.map((one) => [one.video, one]))
 
-const answerAt = (edits: Edits, join: Join): JoinAnswer | undefined => edits.joins.find((answered) => isJoin(answered, join))?.answer
-
-const closeAt = (heads: ReadonlyMap<string, VideoHeads>, clip: Clip): Close => {
-  const measured = heads.get(clip.video)
-  return { eyes: measured === undefined ? undefined : headAt(measured, clip.start, "after") }
+const isOff = (faces: VideoFaces, index: number): boolean => {
+  const look = faces.gaze[index]
+  return look !== undefined && look !== "camera"
 }
 
-export const framed = (clips: ReadonlyArray<Clip>, heads: ReadonlyMap<string, VideoHeads>, edits: Edits): ReadonlyArray<Clip> => {
-  const shotChanges = new Set(joinsOf(clips).flatMap((join) => answerAt(edits, join) === "shot" ? [join.after] : []))
-  return clips.reduce<{ readonly close: Close | undefined; readonly out: ReadonlyArray<Clip> }>((walk, clip, index) => {
-    const close = !shotChanges.has(index) ? walk.close : walk.close === undefined ? closeAt(heads, clip) : undefined
-    return { close, out: [...walk.out, close === undefined ? clip : { ...clip, close }] }
-  }, { close: undefined, out: [] }).out
+const offFrom = (faces: VideoFaces, from: number, to: number): number => {
+  let index = Math.floor(to / faces.step + SAME_MOMENT)
+  while (index * faces.step >= from && isOff(faces, index)) index -= 1
+  return Math.max(from, Math.min(to, (index + 0.5) * faces.step))
+}
+
+const offUntil = (faces: VideoFaces, from: number, to: number): number => {
+  let index = Math.ceil(from / faces.step - SAME_MOMENT)
+  while (index * faces.step <= to && isOff(faces, index)) index += 1
+  return Math.min(to, Math.max(from, (index - 0.5) * faces.step))
+}
+
+type Word = Transcript["words"][number]
+
+const lastWordBefore = (transcript: Transcript, at: number): Word | undefined =>
+  transcript.words.findLast((word) => word.start < at - SAME_MOMENT)
+
+const firstWordAfter = (transcript: Transcript, at: number): Word | undefined =>
+  transcript.words.find((word) => word.end > at + SAME_MOMENT)
+
+interface JoinTrim {
+  readonly end: number
+  readonly start: number
+  readonly cut: number
+  readonly spoken: string | undefined
+}
+
+const untouched = (join: Join): JoinTrim => ({ end: join.end.end, start: join.start.start, cut: 0, spoken: undefined })
+
+export const trimOf = (join: Join, faces: ReadonlyMap<string, VideoFaces>, transcripts: ReadonlyMap<string, Transcript>): JoinTrim => {
+  const { end: before, start: after } = join
+  const facesBefore = faces.get(before.video)
+  const facesAfter = faces.get(after.video)
+  const wordsBefore = transcripts.get(before.video)
+  const wordsAfter = transcripts.get(after.video)
+  if (facesBefore === undefined || facesAfter === undefined || wordsBefore === undefined || wordsAfter === undefined) return untouched(join)
+  const said = lastWordBefore(wordsBefore, before.end)
+  const saidEnd = said === undefined ? before.start : Math.min(said.end, before.end)
+  const offBefore = offFrom(facesBefore, before.start, before.end)
+  const next = firstWordAfter(wordsAfter, after.start)
+  const nextStart = next === undefined ? after.end : Math.max(next.start, after.start)
+  const offAfter = offUntil(facesAfter, after.start, after.end)
+  const end = Math.max(saidEnd, offBefore)
+  const start = Math.min(nextStart, offAfter)
+  const cut = before.end - end + start - after.start
+  const downInSaid = offBefore + facesBefore.step / 2 <= saidEnd + SAME_MOMENT
+  const downInNext = offAfter - facesAfter.step / 2 >= nextStart - SAME_MOMENT
+  const spoken = downInSaid ? said?.text : downInNext ? next?.text : undefined
+  return cut <= SAME_MOMENT ? { ...untouched(join), spoken } : { end, start, cut, spoken }
+}
+
+export const trimmed = (
+  clips: ReadonlyArray<Clip>, faces: ReadonlyMap<string, VideoFaces>, transcripts: ReadonlyMap<string, Transcript>, edits: Edits
+): ReadonlyArray<Clip> => {
+  const trims = new Map(joinsOf(clips).flatMap((join) => answerAt(edits, join) !== "trim" ? [] : [[join.after, trimOf(join, faces, transcripts)] as const]))
+  return clips.map((clip, index) => ({ ...clip, start: trims.get(index)?.start ?? clip.start, end: trims.get(index + 1)?.end ?? clip.end }))
 }
 
 export const openPlaces = (places: ReadonlyArray<Place>): number => places.filter((place) => place.answer === undefined).length

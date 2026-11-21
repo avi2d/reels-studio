@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { AROUND_JOIN_SECONDS, aroundJoin, framed, headsByVideo, withAnswer } from "../shared/joins.ts"
+import { AROUND_JOIN_SECONDS, aroundJoin, facesByVideo, trimmed, withAnswer } from "../shared/joins.ts"
 import { lengthOf } from "../shared/plan.ts"
 import {
   assemble, clipsOf, mergeEdits, NO_EDITS, playedSpans, withChoice, withDeleted, withManualPauses, within,
@@ -59,7 +59,7 @@ export const takeServer = (local: Edits, acked: Edits, server: Edits, ticket: Ti
   !busy && !ticket.busy && ticket.changes === changes && adoptServer(local, acked, server)
 
 const reelOf = (loaded: Loaded, edits: Edits): ReadonlyArray<Clip> =>
-  framed(clipsOf(placedOf(loaded, edits)), headsByVideo(loaded.view.heads), edits)
+  trimmed(clipsOf(placedOf(loaded, edits)), facesByVideo(loaded.view.faces), loaded.transcripts, edits)
 
 export const playedKey = (loaded: Loaded, edits: Edits): string => JSON.stringify(reelOf(loaded, edits))
 

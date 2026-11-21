@@ -27,7 +27,7 @@ const loaded = (blocks: ReadonlyArray<Block>, names: ReadonlyArray<string>, look
     transcripts,
     view: {
       looks: names.map((video) => ({ video, state: looks })),
-      heads: [],
+      faces: [],
       timeline: { state: "ready", blocks: [...blocks], dropped: 0, edits: NO_EDITS },
       gathering: false,
       gatherFailed: false
