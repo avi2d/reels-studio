@@ -81,12 +81,47 @@ const runBrowserChecks = async (directory: string, staticSite: string): Promise<
     await snapshotHome(staticSite)
     const browser = Bun.spawn([process.execPath, "x", "--no-install", "checks-browser", "--pr"], {
       env: { ...process.env, REELS_BROWSER_URL: studioUrl, REELS_BROWSER_DIR: directory },
-      stdout: "inherit",
-      stderr: "inherit"
+      stdout: "pipe",
+      stderr: "pipe"
     })
-    // A silent child would die with the job timeout instead of this cause.
-    await awaitExit(browser, "The browser checks", BROWSER_DEADLINE_MS)
-    return browser.exitCode ?? 1
+    let recent = ""
+    const forward = async (stream: ReadableStream<Uint8Array> | null, write: (chunk: Uint8Array) => void): Promise<void> => {
+      if (stream === null) return
+      const reader = stream.getReader()
+      const decoder = new TextDecoder()
+      try {
+        while (true) {
+          const next = await reader.read()
+          if (next.done) break
+          write(next.value)
+          recent += decoder.decode(next.value, { stream: true })
+          if (recent.length > 8000) recent = recent.slice(-8000)
+        }
+      } finally {
+        reader.releaseLock()
+      }
+    }
+    const forwarding = Promise.all([
+      forward(browser.stdout, (chunk) => process.stdout.write(chunk)),
+      forward(browser.stderr, (chunk) => process.stderr.write(chunk))
+    ])
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      const stalled = await Promise.race([
+        browser.exited.then(() => false),
+        new Promise<true>((resolve) => { timer = setTimeout(() => resolve(true), BROWSER_DEADLINE_MS) })
+      ])
+      if (!stalled) {
+        await forwarding
+        return browser.exitCode ?? 1
+      }
+      browser.kill()
+      await browser.exited
+      await forwarding
+      throw new Error(`The browser checks stalled. Last output:\n${recent === "" ? "(no output)" : recent}`)
+    } finally {
+      clearTimeout(timer)
+    }
   } finally {
     server.kill()
     await server.exited

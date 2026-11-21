@@ -126,7 +126,11 @@ const attachment: ProductCheck = {
     ])
     assert(sent.ok(), `Chat refused the picture: ${sent.status()}`)
     await page.getByText(CHAT_REPLY, { exact: true }).waitFor()
-    await sent.finished()
+    const closed = await Promise.race([
+      sent.finished().then(() => true),
+      page.waitForTimeout(timeout).then(() => false)
+    ])
+    assert(closed, "The chat reply arrived but its response body stayed open")
     await assertOriginal(projectFolder(page), "attached", CHAT_PICTURE)
     await page.reload()
     await page.getByRole("button", { name: "Чат", exact: true }).click()

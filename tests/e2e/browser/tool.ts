@@ -83,4 +83,5 @@ if (command === "ffmpeg") {
 } else {
   assert.equal(command, "--mode", "Expected a media tool or the pi RPC command")
   await runPi()
+  process.exit(0)
 }
