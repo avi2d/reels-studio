@@ -3,31 +3,15 @@ import type { Offer, Pick, UploadedVideo } from "../shared/library.ts"
 import type { VideoView } from "../shared/plan.ts"
 import type { ReelJob, ReelView } from "../shared/reel.ts"
 import { type Edits, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
-import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
-import { openLibrary, removeFiles, uploadedJob } from "./library.ts"
+import { ApiError, badRequest, notFound } from "./api-error.ts"
 import { makeExchange, type Needs } from "./media-exchange.ts"
-import { GazeFailed, listen, look, places, previewIsFresh, readGaze, readPlan, readTranscript, refreshPreview, type Job } from "./media-jobs.ts"
+import { GazeFailed, listen, look, places, previewIsFresh, readGaze, refreshPreview, type Job } from "./media-jobs.ts"
+import { keyOf, listenAgain, makeShelves, orBroken, videosIn, type Failures, type JobShield, type Reels, type Unheard, type Unseen } from "./media-shelves.ts"
 import { Projects } from "./projects.ts"
-import { gatherLibrary, heardIn, keysIn, reuse as reuseOne, sourceNames } from "./reuse.ts"
+import { sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
 import { buildReel, readReel, reelVideoAt } from "./reel.ts"
 import { readCut, readTimeline } from "./timeline-files.ts"
-
-const UNAVAILABLE = "Видео недоступно. Попробуйте открыть страницу ещё раз."
-const orBroken = orUnavailable("the media failed", UNAVAILABLE)
-
-const keyOf = (job: Job): string => places(job).source
-
-type Unheard = Ref.Ref<ReadonlySet<string>>
-type Unseen = Ref.Ref<ReadonlyMap<string, GazeFailure>>
-type Reels = Ref.Ref<ReadonlyMap<string, ReelJob>>
-
-interface Failures {
-  readonly unheard: Unheard
-  readonly unseen: Unseen
-  readonly stale: Unheard
-  readonly reels: Reels
-}
 
 interface Running {
   readonly dir: string
@@ -161,18 +145,6 @@ const step = Effect.fnUntraced(function*(failures: Failures, work: Ref.Ref<Work>
   yield* Effect.sleep("3 seconds")
 })
 
-const view = Effect.fnUntraced(function*(unheard: Unheard, job: Job) {
-  const fs = yield* FileSystem.FileSystem
-  const unready = (state: "failed" | "waiting"): VideoView => ({ name: job.name, state })
-  if ((yield* Ref.get(unheard)).has(keyOf(job))) return unready("failed")
-  if (!(yield* fs.exists(places(job).transcript))) return unready("waiting")
-  const transcript = yield* readTranscript(job)
-  const plan = yield* readPlan(job)
-  if (plan === undefined) { const ready: VideoView = { name: job.name, state: "ready", transcript }; return ready }
-  const ready: VideoView = { name: job.name, state: "ready", transcript, plan }
-  return ready
-})
-
 const stopReel = Effect.fnUntraced(function*(work: Ref.Ref<Work>, reels: Reels, dir: string) {
   const job = (yield* Ref.get(reels)).get(dir)
   if (job?.state === "waiting") return yield* forgetReel(reels, dir)
@@ -219,92 +191,7 @@ const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, r
 }
 
 
-const videosIn = (unheard: Unheard, dir: string) =>
-  Effect.flatMap(sourceNames(dir), (names) => Effect.forEach(names, (name) => view(unheard, { dir, name })))
 
-const listenAgain = Effect.fnUntraced(function*(unheard: Unheard, dir: string, name: string, missing: string) {
-  const names = yield* sourceNames(dir)
-  if (!names.includes(name)) return yield* notFound(missing)
-  const job: Job = { dir, name }
-  yield* Ref.update(unheard, (set) => new Set([...set].filter((key) => key !== keyOf(job))))
-  return yield* view(unheard, job)
-})
-
-const asUploaded = Effect.fnUntraced(function*(dir: string, video: VideoView) {
-  const fs = yield* FileSystem.FileSystem
-  const size = Number((yield* fs.stat(places({ dir, name: video.name }).source)).size)
-  const uploaded: UploadedVideo = video.state === "ready"
-    ? { name: video.name, size, state: "ready", duration: video.transcript.duration }
-    : { name: video.name, size, state: video.state }
-  return uploaded
-})
-
-type JobShield = <A, E, R>(job: Job, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
-
-const forgetFailures = (failures: Failures, job: Job): Effect.Effect<void> => {
-  const key = keyOf(job)
-  const without = (set: ReadonlySet<string>): ReadonlySet<string> => new Set([...set].filter((other) => other !== key))
-  return Effect.all([
-    Ref.update(failures.unheard, without),
-    Ref.update(failures.stale, without),
-    Ref.update(failures.unseen, (map) => new Map([...map].filter(([other]) => other !== key)))
-  ], { discard: true })
-}
-
-const makeShelves = (projects: Projects["Service"], failures: Failures, withoutJob: JobShield, context: Context.Context<Needs>) => {
-  const { unheard } = failures
-  const uploaded = Effect.gen(function*() {
-    const dir = yield* openLibrary
-    return yield* Effect.forEach(yield* videosIn(unheard, dir), (video) => asUploaded(dir, video))
-  }).pipe(orBroken, Effect.provideContext(context))
-
-  const retryUploaded = Effect.fn("Media.retryUploaded")(function*(name: string) {
-    const dir = yield* openLibrary
-    return yield* asUploaded(dir, yield* listenAgain(unheard, dir, name, "Такого загруженного видео нет"))
-  }, orBroken, Effect.provideContext(context))
-
-  const uploadedPreview = Effect.fn("Media.uploadedPreview")(function*(name: string) {
-    const fs = yield* FileSystem.FileSystem
-    const target = places(yield* uploadedJob(name)).preview
-    if (!(yield* fs.exists(target))) return yield* notFound("Этот файл ещё не готов")
-    return target
-  }, orBroken, Effect.provideContext(context))
-
-  const removeUploaded = Effect.fn("Media.removeUploaded")(function*(name: string) {
-    const job = yield* uploadedJob(name)
-    yield* withoutJob(job, removeFiles(job))
-    yield* forgetFailures(failures, job)
-  }, orUnavailable("the uploaded video was not removed", "Не получилось удалить видео. Попробуйте ещё раз."), Effect.provideContext(context))
-
-  const library = Effect.fn("Media.library")(function*(id: string) {
-    const here = yield* keysIn(yield* projects.folder(id))
-    const shared = yield* openLibrary
-    const others = (yield* projects.list).filter((project) => project.id !== id)
-    const inReels = yield* Effect.forEach(others, (project) =>
-      Effect.flatMap(projects.folder(project.id), (dir) => heardIn(dir, { from: "reel", project: project.id, titles: [project.title] })).pipe(
-        Effect.tapError((error) => error instanceof ApiError && error.status === 404 ? Effect.void : Effect.logError("the library skipped a folder", error)),
-        Effect.orElseSucceed(() => [])))
-    const inLibrary = yield* heardIn(shared, { from: "library" }).pipe(Effect.tapError((error) => Effect.logError("the library skipped the shared list", error)), Effect.orElseSucceed(() => []))
-    const waiting = yield* videosIn(unheard, shared).pipe(Effect.tapError((error) => Effect.logError("the library skipped the shared list", error)), Effect.orElseSucceed((): ReadonlyArray<VideoView> => []))
-    const offer: Offer = {
-      videos: gatherLibrary(here, [...inLibrary, ...inReels.flat()]),
-      listening: waiting.filter((video) => video.state === "waiting").length
-    }
-    return offer
-  }, orBroken, Effect.provideContext(context))
-
-  const reuse = Effect.fn("Media.reuse")(function*(id: string, picks: ReadonlyArray<Pick>) {
-    const dir = yield* projects.folder(id)
-    yield* Effect.forEach(picks, (pick) => Effect.gen(function*() {
-      if (pick.from === "reel" && pick.project === id) return yield* badRequest("Это видео уже есть в ролике")
-      const from = pick.from === "library" ? yield* openLibrary : yield* projects.folder(pick.project)
-      if (!(yield* sourceNames(from)).includes(pick.name)) return yield* notFound("Такого видео уже нет")
-      yield* reuseOne({ dir: from, name: pick.name }, dir)
-    }), { discard: true })
-  }, orUnavailable("the reuse failed", "Не получилось добавить видео. Попробуйте ещё раз."), Effect.provideContext(context))
-
-  return { uploaded, retryUploaded, uploadedPreview, removeUploaded, library, reuse }
-}
 
 export class Media extends Context.Service<Media, {
   readonly videos: (id: string) => Effect.Effect<ReadonlyArray<VideoView>, ApiError>
@@ -362,35 +249,38 @@ export class Media extends Context.Service<Media, {
         return yield* listenAgain(unheard, yield* projects.folder(id), name, "Такого видео в ролике нет")
       }, orBroken, Effect.provideContext(context))
 
-      const withoutWork = <A, E, R>(dir: string, use: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+      const shielded = <A, E, R>(
+        matches: (running: Running | undefined) => Running | undefined,
+        close: (state: Work) => Work,
+        open: (state: Work) => Work,
+        use: Effect.Effect<A, E, R>
+      ): Effect.Effect<A, E, R> =>
         Effect.acquireUseRelease(
           Effect.gen(function*() {
-            const running = yield* Ref.modify(work, (state) => [
-              state.running?.dir === dir ? state.running : undefined,
-              { ...state, closed: new Set([...state.closed, dir]) }
-            ])
+            const running = yield* Ref.modify(work, (state) => [matches(state.running), close(state)])
             if (running === undefined) return
             yield* Deferred.succeed(running.stop, undefined)
             yield* Deferred.await(running.finished)
           }),
           () => use,
-          () => Ref.update(work, (state) => ({ ...state, closed: new Set([...state.closed].filter((other) => other !== dir)) }))
+          () => Ref.update(work, open)
+        )
+
+      const withoutWork = <A, E, R>(dir: string, use: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+        shielded(
+          (running) => running?.dir === dir ? running : undefined,
+          (state) => ({ ...state, closed: new Set([...state.closed, dir]) }),
+          (state) => ({ ...state, closed: new Set([...state.closed].filter((other) => other !== dir)) }),
+          use
         )
 
       const withoutJob: JobShield = <A, E, R>(job: Job, use: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => {
         const key = keyOf(job)
-        return Effect.acquireUseRelease(
-          Effect.gen(function*() {
-            const running = yield* Ref.modify(work, (state) => [
-              state.running?.dir === job.dir && state.running.name === job.name ? state.running : undefined,
-              { ...state, closedJobs: new Set([...state.closedJobs, key]) }
-            ])
-            if (running === undefined) return
-            yield* Deferred.succeed(running.stop, undefined)
-            yield* Deferred.await(running.finished)
-          }),
-          () => use,
-          () => Ref.update(work, (state) => ({ ...state, closedJobs: new Set([...state.closedJobs].filter((other) => other !== key)) }))
+        return shielded(
+          (running) => running?.dir === job.dir && running.name === job.name ? running : undefined,
+          (state) => ({ ...state, closedJobs: new Set([...state.closedJobs, key]) }),
+          (state) => ({ ...state, closedJobs: new Set([...state.closedJobs].filter((other) => other !== key)) }),
+          use
         )
       }
 
