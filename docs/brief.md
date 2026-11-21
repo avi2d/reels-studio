@@ -19,7 +19,7 @@ The plan covers every stage the studio can do, the takes, the pauses, the player
 The person agrees by pressing «Согласна» under the plan, or by writing «Согласна» or «Согласен» as the whole message.
 After the chat model answers that message, or the request is cut, the studio works in the background without another question:
 
-- When a gathering runs or is due, the yes waits for it to finish, then pins the takes and writes the list.
+- When a gathering runs or is due, or the gaze of a heard video has not settled yet, the yes waits for it to finish, then pins the takes and writes the list.
 - It pins the shown take of every block in `timeline.json`, while that take still exists, so later gatherings keep it.
 The take is the take ranked first unless the person chose another, as [docs/timeline.md](timeline.md) says.
 Before the yes the studio pins nothing.
