@@ -81,7 +81,7 @@ Inside a reel, the «Выбрать видео» button of the «Видео» ca
 A picked video joins the folder at once with its text and preview, without a second upload or transcription.
 The studio adds a hard link to the original and to the preview, so the bytes of a video stay on disk once.
 It copies the two transcript files, which are small.
-Two uploads of one recording count as one video, matched by size and the SHA-256 of the first megabyte.
+In «Выбрать видео» two uploads of one recording count as one video, matched by size and the SHA-256 of the first megabyte.
 
 Deleting a video folder first stops the chat turn and the transcription running for it, then removes the folder.
 A video that another folder links to stays there, because removing one hard link leaves the others.
