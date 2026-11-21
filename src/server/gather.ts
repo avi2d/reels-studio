@@ -1,6 +1,6 @@
 import { Context, Effect, Exit, FileSystem, Layer, Path, Schema } from "effect"
 import { shortenPlaced } from "../shared/brief.ts"
-import { blocksHash, failedShows, Gathered, gatherStep } from "../shared/gather.ts"
+import { blocksHash, failedShows, Gathered, gatherStep, shortenDue } from "../shared/gather.ts"
 import { Chat } from "./chat.ts"
 import { GatherState } from "./gather-state.ts"
 import { Media } from "./media.ts"
