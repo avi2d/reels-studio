@@ -42,8 +42,13 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
     h("legend", {}, "Загруженные видео"),
     h("p", { class: "muted" }, "Студия уже прослушала эти видео. Отмеченные появятся в ролике сразу, вместе с текстом."),
     list, listening, h("div", { class: "row" }, add, cancel), problem)
-  const state = { chosen: new Map<HTMLInputElement, { video: LibraryVideo; node: HTMLElement }>(), shown: false, timer: 0 }
+  const state = { chosen: new Map<HTMLInputElement, { video: LibraryVideo; node: HTMLElement }>(), shown: false, timer: 0, adding: false }
   const recount = (): void => {
+    if (state.adding) {
+      add.textContent = "Добавляем…"
+      add.disabled = true
+      return
+    }
     const count = [...state.chosen.keys()].filter((box) => box.checked).length
     add.textContent = addLabel(count)
     add.disabled = count === 0
@@ -112,6 +117,7 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
   cancel.addEventListener("click", () => { show(false) })
   add.addEventListener("click", () => {
     const picks = [...state.chosen].filter(([box]) => box.checked).map(([, entry]) => pickOf(entry.video))
+    state.adding = true
     add.disabled = true
     add.textContent = "Добавляем…"
     problem.textContent = ""
@@ -119,6 +125,7 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
       Effect.andThen(onAdded()),
       Effect.map(() => {
         for (const box of state.chosen.keys()) box.checked = false
+        state.adding = false
         show(false)
         reload()
       }),
@@ -126,6 +133,7 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
         Effect.andThen(
           Effect.catchTag(onAdded(), "Failed", () => Effect.void),
           Effect.sync(() => {
+            state.adding = false
             problem.textContent = error.message
             reload()
             recount()
