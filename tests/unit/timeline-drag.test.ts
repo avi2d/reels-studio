@@ -188,7 +188,9 @@ interface Put {
 const orderOf = (put: Put | undefined): ReadonlyArray<string> => {
   if (put === undefined) throw new Error("no saved order")
   if (typeof put.body !== "object" || put.body === null) throw new Error("bad saved body")
-  const order: unknown = Object.getOwnPropertyDescriptor(put.body, "order")?.value
+  const sent: unknown = Object.getOwnPropertyDescriptor(put.body, "edits")?.value ?? put.body
+  if (typeof sent !== "object" || sent === null) throw new Error("bad saved order")
+  const order: unknown = Object.getOwnPropertyDescriptor(sent, "order")?.value
   if (!Array.isArray(order) || !order.every((one: unknown): one is string => typeof one === "string")) throw new Error("bad saved order")
   return order
 }
@@ -219,7 +221,9 @@ const setup = (blocks: number): { readonly card: ReturnType<typeof timelineCard>
   const videos = { videos: [{ name: "a", state: "ready", transcript: { duration: 20, words } }] }
   const timeline = (): unknown => ({
     looks: [{ video: "a", state: "measured" }],
-    timeline: { state: "ready", blocks: blocksOf(count), dropped: 0, edits: { order: [], deleted: [], chosen: [], pauses: [] } }
+    timeline: { state: "ready", blocks: blocksOf(count), dropped: 0, edits: { order: [], deleted: [], chosen: [], pauses: [] } },
+    gathering: false,
+    gatherFailed: false
   })
   Object.assign(globalThis, {
     HTMLElement: FakeEl,
@@ -239,8 +243,10 @@ const setup = (blocks: number): { readonly card: ReturnType<typeof timelineCard>
     requestAnimationFrame: () => 0,
     fetch: (url: string, init?: { readonly method?: string; readonly body?: string }) => {
       if (init?.method === "PUT") {
-        puts.push({ url, body: JSON.parse(init.body ?? "{}") })
-        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ saved: "p1" }) })
+        const parsed: unknown = JSON.parse(init.body ?? "{}")
+        puts.push({ url, body: parsed })
+        const reply: unknown = typeof parsed === "object" && parsed !== null ? (Object.getOwnPropertyDescriptor(parsed, "edits")?.value ?? parsed) : parsed
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(reply) })
       }
       const body = url.endsWith("/videos") ? videos : timeline()
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) })
