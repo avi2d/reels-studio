@@ -20,7 +20,7 @@ const studioReady = async (server: Bun.Subprocess): Promise<void> => {
 }
 
 const snapshotHome = async (directory: string): Promise<void> => {
-  const paths = ["/", "/app.css", "/app.js", "/api/projects",
+  const paths = ["/", "/app.css", "/app.js", "/api/projects", "/api/library",
     "/fonts/onest-cyrillic.woff2", "/fonts/onest-latin.woff2",
     "/fonts/unbounded-cyrillic.woff2", "/fonts/unbounded-latin.woff2"]
   await Promise.all(paths.map(async (path) => {
