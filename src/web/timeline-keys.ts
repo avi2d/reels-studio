@@ -70,13 +70,7 @@ export const onKeys = (anchor: { readonly isConnected: boolean }, now: () => Now
       return
     }
     if (event.ctrlKey || event.metaKey || event.altKey) return
-    if (enabled?.() === false) {
-      if (event.code === "KeyZ") {
-        actions.undo()
-        event.preventDefault()
-      }
-      return
-    }
+    if (enabled?.() === false) return
     if (act(event, now(), actions)) event.preventDefault()
   }
   document.addEventListener("keydown", listen)
