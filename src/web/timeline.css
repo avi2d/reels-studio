@@ -38,7 +38,7 @@
 .notes, .details, .detail { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .details, .detail { min-height: 0; }
 .details { flex: 1; }
-.takes, .pause-list, .detail .files { position: relative; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; }
+.takes, .pause-list, .place-list, .detail .files { position: relative; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; }
 .notes:empty, .details:empty { display: none; }
 .detail + .detail { padding-top: 14px; border-top: 1px solid var(--wa-color-surface-border); }
 .detail-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -62,6 +62,9 @@ del.gap { color: var(--wa-color-text-quiet); }
 .pause-row .where b { color: var(--wa-color-brand-fill-loud); font-size: 14px; font-weight: 600; }
 .pause-row.removed .where b { color: var(--wa-color-text-quiet); text-decoration: line-through; }
 .pause-row .take-acts { flex: none; flex-wrap: nowrap; }
+.place-list { display: flex; flex-direction: column; gap: 8px; }
+.answers-said { display: flex; flex-direction: column; gap: 4px; margin: 0; padding-left: 1.2em; font-size: 14px; }
+.place.answered .where b { color: var(--wa-color-text-quiet); }
 
 @media (hover: hover) and (pointer: fine) {
   .handle:hover, .pick:hover { background: var(--wa-color-overlay-inline); }
@@ -74,6 +77,8 @@ del.gap { color: var(--wa-color-text-quiet); }
   .timeline { --r-clip: 60px; --r-gaps: 48px; margin-right: -12px; }
   .handle { width: 40px; }
   .take .take-acts { padding-left: 0; }
+  .place { flex-wrap: wrap; }
+  .place .take-acts { flex: 1 1 100%; flex-wrap: wrap; }
 }
 
 @media (max-width: 820px) and (max-height: 740px) {

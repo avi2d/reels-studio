@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Option, Result, Schema } from "effect"
 import type { Transcript, VideoView } from "../shared/plan.ts"
 import { Gathered } from "../shared/gather.ts"
-import { assemble, Blocks, clipsOf, Edits, NO_EDITS, soundBlocks, type Gaze, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
+import { assemble, Blocks, clipsOf, Edits, NO_EDITS, soundBlocks, type Gaze, type GazeFailure, type TimelineView, type VideoFaces } from "../shared/timeline.ts"
 import { places, readGaze, readTranscript } from "./media-jobs.ts"
 
 const decodeBlocks = Schema.decodeUnknownOption(Schema.fromJsonString(Blocks))
@@ -37,9 +37,10 @@ export const writeEdits = Effect.fnUntraced(function*(dir: string, edits: Edits)
 type Look = TimelineView["looks"][number]
 
 const lookOf = (video: string, measured: Gaze | undefined, written: boolean, failure: GazeFailure | undefined): Look => {
-  if (measured !== undefined) return { video, state: "measured" }
-  if (written) return { video, state: "failed", reason: "file-unreadable" }
+  if (measured !== undefined && measured.heads !== undefined) return { video, state: "measured" }
   if (failure !== undefined) return { video, state: "failed", reason: failure }
+  if (measured !== undefined) return { video, state: "waiting" }
+  if (written) return { video, state: "failed", reason: "file-unreadable" }
   return { video, state: "waiting" }
 }
 
@@ -58,6 +59,7 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
   const transcripts = new Map<string, Transcript>()
   const gazes = new Map<string, Gaze>()
   const looks: Array<Look> = []
+  const faces: Array<VideoFaces> = []
   for (const name of names) {
     const place = places({ dir, name })
     if (!(yield* fs.exists(place.transcript))) continue
@@ -69,6 +71,7 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
       if (Result.isSuccess(decoded)) {
         measured = decoded.success
         gazes.set(name, measured)
+        if (measured.heads !== undefined) faces.push({ video: name, step: measured.step, gaze: measured.samples, heads: measured.heads })
       } else {
         yield* Effect.logError("the gaze is unreadable", place.gaze, decoded.failure)
       }
@@ -76,8 +79,8 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
     looks.push(lookOf(name, measured, written, unseen.get(place.source)))
   }
   const written = yield* readBlocks(dir)
-  if (written === "none" || written === "unreadable") return { looks, timeline: { state: written } } satisfies TimelineView
-  return { looks, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir) } } satisfies TimelineView
+  if (written === "none" || written === "unreadable") return { looks, faces, timeline: { state: written } } satisfies TimelineView
+  return { looks, faces, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir) } } satisfies TimelineView
 })
 
 export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>) {
