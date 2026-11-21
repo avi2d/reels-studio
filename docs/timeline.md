@@ -81,7 +81,7 @@ During playback, a play mark shows the current block in the numbered strip and t
 ## The built reel
 
 «Собрать ролик» on the «Готовый ролик» stage builds one file from the original videos, not from the previews.
-The file holds the chosen takes in the order of the row, without the removed pauses, with the same 0.06 s sound fade at each cut.
+The file holds the chosen takes in row order, without removed pauses, with the same 0.06 s sound fade at each cut.
 It is 1080 by 1920 at 30 frames a second, H.264 High with AAC sound in an MP4.
 An iPhone HDR original is turned into ordinary BT.709 colours, so the reel does not look washed out in Instagram.
 The studio cuts each clip to whole frames, encodes the clips one by one through `REELS_HEAVY` with `REELS_ENCODER`, then joins them without encoding again.
