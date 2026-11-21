@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { lengthOf, removedSpans, removedWords, skipTarget, type Span, type VideoView } from "../shared/plan.ts"
 import * as Api from "./api.ts"
-import { button } from "./controls.ts"
+import { retryPair, type Retry } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatLength } from "./format.ts"
 
@@ -54,26 +54,13 @@ const heardSection = (projectId: string, video: Heard): ReadonlyArray<HTMLElemen
   return [player, h("p", { class: "muted" }, summary), text, h("p", { class: "muted" }, "Нажмите на слово, и видео перейдёт к нему.")]
 }
 
-type Retry = (name: string, onFailure: (message: string) => void) => void
-
 const section = (projectId: string, video: VideoView, retry: Retry): HTMLElement => {
   const title = h("h3", {}, video.name)
   if (video.state === "ready") return h("div", { class: "video" }, title, ...heardSection(projectId, video))
   if (video.state === "waiting") {
     return h("div", { class: "video" }, title, h("p", { class: "muted", role: "status" }, "Студия слушает видео. Текст появится здесь сам через несколько минут."))
   }
-  const trouble = h("p", { class: "error", role: "alert" })
-  const again = button("normal", {
-    class: "end",
-    click: () => {
-      again.disabled = true
-      trouble.textContent = ""
-      retry(video.name, (message) => {
-        again.disabled = false
-        trouble.textContent = message
-      })
-    }
-  }, "Попробовать ещё раз")
+  const { again, trouble } = retryPair(video.name, retry)
   const note = h("p", { class: "error", role: "alert" }, "Студия не расслышала это видео. Нажмите «Попробовать ещё раз», чтобы она послушала его снова.")
   return h("div", { class: "video" }, title, note, again, trouble)
 }

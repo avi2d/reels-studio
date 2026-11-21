@@ -27,26 +27,57 @@ const projectFolder = (page: Page): string => {
   return join(setting("REELS_BROWSER_DIR"), "projects", id)
 }
 
-const assertOriginal = async (project: string, shelf: "source" | "attached", name: string): Promise<void> => {
-  const uploaded = await Bun.file(join(project, shelf, name)).bytes()
+const assertOriginal = async (folder: string, shelf: "source" | "attached", name: string): Promise<void> => {
+  const uploaded = await Bun.file(join(folder, shelf, name)).bytes()
   const fixture = await Bun.file(join(setting("REELS_BROWSER_DIR"), name)).bytes()
   assert.deepEqual(uploaded, fixture, `The studio did not keep the original ${name}`)
 }
 
+const listedNames = (body: unknown): ReadonlyArray<unknown> =>
+  typeof body === "object" && body !== null && "videos" in body && Array.isArray(body.videos)
+    ? body.videos.map((video: unknown) => typeof video === "object" && video !== null && "name" in video ? video.name : undefined)
+    : []
+
+const uploadOnVideosPage = async (page: Page): Promise<void> => {
+  page.setDefaultTimeout(timeout)
+  await page.goto(setting("REELS_BROWSER_URL"))
+  await page.getByRole("heading", { name: "Студия Reels", exact: true }).waitFor()
+  assert.equal(await page.getByRole("region", { name: "Загруженные видео" }).count(), 0, "The main page must not show the uploaded videos")
+  const [listed] = await Promise.all([
+    page.waitForResponse((response) => new URL(response.url()).pathname === "/api/library", { timeout }),
+    page.getByRole("link", { name: "Загрузить видео", exact: true }).click()
+  ])
+  await page.getByRole("heading", { name: "Загруженные видео", exact: true }).waitFor()
+  if (!listedNames(await listed.json()).includes(SOURCE_VIDEO)) {
+    await page.locator('input[type="file"][accept="video/*"]').setInputFiles(join(setting("REELS_BROWSER_DIR"), SOURCE_VIDEO))
+  }
+  await page.getByRole("region", { name: "Загруженные видео" }).getByRole("listitem").filter({ hasText: SOURCE_VIDEO })
+    .getByRole("button", { name: `Посмотреть видео «${SOURCE_VIDEO}»`, exact: true }).waitFor()
+}
+
+const addFromList = async (page: Page): Promise<void> => {
+  await page.getByRole("button", { name: "Выбрать видео", exact: true }).click()
+  await page.getByRole("checkbox", { name: new RegExp(`^${SOURCE_VIDEO}`, "u") }).check()
+  await page.getByRole("button", { name: "Добавить 1 видео", exact: true }).click()
+  await page.locator(".files").getByText(SOURCE_VIDEO, { exact: true }).waitFor()
+}
+
 const projectAndUpload: ProductCheck = {
-  name: "creation and upload keep the reel and its original bytes after leaving the page",
+  name: "a video uploaded on the videos page reaches a reel only by picking it, with its original bytes",
   run: async (page) => {
     const title = "Ролик для монтажа"
+    await uploadOnVideosPage(page)
+    await assertOriginal(join(setting("REELS_BROWSER_DIR"), "projects", ".library"), "source", SOURCE_VIDEO)
     await createProject(page, title)
-    await page.locator('input[type="file"][accept="video/*"]').setInputFiles(join(setting("REELS_BROWSER_DIR"), SOURCE_VIDEO))
-    await page.locator(".files").getByText(SOURCE_VIDEO, { exact: true }).waitFor()
+    assert.equal(await page.locator('input[type="file"][accept="video/*"]').count(), 0, "A reel must not offer its own video upload")
+    await addFromList(page)
     await page.getByRole("link", { name: "Все ролики" }).click()
     const tile = page.getByRole("link", { name: new RegExp(title, "u") })
     await tile.getByText("Видео: 1", { exact: true }).waitFor()
     await tile.click()
     await page.getByRole("heading", { name: title, exact: true }).waitFor()
     await assertOriginal(projectFolder(page), "source", SOURCE_VIDEO)
-    return { targets: ["created reel in the list", "uploaded original after reopening"], found: [] }
+    return { targets: ["main page without the uploaded list", "uploaded original on the videos page", "reel without its own upload", "picked original after reopening"], found: [] }
   }
 }
 
@@ -59,8 +90,9 @@ const saveEdit = async (page: Page, edit: () => Promise<void>): Promise<void> =>
 }
 
 const buildBlocks = async (page: Page): Promise<void> => {
+  await uploadOnVideosPage(page)
   await createProject(page, "Сборка ролика")
-  await page.locator('input[type="file"][accept="video/*"]').setInputFiles(join(setting("REELS_BROWSER_DIR"), SOURCE_VIDEO))
+  await addFromList(page)
   await page.locator('wa-tab[panel="takes"]').click()
   await page.getByRole("button", { name: "Собрать блоки", exact: true }).click()
   await page.getByText("Блоки готовы.", { exact: true }).waitFor()
@@ -137,4 +169,31 @@ const attachment: ProductCheck = {
   }
 }
 
-export const checks = [projectAndUpload, preview, attachment] satisfies readonly ProductCheck[]
+const removeUploaded = async (page: Page): Promise<void> => {
+  page.setDefaultTimeout(timeout)
+  await page.goto(new URL("#/videos", setting("REELS_BROWSER_URL")).href)
+  const item = page.getByRole("region", { name: "Загруженные видео" }).getByRole("listitem").filter({ hasText: SOURCE_VIDEO })
+  await item.getByRole("button", { name: `Удалить видео «${SOURCE_VIDEO}»`, exact: true }).click()
+  const [removed] = await Promise.all([
+    page.waitForResponse((response) => response.request().method() === "DELETE" && new URL(response.url()).pathname.startsWith("/api/library/"), { timeout }),
+    page.getByRole("dialog", { name: `Удалить видео «${SOURCE_VIDEO}»?` }).getByRole("button", { name: "Удалить видео", exact: true }).click()
+  ])
+  assert(removed.ok(), `The studio refused to delete the video: ${removed.status()}`)
+  await item.waitFor({ state: "detached" })
+}
+
+const removal: ProductCheck = {
+  name: "deleting an uploaded video drops its card and shared file without taking the copy out of a reel that uses it",
+  run: async (page) => {
+    await removeUploaded(page)
+    const shared = join(setting("REELS_BROWSER_DIR"), "projects", ".library", "source", SOURCE_VIDEO)
+    assert.equal(await Bun.file(shared).exists(), false, "Deleting must remove the uploaded file")
+    await page.goto(setting("REELS_BROWSER_URL"))
+    await page.getByRole("link", { name: /Сборка ролика/u }).click()
+    await page.getByRole("heading", { name: "Сборка ролика", exact: true }).waitFor()
+    await assertOriginal(projectFolder(page), "source", SOURCE_VIDEO)
+    return { targets: ["card removed", "shared file removed", "reel copy kept"], found: [] }
+  }
+}
+
+export const checks = [projectAndUpload, preview, attachment, removal] satisfies readonly ProductCheck[]

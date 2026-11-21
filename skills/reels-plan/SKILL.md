@@ -19,7 +19,7 @@ The original in `source/` is never changed, renamed or deleted.
 
 1. Look at what the project holds: list `source/` and `transcripts/`, and read `brief.md`, `plan.md` and `plan.json` when they exist.
    `brief.md` holds the brief the person wrote for this reel on the page. Never write it.
-2. When `source/` is empty, ask the person to upload the video on this page and stop.
+2. When `source/` is empty, ask the person to upload the video on the «Загруженные видео» page, which «Загрузить видео» on the main page opens, add it to this reel with «Выбрать видео», and stop.
 3. When a video has no transcript yet, say that the studio is still listening to it and ask the person to write again in a few minutes.
 When a video is listed as the studio could not hear it, say that the person can press «Попробовать ещё раз» under the video to have the studio listen to it again.
 4. Read the transcript of every video before you say anything about its content.

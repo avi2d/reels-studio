@@ -21,6 +21,9 @@ export const fromProjects = (titles: ReadonlyArray<string>): string =>
 
 export const addLabel = (count: number): string => count === 0 ? "Добавить видео" : `Добавить ${count} видео`
 
+export const listeningNote = (count: number): string =>
+  count === 0 ? "" : `Студия ещё слушает загруженные видео: ${count}. Они появятся здесь сами.`
+
 export const formatDay = (iso: string): string =>
   new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric" }).format(new Date(iso))
 

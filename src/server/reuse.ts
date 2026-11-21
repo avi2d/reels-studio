@@ -7,23 +7,23 @@ import { numbered } from "./tus.ts"
 
 export interface Found {
   readonly key: string
-  readonly project: string
-  readonly title: string
-  readonly name: string
-  readonly size: number
-  readonly duration: number
+  readonly video: LibraryVideo
+}
+
+export type Origin =
+  | { readonly from: "library" }
+  | { readonly from: "reel"; readonly project: string; readonly titles: ReadonlyArray<string> }
+
+const joined = (known: LibraryVideo | undefined, video: LibraryVideo): LibraryVideo => {
+  if (known === undefined || known.from === "library") return known ?? video
+  if (video.from === "library") return video
+  return { ...known, titles: [...new Set([...known.titles, ...video.titles])] }
 }
 
 export const gatherLibrary = (here: ReadonlySet<string>, found: ReadonlyArray<Found>): ReadonlyArray<LibraryVideo> => {
   const byKey = new Map<string, LibraryVideo>()
-  for (const video of found) {
-    if (here.has(video.key)) continue
-    const known = byKey.get(video.key)
-    if (known === undefined) {
-      byKey.set(video.key, { project: video.project, name: video.name, size: video.size, duration: video.duration, titles: [video.title] })
-    } else if (!known.titles.includes(video.title)) {
-      byKey.set(video.key, { ...known, titles: [...known.titles, video.title] })
-    }
+  for (const { key, video } of found) {
+    if (!here.has(key)) byKey.set(key, joined(byKey.get(key), video))
   }
   return [...byKey.values()]
 }
@@ -58,7 +58,7 @@ const isHeard = Effect.fnUntraced(function*(job: Job) {
   return (yield* fs.exists(place.transcript)) && (yield* fs.exists(place.preview))
 })
 
-export const heardIn = Effect.fnUntraced(function*(project: { readonly id: string; readonly title: string }, dir: string) {
+export const heardIn = Effect.fnUntraced(function*(dir: string, origin: Origin) {
   const fs = yield* FileSystem.FileSystem
   const names = yield* sourceNames(dir)
   const found = yield* Effect.forEach(names, (name) => Effect.gen(function*() {
@@ -66,15 +66,9 @@ export const heardIn = Effect.fnUntraced(function*(project: { readonly id: strin
     if (!(yield* isHeard(job))) return []
     const info = yield* fs.stat(places(job).source)
     const transcript = yield* readTranscript(job)
-    const video: Found = {
-      key: yield* keyOf(job),
-      project: project.id,
-      title: project.title,
-      name,
-      size: Number(info.size),
-      duration: transcript.duration
-    }
-    return [video]
+    const video: LibraryVideo = { ...origin, name, size: Number(info.size), duration: transcript.duration }
+    const one: Found = { key: yield* keyOf(job), video }
+    return [one]
   }))
   return found.flat()
 })
@@ -102,7 +96,7 @@ const existingFolder = Effect.fnUntraced(function*(folder: string) {
 
 export const reuse = Effect.fnUntraced(function*(from: Job, dir: string) {
   const fs = yield* FileSystem.FileSystem
-  if (!(yield* isHeard(from))) return yield* badRequest("Студия ещё слушает это видео. Возьмите его, когда в его ролике появится текст.")
+  if (!(yield* isHeard(from))) return yield* badRequest("Студия ещё слушает это видео. Добавьте его, когда она дослушает.")
   if ((yield* keysIn(dir)).has(yield* keyOf(from))) return
   const name = yield* freeName(dir, from.name, 0)
   const source = places(from)

@@ -72,7 +72,7 @@ export const homeView = (projects: ReadonlyArray<Api.ProjectView>, onRemoved: ()
     h("header", { class: "top" },
       h("h1", { class: "brand" }, "Студия Reels"),
       countsOf(projects),
-      button("primary", { click: askForTitle }, "Новый ролик")),
+      h("div", { class: "actions" }, button("normal", { href: "#/videos" }, "Загрузить видео"), button("primary", { click: askForTitle }, "Новый ролик"))),
     projects.length === 0
-      ? h("p", { class: "none" }, "Роликов пока нет. Нажмите «Новый ролик» и назовите первый.")
+      ? h("p", { class: "none" }, "Роликов пока нет. Загрузите видео, затем нажмите «Новый ролик» и назовите первый.")
       : h("ul", { class: "grid" }, ...projects.map((project) => tile(project, onRemoved))))

@@ -74,17 +74,7 @@ To serve a newer `main`:
 
 How the studio hears a video lives in [How the studio hears a video](docs/how-the-studio-hears-a-video.md).
 
-## Reuse a video and delete a video folder
-
-The «Видео» card offers the videos the studio has already heard in other video folders.
-A picked video joins the folder at once with its text and preview, without a second upload or transcription.
-The studio adds a hard link to the original and to the preview, so the bytes of a video stay on disk once.
-It copies the two transcript files, which are small.
-Two uploads of one recording count as one video, matched by size and the SHA-256 of the first megabyte.
-
-Deleting a video folder first stops the chat turn and the transcription running for it, then removes the folder.
-A video that another folder links to stays there, because removing one hard link leaves the others.
-The studio never touches the files on the person's devices.
+Upload, play, reuse and delete a video lives in [Upload, play, reuse and delete a video](docs/upload-and-reuse-video.md).
 
 ## Run the checks
 

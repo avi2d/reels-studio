@@ -79,8 +79,6 @@ input[type="text"] {
   font-size: 16px;
 }
 
-.file-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
-
 .row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
 .row > .grow { flex: 1 1 160px; min-width: 0; }
 
@@ -101,6 +99,20 @@ progress::-moz-progress-bar { background: var(--wa-color-brand-fill-loud); }
 .top .sum { margin-right: auto; color: var(--wa-color-text-quiet); }
 .top .sum.waits { color: var(--wa-color-brand-fill-loud); }
 .none { padding: 0 var(--pad); color: var(--wa-color-text-quiet); }
+.top .fits { flex: 1 1 0; min-width: 0; }
+.top .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.uploaded { display: flex; flex-direction: column; gap: 18px; }
+.uploaded > .error { padding: 0 var(--pad); }
+.queue { max-width: 720px; margin: 0 var(--pad); padding: 16px; border-radius: 16px; background: var(--wa-color-surface-raised); }
+.footage { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; align-content: start; }
+.footage > b { overflow-wrap: anywhere; }
+.footage > .end { width: 100%; }
+.footage > .end::part(label) { white-space: normal; text-wrap: balance; }
+.footage .play { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+.footage .playing video { pointer-events: auto; object-fit: contain; background: #000; }
+.uploaded > .none:last-child { max-width: calc(720px + 2 * var(--pad)); }
+.footage > :is(.muted, .error) { margin-top: 4px; font-size: 13px; }
+.hint a { color: var(--wa-color-brand-fill-loud); text-decoration: underline; }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 18px 14px; padding: 0 var(--pad); }
 .tile { position: relative; min-width: 0; }
@@ -154,9 +166,11 @@ progress::-moz-progress-bar { background: var(--wa-color-brand-fill-loud); }
   body { font-size: 15px; }
   .top { flex-wrap: wrap; gap: 4px 12px; padding-top: 16px; padding-bottom: 14px; }
   .brand { font-size: 24px; }
-  .top .sum { order: 3; flex-basis: 100%; }
+  .top .sum { flex-basis: 100%; }
   .top .sum:empty { display: none; }
-  .top wa-button { margin-left: auto; }
+  .top .actions { display: grid; grid-template-columns: 1fr 1fr; flex-basis: 100%; margin-top: 8px; }
+  .top .actions wa-button { width: 100%; }
+  .top .actions:has(> :only-child) { grid-template-columns: 1fr; }
   .grid { grid-template-columns: 1fr 1fr; gap: 16px 10px; }
 }
 

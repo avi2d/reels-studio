@@ -7,6 +7,7 @@ import { Attachments } from "./attachments.ts"
 import { Brief } from "./brief.ts"
 import { Chat } from "./chat.ts"
 import { Gather } from "./gather.ts"
+import { openLibrary } from "./library.ts"
 import { allowedHosts, isAllowedHost, isHomeAddress, isSameOrigin } from "./home-network.ts"
 import { Media } from "./media.ts"
 import { Effort, Projects } from "./projects.ts"
@@ -110,17 +111,33 @@ const chat = Layer.mergeAll(
   })))
 )
 
-const startUpload = (segment: string, into: Tus.Folder) => (request: HttpServerRequest.HttpServerRequest) => reply(Effect.gen(function*() {
+interface Shelf {
+  readonly dir: string
+  readonly location: string
+  readonly into: Tus.Folder
+}
+
+const projectFolder = Effect.gen(function*() {
   const store = yield* Projects
+  return yield* store.folder(yield* param("id"))
+})
+
+const attachmentShelf = Effect.gen(function*() {
   const id = yield* param("id")
-  const dir = yield* store.folder(id)
-  if (request.method === "POST") return yield* Tus.create(request, dir, `/api/projects/${id}/${segment}`, into)
-  return yield* new ApiError({ status: 405, message: "Так загрузку не начать" })
+  const shelf: Shelf = { dir: yield* projectFolder, location: `/api/projects/${id}/attachments`, into: "attached" }
+  return shelf
+})
+
+const libraryShelf = Effect.map(openLibrary, (dir): Shelf => ({ dir, location: "/api/library/uploads", into: "source" }))
+
+const startUpload = <R>(shelf: Effect.Effect<Shelf, ApiError, R>) => (request: HttpServerRequest.HttpServerRequest) => reply(Effect.gen(function*() {
+  if (request.method !== "POST") return yield* new ApiError({ status: 405, message: "Так загрузку не начать" })
+  const { dir, location, into } = yield* shelf
+  return yield* Tus.create(request, dir, location, into)
 }))
 
-const resumeUpload = (request: HttpServerRequest.HttpServerRequest) => reply(Effect.gen(function*() {
-  const store = yield* Projects
-  const dir = yield* store.folder(yield* param("id"))
+const resumeUpload = <R>(folder: Effect.Effect<string, ApiError, R>) => (request: HttpServerRequest.HttpServerRequest) => reply(Effect.gen(function*() {
+  const dir = yield* folder
   const upload = yield* param("upload")
   if (request.method === "HEAD") return yield* Tus.head(request, dir, upload)
   if (request.method === "PATCH") return yield* Tus.patch(request, dir, upload)
@@ -128,17 +145,35 @@ const resumeUpload = (request: HttpServerRequest.HttpServerRequest) => reply(Eff
 }))
 
 const uploads = Layer.mergeAll(
-  HttpRouter.add("*", "/api/projects/:id/uploads", startUpload("uploads", "source")),
-  HttpRouter.add("*", "/api/projects/:id/attachments", startUpload("attachments", "attached")),
-  HttpRouter.add("*", "/api/projects/:id/attachments/:upload", resumeUpload),
+  HttpRouter.add("*", "/api/library/uploads", startUpload(libraryShelf)),
+  HttpRouter.add("*", "/api/library/uploads/:upload", resumeUpload(openLibrary)),
+  HttpRouter.add("GET", "/api/library", reply(Effect.gen(function*() {
+    const media = yield* Media
+    return json({ videos: yield* media.uploaded })
+  }))),
+  HttpRouter.add("POST", "/api/library/:name/retry", reply(Effect.gen(function*() {
+    const media = yield* Media
+    return json({ video: yield* media.retryUploaded(yield* param("name")) })
+  }))),
+  HttpRouter.add("DELETE", "/api/library/:name", reply(Effect.gen(function*() {
+    const media = yield* Media
+    const name = yield* param("name")
+    yield* media.removeUploaded(name)
+    return json({ removed: name })
+  }))),
+  HttpRouter.add("GET", "/api/library/:name/preview", (request) => reply(Effect.gen(function*() {
+    const media = yield* Media
+    return yield* sendFile(yield* media.uploadedPreview(yield* param("name")), "video/mp4", request.headers["range"])
+  }))),
+  HttpRouter.add("*", "/api/projects/:id/attachments", startUpload(attachmentShelf)),
+  HttpRouter.add("*", "/api/projects/:id/attachments/:upload", resumeUpload(projectFolder)),
   HttpRouter.add("GET", "/api/projects/:id/attachments/:name/cover", reply(Effect.gen(function*() {
     const attachments = yield* Attachments
     const target = yield* attachments.cover(yield* param("id"), yield* param("name"))
     return yield* HttpServerResponse.file(target, { contentType: "image/jpeg", headers: { "cache-control": "no-store" } }).pipe(
       Effect.mapError(() => new ApiError({ status: 500, message: "Файл недоступен. Попробуйте открыть страницу ещё раз." }))
     )
-  }))),
-  HttpRouter.add("*", "/api/projects/:id/uploads/:upload", resumeUpload)
+  })))
 )
 
 const UNREADABLE = new ApiError({ status: 500, message: "Видео недоступно. Попробуйте открыть страницу ещё раз." })
@@ -226,7 +261,7 @@ const videos = Layer.mergeAll(
   }))),
   HttpRouter.add("GET", "/api/projects/:id/library", reply(Effect.gen(function*() {
     const media = yield* Media
-    return json({ videos: yield* media.library(yield* param("id")) })
+    return json(yield* media.library(yield* param("id")))
   }))),
   HttpRouter.add("GET", "/api/projects/:id/videos/:name/preview", (request) => reply(Effect.gen(function*() {
     const media = yield* Media

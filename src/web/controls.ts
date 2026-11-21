@@ -25,6 +25,24 @@ export const spoken = (visible: string, name: string): ReadonlyArray<Child> =>
 export const iconButton = (look: Look, name: IconName, label: string, props: Props = {}): WaButton =>
   button(look, props, icon(name, label))
 
+export type Retry = (name: string, onFailure: (message: string) => void) => void
+
+export const retryPair = (name: string, retry: Retry): { readonly again: WaButton; readonly trouble: HTMLElement } => {
+  const trouble = h("p", { class: "error", role: "alert" })
+  const again = button("normal", {
+    class: "end",
+    click: () => {
+      again.disabled = true
+      trouble.textContent = ""
+      retry(name, (message) => {
+        again.disabled = false
+        trouble.textContent = message
+      })
+    }
+  }, "Попробовать ещё раз")
+  return { again, trouble }
+}
+
 export const focusWhenReady = (target: HTMLElement): void => {
   const focus = (): void => {
     target.focus({ preventScroll: true })
