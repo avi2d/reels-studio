@@ -14,12 +14,18 @@ import { run } from "./run.ts"
 import { reelPane } from "./reel.ts"
 import { stageRail, type StageId, type StageNote } from "./stages.ts"
 import { timelineCard, type Status } from "./timeline.ts"
-import { upload, type Progress } from "./upload.ts"
+import { upload, videoShelf, type Progress } from "./upload.ts"
 import { videosCard } from "./videos.ts"
 
 const app = document.querySelector("#app") ?? document.body
 
-const show = (...nodes: ReadonlyArray<Node>): void => { app.replaceChildren(...nodes) }
+let disposeChat: (() => void) | undefined
+
+const show = (...nodes: ReadonlyArray<Node>): void => {
+  disposeChat?.()
+  disposeChat = undefined
+  app.replaceChildren(...nodes)
+}
 
 const showFailure = (message: string): void => {
   show(h("div", { class: "home" }, h("p", { class: "error", role: "alert" }, message), h("a", { class: "back", href: "#/" }, "← Все ролики")))
@@ -62,7 +68,7 @@ const uploadRow = (projectId: string, file: File) => {
       ? message
       : `${message} Выберите тот же файл ещё раз, и загрузка продолжится с того же места.`
   }
-  const work = upload(projectId, file, onProgress).pipe(
+  const work = upload(videoShelf(projectId), file, onProgress).pipe(
     Effect.flatMap(() => (refreshByProject.get(projectId)?.() ?? Effect.void).pipe(
       Effect.map(() => {
         for (const kept of uploadsByProject.get(projectId) ?? []) {
@@ -191,6 +197,7 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
       h("div", { class: "board" }, stages.rail),
       chat.node)
     show(reel)
+    disposeChat = chat.dispose
     shrinkWhenScrolledPast(panels.viewer)
     refresh()
   })

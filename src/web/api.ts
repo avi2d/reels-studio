@@ -1,4 +1,5 @@
 import { Data, Effect, Option, Schema } from "effect"
+import { Message } from "../shared/chat.ts"
 import { LibraryVideo, type Pick } from "../shared/library.ts"
 import { VideoView } from "../shared/plan.ts"
 import { ReelView } from "../shared/reel.ts"
@@ -22,12 +23,7 @@ const ProjectView = Schema.Struct({
 })
 export type ProjectView = typeof ProjectView.Type
 
-const Message = Schema.Struct({
-  role: Schema.Literals(["user", "assistant"]),
-  text: Schema.String,
-  failed: Schema.optionalKey(Schema.String)
-})
-export type Message = typeof Message.Type
+export type { Message } from "../shared/chat.ts"
 
 export const ChatEvent = Schema.Union([
   Schema.Struct({ type: Schema.Literal("delta"), text: Schema.String }),
@@ -133,5 +129,8 @@ export const reelDownloadUrl = (id: string): string =>
 export const removeProject = (id: string): Effect.Effect<{ readonly removed: string }, Failed> =>
   call(Schema.Struct({ removed: Schema.String }), `/api/projects/${id}`, { method: "DELETE" })
 
-export const postChat = (id: string, text: string, model: string, effort: Effort): Effect.Effect<Response, Offline> =>
-  send(`/api/projects/${id}/chat`, post({ text, model, effort }))
+export const postChat = (id: string, text: string, files: ReadonlyArray<string>, model: string, effort: Effort): Effect.Effect<Response, Offline> =>
+  send(`/api/projects/${id}/chat`, post({ text, files, model, effort }))
+
+export const coverUrl = (id: string, name: string): string =>
+  `/api/projects/${id}/attachments/${encodeURIComponent(name)}/cover`

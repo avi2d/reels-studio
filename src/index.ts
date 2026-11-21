@@ -2,6 +2,7 @@ import { BunHttpServer, BunRuntime, BunServices } from "@effect/platform-bun"
 import { Effect, Layer } from "effect"
 import { HttpRouter } from "effect/http"
 import { apiRoutes } from "./server/api.ts"
+import { Attachments } from "./server/attachments.ts"
 import { Chat } from "./server/chat.ts"
 import { Media } from "./server/media.ts"
 import { pageRoutes } from "./server/page.ts"
@@ -9,8 +10,9 @@ import { Projects } from "./server/projects.ts"
 import { Settings } from "./server/settings.ts"
 
 const mediaLive = Media.layer
-const chatLive = Chat.layer.pipe(Layer.provideMerge(mediaLive))
-const services = Layer.mergeAll(chatLive, mediaLive).pipe(Layer.provideMerge(Projects.layer), Layer.provideMerge(Settings.layer))
+const attachmentsLive = Attachments.layer
+const chatLive = Chat.layer.pipe(Layer.provideMerge(mediaLive), Layer.provideMerge(attachmentsLive))
+const services = Layer.mergeAll(chatLive, mediaLive, attachmentsLive).pipe(Layer.provideMerge(Projects.layer), Layer.provideMerge(Settings.layer))
 
 const server = Layer.unwrap(Effect.gen(function*() {
   const settings = yield* Settings
