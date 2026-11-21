@@ -213,3 +213,34 @@ export const withManualPauses = (edits: Edits, pauses: ReadonlyArray<PauseRef>, 
   const keptNow = keptOf(edits).filter((old) => !pauses.some((pause) => samePause(old, pause)))
   return removed ? { ...withCut, kept: keptNow } : { ...withCut, kept: [...keptNow, ...pauses.filter((pause) => !keptNow.some((old) => samePause(old, pause)))] }
 }
+
+type Choice = Edits["chosen"][number]
+
+const sameChoice = (left: Choice | undefined, right: Choice | undefined): boolean => {
+  if (left === undefined || right === undefined) return left === right
+  return left.video === right.video && left.from === right.from
+}
+
+export const mergeEdits = (base: Edits, local: Edits, current: Edits): Edits => {
+  const mergeRefs = <Ref>(same: (left: Ref, right: Ref) => boolean) =>
+    (mine: ReadonlyArray<Ref>, baseRefs: ReadonlyArray<Ref>, currentRefs: ReadonlyArray<Ref>): Array<Ref> => [
+      ...currentRefs.filter((one) => !baseRefs.some((old) => same(old, one)) || mine.some((kept) => same(kept, one))),
+      ...mine.filter((one) => !baseRefs.some((old) => same(old, one)) && !currentRefs.some((have) => same(have, one)))
+    ]
+  const mergePauses = mergeRefs(samePause)
+  const choiceOf = (list: ReadonlyArray<Choice>, block: string): Choice | undefined => list.find((one) => one.block === block)
+  const blocks = [...new Set([...base.chosen, ...local.chosen, ...current.chosen].map((one) => one.block))]
+  const reordered = base.order.length !== local.order.length || base.order.some((id, index) => local.order[index] !== id)
+  return {
+    order: reordered ? [...local.order] : [...current.order],
+    deleted: mergeRefs((left: string, right: string) => left === right)(local.deleted, base.deleted, current.deleted),
+    chosen: blocks.flatMap((block) => {
+      const entry = sameChoice(choiceOf(base.chosen, block), choiceOf(local.chosen, block))
+        ? choiceOf(current.chosen, block)
+        : choiceOf(local.chosen, block)
+      return entry === undefined ? [] : [entry]
+    }),
+    pauses: mergePauses(local.pauses, base.pauses, current.pauses),
+    kept: mergePauses(local.kept ?? [], base.kept ?? [], current.kept ?? [])
+  }
+}

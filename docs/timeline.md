@@ -55,6 +55,9 @@ Each take carries a short reason in Russian.
 
 The person chooses a take, drags and deletes blocks, and removes pauses on the page.
 The studio keeps these choices in `timeline.json`, which the chat model cannot write.
+Each page save carries the edits the page started from next to its new edits.
+The server applies only the person's changes since that base on top of the current `timeline.json` under one per-project lock, and the page adopts the merged edits.
+The gathering and the yes write `timeline.json` under the same lock on top of the file as it stands.
 A pause the person returns stays in the `kept` list of `timeline.json`, and the studio never shortens it by itself, neither after a gathering nor after the yes.
 Removing the pause by hand drops it from that list.
 A deleted block and a removed pause stay listed on the page, and one tap returns each.

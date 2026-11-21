@@ -17,7 +17,7 @@ const EditsFile = Schema.fromJsonString(Edits)
 const decodeEdits = Schema.decodeUnknownOption(EditsFile)
 const encodeEdits = Schema.encodeEffect(EditsFile)
 
-const readEdits = Effect.fnUntraced(function*(dir: string) {
+export const readEdits = Effect.fnUntraced(function*(dir: string) {
   const fs = yield* FileSystem.FileSystem
   const file = `${dir}/timeline.json`
   if (!(yield* fs.exists(file))) return NO_EDITS

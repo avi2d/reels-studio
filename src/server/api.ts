@@ -31,6 +31,7 @@ const body = <A>(schema: Schema.ConstraintDecoder<A>) =>
   HttpServerRequest.schemaBodyJson(schema).pipe(Effect.mapError(() => badRequest("Запрос не разобран")))
 
 const NewProject = Schema.Struct({ title: Schema.String })
+const SaveEdits = Schema.Struct({ base: Edits, edits: Edits })
 
 const projects = Layer.mergeAll(
   HttpRouter.add("GET", "/api/projects", reply(Effect.gen(function*() {
@@ -176,14 +177,15 @@ const videos = Layer.mergeAll(
     const media = yield* Media
     const gather = yield* Gather
     const id = yield* param("id")
+    const gathering = yield* gather.running(id)
     const view = yield* media.timeline(id)
-    return json({ ...view, gathering: yield* gather.running(id), gatherFailed: yield* gather.failed(id) } satisfies TimelinePage)
+    return json({ ...view, gathering, gatherFailed: yield* gather.failed(id) } satisfies TimelinePage)
   }))),
   HttpRouter.add("PUT", "/api/projects/:id/timeline", reply(Effect.gen(function*() {
     const media = yield* Media
     const id = yield* param("id")
-    yield* media.saveEdits(id, yield* body(Edits))
-    return json({ saved: id })
+    const input = yield* body(SaveEdits)
+    return json(yield* media.mergeEdits(id, input.base, input.edits))
   }))),
   HttpRouter.add("GET", "/api/projects/:id/library", reply(Effect.gen(function*() {
     const media = yield* Media

@@ -100,8 +100,8 @@ export const previewUrl = (id: string, name: string): string =>
 export const getTimeline = (id: string): Effect.Effect<TimelinePage, Failed> =>
   call(TimelinePage, `/api/projects/${id}/timeline`)
 
-export const saveEdits = (id: string, edits: Edits): Effect.Effect<{ readonly saved: string }, Failed> =>
-  call(Schema.Struct({ saved: Schema.String }), `/api/projects/${id}/timeline`, { ...post(edits), method: "PUT" })
+export const saveEdits = (id: string, base: Edits, edits: Edits): Effect.Effect<Edits, Failed> =>
+  call(Edits, `/api/projects/${id}/timeline`, { ...post({ base, edits }), method: "PUT" })
 
 const Library = Schema.Struct({ videos: Schema.Array(LibraryVideo) })
 

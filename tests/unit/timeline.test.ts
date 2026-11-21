@@ -3,9 +3,9 @@ import { videoLines } from "../../src/server/chat.ts"
 import { gazeText } from "../../src/server/media-commands.ts"
 import type { Transcript } from "../../src/shared/plan.ts"
 import {
-  arrange, assemble, cameraShare, chosenTake, clipsOf, fadeGain, NO_EDITS, offsetIn, pausesOf, playedSpans, soundBlocks, withChoice, withDeleted,
+  arrange, assemble, cameraShare, chosenTake, clipsOf, fadeGain, mergeEdits, NO_EDITS, offsetIn, pausesOf, playedSpans, soundBlocks, withChoice, withDeleted,
   withPauses, within,
-  type Block, type Gaze
+  type Block, type Edits, type Gaze
 } from "../../src/shared/timeline.ts"
 
 const word = (start: number, end: number, text: string) => ({ start, end, text })
@@ -143,4 +143,48 @@ test("a time in the second played span sits after only the played seconds before
 test("a window keeps only the parts of the spans inside it, not every span it touches whole", () => {
   const spans = [{ start: 0, end: 2 }, { start: 5, end: 8 }, { start: 9, end: 10 }]
   expect(within(spans, { start: 1, end: 6 })).toEqual([{ start: 1, end: 2 }, { start: 5, end: 6 }])
+})
+const choice = (block: string, video: string, from: number) => ({ block, video, from })
+const cut = (video: string, after: number) => ({ video, after })
+
+test("a save keeps a picked take and the studio pauses instead of dropping one side", () => {
+  const base: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)] }
+  const local: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0), choice("deposit", "a", 4)] }
+  const current: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3)] }
+  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: local.chosen, pauses: [cut("a", 3)], kept: [] })
+})
+
+test("returning a seen pause removes it instead of keeping the studio cut", () => {
+  const base: Edits = { ...NO_EDITS, pauses: [cut("a", 3)] }
+  const local: Edits = { ...NO_EDITS }
+  const current: Edits = { ...NO_EDITS, pauses: [cut("a", 3)] }
+  expect(mergeEdits(base, local, current).pauses).toEqual([])
+})
+
+test("a pause shortened after the last ack stays cut instead of coming back", () => {
+  const base: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)] }
+  const local: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0), choice("deposit", "a", 4)] }
+  const current: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3)] }
+  expect(mergeEdits(base, local, current).pauses).toEqual([cut("a", 3)])
+})
+
+test("an undone take goes back while a later studio pause stays cut", () => {
+  const base: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 2)], pauses: [cut("a", 3)] }
+  const local: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3)] }
+  const current: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 2)], pauses: [cut("a", 3), cut("a", 5)] }
+  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3), cut("a", 5)], kept: [] })
+})
+
+test("a reorder wins the order while untouched fields stay on the server", () => {
+  const base: Edits = { ...NO_EDITS, order: ["advance", "deposit"] }
+  const local: Edits = { ...NO_EDITS, order: ["deposit", "advance"] }
+  const current: Edits = { ...NO_EDITS, order: ["advance", "deposit"], pauses: [cut("a", 3)] }
+  expect(mergeEdits(base, local, current)).toEqual({ order: ["deposit", "advance"], deleted: [], chosen: [], pauses: [cut("a", 3)], kept: [] })
+})
+
+test("returning a pause while the studio cuts another keeps both", () => {
+  const base: Edits = { ...NO_EDITS, pauses: [cut("a", 3)] }
+  const local: Edits = { ...NO_EDITS, kept: [cut("a", 3)] }
+  const current: Edits = { ...NO_EDITS, pauses: [cut("a", 3), cut("a", 5)] }
+  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: [], pauses: [cut("a", 5)], kept: [cut("a", 3)] })
 })

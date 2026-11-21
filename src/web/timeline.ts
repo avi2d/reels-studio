@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { lengthOf } from "../shared/plan.ts"
 import {
-  assemble, clipsOf, NO_EDITS, playedSpans, withChoice, withDeleted, withManualPauses, within,
+  assemble, clipsOf, mergeEdits, NO_EDITS, playedSpans, withChoice, withDeleted, withManualPauses, within,
   type Clip, type Edits, type Placed, type Take
 } from "../shared/timeline.ts"
 import * as Api from "./api.ts"
@@ -272,7 +272,12 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
   const view = display(parts, state)
   const player = montage(projectId, view.markPlaying)
   ui.frame.prepend(player.node)
-  const saving = saver(projectId, ui.problem, () => state.edits)
+  const saving = saver(projectId, ui.problem, () => state.edits, () => state.acked, (sent, merged) => {
+    state.acked = merged
+    state.edits = mergeEdits(sent, state.edits, merged)
+    state.changes += 1
+    draw()
+  })
   const card: Card = { parts, ui, state, view, player, saving, hooks }
   const draw = (): void => {
     redraw({ parts, ui, state, view, player, hooks }, actions)

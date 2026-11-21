@@ -18,6 +18,7 @@ const GATHER = "Собери блоки из всех видео и расста
 const NO_SPEECH = "Блоки появятся, когда студия услышит первое видео."
 const GATHERING = "Студия собирает блоки из всех видео. Потом сама выберет лучший дубль в каждом блоке и сократит паузы."
 const REGATHERING = "Студия собирает блоки заново вместе с новым видео. Дубли и паузы обновятся сами."
+const FAILED = "Студия не смогла собрать блоки. Новое видео или измеренный взгляд попробуют ещё раз."
 const NO_BLOCKS = "Блоков пока нет. Студия соберёт их из текста всех видео: дубли с одним смыслом попадут в один блок, лучший дубль встанет первым."
 const NO_ROW = "Здесь появятся блоки ролика и паузы в них."
 const NO_PAUSES = "Паузы появятся, когда студия соберёт блоки."
@@ -70,13 +71,13 @@ export const notesOf = ({ transcripts, view }: Loaded, ask: (text: string) => vo
   const regathering = view.gathering ? [h("p", { class: "muted", role: "status" }, REGATHERING)] : []
   if (timeline.state !== "ready") {
     if (timeline.state === "unreadable") return [h("p", { class: "error" }, "Блоки не прочитались. Попросите студию собрать их заново."), gather("Собрать блоки заново")]
-    if (view.gatherFailed) return [h("p", { class: "error" }, "Студия не смогла собрать блоки. Новое видео или измеренный взгляд попробуют ещё раз."), gather("Собрать блоки")]
+    if (view.gatherFailed) return [h("p", { class: "error" }, FAILED), gather("Собрать блоки")]
     return [h("p", { class: "muted" }, NO_BLOCKS), gather("Собрать блоки")]
   }
   const dropped = timeline.dropped === 0 ? [] : [h("p", { class: "muted" },
     `Студия пропустила дубли, которые не нашла в видео: ${timeline.dropped}. Попросите в чате собрать блоки заново.`)]
-  const failed = view.gatherFailed
-    ? [h("p", { class: "error" }, "Студия не смогла собрать блоки. Новое видео или измеренный взгляд попробуют ещё раз."), gather("Собрать блоки")]
+  const failed = view.gatherFailed && !view.gathering
+    ? [h("p", { class: "error" }, FAILED), gather("Собрать блоки")]
     : []
   return [...regathering, ...failed, ...dropped, ...looksNote(view.looks)]
 }
