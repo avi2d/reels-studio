@@ -149,10 +149,18 @@ const pageAt = (pathname: string): Page | undefined => {
 
 let stopPageLoad: (() => void) | undefined
 
+const savedPath = (): string | undefined => {
+  if (location.pathname !== HOME_PATH || !location.hash.startsWith("#/")) return undefined
+  const path = location.hash.slice(1)
+  return pageAt(path) !== undefined ? path : undefined
+}
+
 const route = (): void => {
   stopPageLoad?.()
   stopPageLoad = undefined
-  const page = pageAt(location.pathname)
+  const saved = savedPath()
+  if (saved !== undefined) history.replaceState(history.state, "", saved + location.search)
+  const page = pageAt(saved ?? location.pathname)
   document.title = "Студия Reels"
   if (page?.kind === "videos") {
     document.title = "Загруженные видео · Студия Reels"
@@ -181,10 +189,6 @@ const clickedPage = (event: MouseEvent): URL | undefined => {
   if (url.origin === location.origin && url.hash === "" && pageAt(url.pathname) !== undefined) return url
 }
 
-if (location.pathname === HOME_PATH && location.hash.startsWith("#/")) {
-  const path = location.hash.slice(1)
-  if (pageAt(path) !== undefined) history.replaceState(history.state, "", path + location.search)
-}
 startKit()
 document.addEventListener("click", (event) => {
   const url = clickedPage(event)
@@ -193,4 +197,5 @@ document.addEventListener("click", (event) => {
   navigate(url)
 })
 globalThis.addEventListener("popstate", route)
+globalThis.addEventListener("hashchange", route)
 route()

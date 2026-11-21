@@ -78,7 +78,8 @@ const savedVideosLink: ProductCheck = {
   name: "opening a saved videos link does not leave #/videos in the address bar",
   run: async (page) => {
     const base = setting("REELS_BROWSER_URL")
-    await page.goto("about:blank")
+    await page.goto(base)
+    await page.getByRole("heading", { name: "Студия Reels", exact: true }).waitFor()
     await page.goto(new URL("/#/videos", base).href)
     await page.getByRole("heading", { name: "Загруженные видео", exact: true }).waitFor()
     assert.equal(page.url(), new URL("/videos", base).href)
