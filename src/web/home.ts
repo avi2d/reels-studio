@@ -5,7 +5,6 @@ import { h } from "./dom.ts"
 import { formatDay } from "./format.ts"
 import { askToRemove } from "./remove.ts"
 import { run } from "./run.ts"
-import { uploadedPanel } from "./uploaded.ts"
 
 const askForTitle = (): void => {
   const title = h("input", { type: "text", name: "title", maxlength: "120", required: true, autocomplete: "off", placeholder: "Например: нотариальный осмотр сайта" })
@@ -68,15 +67,12 @@ const countsOf = (projects: ReadonlyArray<Api.ProjectView>): HTMLElement => {
     : h("span", { class: "sum waits" }, `Ждут видео: ${waiting} из ${projects.length}`)
 }
 
-export const homeView = (projects: ReadonlyArray<Api.ProjectView>, onRemoved: () => void): HTMLElement => {
-  const uploaded = uploadedPanel()
-  return h("div", { class: "home" },
+export const homeView = (projects: ReadonlyArray<Api.ProjectView>, onRemoved: () => void): HTMLElement =>
+  h("div", { class: "home" },
     h("header", { class: "top" },
       h("h1", { class: "brand" }, "Студия Reels"),
       countsOf(projects),
-      h("div", { class: "actions" }, uploaded.opener, button("primary", { click: askForTitle }, "Новый ролик"))),
-    uploaded.node,
+      h("div", { class: "actions" }, button("normal", { href: "#/videos" }, "Загрузить видео"), button("primary", { click: askForTitle }, "Новый ролик"))),
     projects.length === 0
       ? h("p", { class: "none" }, "Роликов пока нет. Загрузите видео, затем нажмите «Новый ролик» и назовите первый.")
       : h("ul", { class: "grid" }, ...projects.map((project) => tile(project, onRemoved))))
-}

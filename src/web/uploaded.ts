@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { UploadedVideo } from "../shared/library.ts"
 import * as Api from "./api.ts"
-import { button, retryPair, type Retry } from "./controls.ts"
+import { button, iconButton, retryPair, tooltip, type Retry } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatLength, formatSize } from "./format.ts"
 import { oneAfterAnother } from "./queue.ts"
@@ -89,19 +89,15 @@ const uploadedItem = (video: UploadedVideo, retry: Retry): HTMLElement =>
     h("div", { class: "name" }, h("span", {}, video.name), h("span", {}, formatSize(video.size))),
     ...stateOf(video, retry))
 
-export interface UploadedPanel {
-  readonly opener: HTMLElement
-  readonly node: HTMLElement
-}
-
-export const uploadedPanel = (): UploadedPanel => {
+export const uploadedView = (): HTMLElement => {
   const input = h("input", { class: "visually-hidden", name: "videos", type: "file", accept: "video/*", multiple: true, tabindex: "-1", "aria-hidden": "true" })
-  const open = button("normal", { click: () => { input.click() } }, "Загрузить видео")
+  const open = button("primary", { click: () => { input.click() } }, "Загрузить видео")
   const uploads = h("ul", { class: "uploads" }, ...rows)
-  const known = h("ul", { class: "uploads", "aria-labelledby": "uploaded-title" })
-  const node = h("section", { class: "uploaded", "aria-labelledby": "uploaded-title", hidden: rows.length === 0 },
-    h("h2", { id: "uploaded-title" }, "Загруженные видео"), uploads, known,
-    h("p", { class: "muted" }, "Видео загружаются по очереди. Не закрывайте страницу, пока идёт загрузка. Чтобы взять видео в ролик, откройте ролик и нажмите «Выбрать видео». Исходные видео студия не меняет."))
+  const known = h("ul", { class: "uploads" })
+  const none = h("p", { class: "muted", hidden: true }, "Видео пока нет. Нажмите «Загрузить видео» и выберите файлы.")
+  const node = h("section", { class: "uploaded", "aria-label": "Загруженные видео" },
+    h("div", { class: "row" }, open, input), uploads, known, none,
+    h("p", { class: "muted" }, "Видео загружаются по очереди. Загрузка продолжится, если перейти в ролик, но не закрывайте вкладку. Чтобы взять видео в ролик, откройте ролик и нажмите «Выбрать видео». Исходные видео студия не меняет."))
   const state = { timer: 0, signature: "" }
   const show = (videos: ReadonlyArray<UploadedVideo>): void => {
     const signature = JSON.stringify(videos)
@@ -109,7 +105,7 @@ export const uploadedPanel = (): UploadedPanel => {
       state.signature = signature
       known.replaceChildren(...videos.map((video) => uploadedItem(video, retry)))
     }
-    node.hidden = videos.length === 0 && rows.length === 0
+    none.hidden = videos.length > 0 || rows.length > 0
     globalThis.clearTimeout(state.timer)
     if (videos.some((video) => video.state === "waiting")) state.timer = Number(globalThis.setTimeout(refresh, POLL_MS))
   }
@@ -143,7 +139,7 @@ export const uploadedPanel = (): UploadedPanel => {
     }
     if (made.length === 0) return
     uploads.append(...made.map((row) => row.node))
-    node.hidden = false
+    none.hidden = true
     enqueue(made.map((row) => row.work))
   }
   input.addEventListener("change", () => {
@@ -151,5 +147,8 @@ export const uploadedPanel = (): UploadedPanel => {
     input.value = ""
   })
   queueMicrotask(refresh)
-  return { opener: h("span", { class: "upload-open" }, open, input), node }
+  const back = iconButton("plain", "back", "Все ролики", { class: "back", href: "#/" })
+  return h("div", { class: "home" },
+    h("header", { class: "top" }, back, tooltip(back, "videos-back", "Все ролики"), h("h1", { class: "brand fits" }, "Загруженные видео")),
+    node)
 }

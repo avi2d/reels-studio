@@ -3,7 +3,8 @@ kind: reference
 ---
 # Upload a video, reuse it and delete a video folder
 
-The person uploads videos only on the main page, with the «Загрузить видео» button next to «Новый ролик».
+The «Загрузить видео» link next to «Новый ролик» on the main page opens the «Загруженные видео» page at `#/videos`.
+That page lists the uploaded videos, and its «Загрузить видео» button above the list is the only place that uploads a video.
 The uploaded videos go into one shared list in `projects/.library`, and the studio hears each of them there.
 Inside a reel, the «Выбрать видео» button of the «Видео» card offers the heard videos from that list and from other video folders.
 A picked video joins the folder at once with its text and preview, without a second upload or transcription.

@@ -38,12 +38,16 @@ const listedNames = (body: unknown): ReadonlyArray<unknown> =>
     ? body.videos.map((video: unknown) => typeof video === "object" && video !== null && "name" in video ? video.name : undefined)
     : []
 
-const uploadOnHome = async (page: Page): Promise<void> => {
+const uploadOnVideosPage = async (page: Page): Promise<void> => {
   page.setDefaultTimeout(timeout)
+  await page.goto(setting("REELS_BROWSER_URL"))
+  await page.getByRole("heading", { name: "Студия Reels", exact: true }).waitFor()
+  assert.equal(await page.getByRole("region", { name: "Загруженные видео" }).count(), 0, "The main page must not show the uploaded videos")
   const [listed] = await Promise.all([
     page.waitForResponse((response) => new URL(response.url()).pathname === "/api/library", { timeout }),
-    page.goto(setting("REELS_BROWSER_URL"))
+    page.getByRole("link", { name: "Загрузить видео", exact: true }).click()
   ])
+  await page.getByRole("heading", { name: "Загруженные видео", exact: true }).waitFor()
   if (!listedNames(await listed.json()).includes(SOURCE_VIDEO)) {
     await page.locator('input[type="file"][accept="video/*"]').setInputFiles(join(setting("REELS_BROWSER_DIR"), SOURCE_VIDEO))
   }
@@ -59,10 +63,10 @@ const addFromList = async (page: Page): Promise<void> => {
 }
 
 const projectAndUpload: ProductCheck = {
-  name: "a video uploaded on the main page reaches a reel only by picking it, with its original bytes",
+  name: "a video uploaded on the videos page reaches a reel only by picking it, with its original bytes",
   run: async (page) => {
     const title = "Ролик для монтажа"
-    await uploadOnHome(page)
+    await uploadOnVideosPage(page)
     await assertOriginal(join(setting("REELS_BROWSER_DIR"), "projects", ".library"), "source", SOURCE_VIDEO)
     await createProject(page, title)
     assert.equal(await page.locator('input[type="file"][accept="video/*"]').count(), 0, "A reel must not offer its own video upload")
@@ -73,7 +77,7 @@ const projectAndUpload: ProductCheck = {
     await tile.click()
     await page.getByRole("heading", { name: title, exact: true }).waitFor()
     await assertOriginal(projectFolder(page), "source", SOURCE_VIDEO)
-    return { targets: ["uploaded original in the shared list", "reel without its own upload", "picked original after reopening"], found: [] }
+    return { targets: ["main page without the uploaded list", "uploaded original on the videos page", "reel without its own upload", "picked original after reopening"], found: [] }
   }
 }
 
@@ -86,7 +90,7 @@ const saveEdit = async (page: Page, edit: () => Promise<void>): Promise<void> =>
 }
 
 const buildBlocks = async (page: Page): Promise<void> => {
-  await uploadOnHome(page)
+  await uploadOnVideosPage(page)
   await createProject(page, "Сборка ролика")
   await addFromList(page)
   await page.locator('wa-tab[panel="takes"]').click()

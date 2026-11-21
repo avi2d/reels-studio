@@ -99,6 +99,7 @@ progress::-moz-progress-bar { background: var(--wa-color-brand-fill-loud); }
 .top .sum { margin-right: auto; color: var(--wa-color-text-quiet); }
 .top .sum.waits { color: var(--wa-color-brand-fill-loud); }
 .none { padding: 0 var(--pad); color: var(--wa-color-text-quiet); }
+.top .fits { flex: 1 1 0; min-width: 0; }
 .top .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .uploaded { display: flex; flex-direction: column; gap: 12px; max-width: 720px; margin: 0 var(--pad) 24px; padding: 16px; border-radius: 16px; background: var(--wa-color-surface-raised); }
 .uploaded > .uploads:not(:empty) + .uploads:not(:empty) { padding-top: 12px; border-top: 1px solid var(--wa-color-surface-border); }

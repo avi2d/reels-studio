@@ -110,7 +110,7 @@ export interface Picker {
 export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<void, Api.Failed>): Picker => {
   const open = button("primary", { hidden: true }, "Выбрать видео")
   setExpanded(open, false)
-  const hint = h("p", { class: "muted hint", hidden: true }, "Загрузите видео на ", h("a", { href: "#/" }, "главной странице"), ", и его можно будет добавить в ролик.")
+  const hint = h("p", { class: "muted hint", hidden: true }, "Загрузите видео на странице ", h("a", { href: "#/videos" }, "«Загруженные видео»"), ", и его можно будет добавить в ролик.")
   const list = h("ul", { class: "choices" })
   const listening = h("p", { class: "muted", role: "status" })
   const add = button("primary", { disabled: true }, addLabel(0))

@@ -13,6 +13,7 @@ import { askToRemove } from "./remove.ts"
 import { run } from "./run.ts"
 import { stageRail, type StageId, type StageNote } from "./stages.ts"
 import { timelineCard, type Status } from "./timeline.ts"
+import { uploadedView } from "./uploaded.ts"
 import { videosCard } from "./videos.ts"
 
 const app = document.querySelector("#app") ?? document.body
@@ -109,9 +110,16 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
     refresh()
   })
 
+const VIDEOS = "#/videos"
+
 const route = (): void => {
   const match = /^#\/p\/([a-z0-9-]+)$/.exec(location.hash)
   document.title = "Студия Reels"
+  if (location.hash === VIDEOS) {
+    document.title = "Загруженные видео · Студия Reels"
+    show(uploadedView())
+    return
+  }
   const view = match?.[1] === undefined ? Effect.map(Api.listProjects, ({ projects }) => { show(homeView(projects, route)) }) : projectView(match[1])
   run(view, showFailure)
 }
