@@ -7,6 +7,7 @@ import { formatLength, formatSize } from "./format.ts"
 import type { StageNote } from "./stages.ts"
 
 const POLL_MS = 1000
+const IDLE_MS = 3000
 
 const ABOUT = "Студия соберёт ролик из исходных видео: выбранные дубли в порядке блоков, без убранных пауз, с мягким звуком на каждой склейке. Исходные видео не меняются."
 const NO_CUT = "В монтаже нет ни одного блока. Соберите блоки, и ролик можно будет собрать."
@@ -35,7 +36,7 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
   readonly edited: () => void
   readonly settled: (ok: boolean) => void
 } => {
-  const state: { timer: number; made: string | undefined; dirty: boolean; seen: number } = { timer: 0, made: undefined, dirty: false, seen: 0 }
+  const state: { timer: number; made: string | undefined; dirty: boolean; busy: boolean; next: number; applied: number; mut: number } = { timer: 0, made: undefined, dirty: false, busy: false, next: 0, applied: 0, mut: 0 }
   const status = h("p", { class: "muted", role: "status" })
   const bar = h("progress", { max: "1", value: "0", hidden: true })
   const problem = h("p", { class: "error", role: "alert" })
@@ -52,21 +53,21 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
 
   const later = (): void => {
     globalThis.clearTimeout(state.timer)
-    state.timer = Number(globalThis.setTimeout(refresh, POLL_MS))
+    state.timer = Number(globalThis.setTimeout(refresh, state.busy ? POLL_MS : IDLE_MS))
   }
 
   const show = (view: ReelView): void => {
-    const busy = isBusy(view)
-    make.disabled = busy || view.cut === 0 || state.dirty || hooks.pending()
-    make.hidden = busy
-    cancel.hidden = !busy
+    state.busy = isBusy(view)
+    make.disabled = state.busy || view.cut === 0 || state.dirty || hooks.pending()
+    make.hidden = state.busy
+    cancel.hidden = !state.busy
     cancel.disabled = false
     make.textContent = view.file === undefined ? "Собрать ролик" : "Собрать заново"
     status.textContent = statusOf(view)
     bar.hidden = view.job.state !== "running"
     bar.value = view.job.state === "running" ? view.job.done : 0
     if (view.job.state === "failed") problem.textContent = FAILED
-    else if (busy) problem.textContent = ""
+    else if (state.busy) problem.textContent = ""
     file.hidden = view.file === undefined
     if (view.file !== undefined) {
       if (state.made !== view.file.made) {
@@ -74,31 +75,52 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
         player.src = Api.reelUrl(projectId, view.file.made)
       }
       facts.textContent = `Длина ${formatLength(view.file.seconds)} · ${formatSize(view.file.size)} · собран ${madeAt(view.file.made)}`
-      stale.hidden = busy || (view.file.fresh && !state.dirty)
+      stale.hidden = state.busy || (view.file.fresh && !state.dirty)
     }
-    hooks.note({ note: "", done: view.file?.fresh === true })
-    if (busy) later()
+    hooks.note({ note: "", done: view.file?.fresh === true && !state.dirty })
+    later()
   }
 
   function refresh(): void {
     globalThis.clearTimeout(state.timer)
     if (!node.isConnected) return
-    state.seen += 1
-    const ticket = state.seen
+    state.next += 1
+    const n = state.next
     Effect.runFork(Api.getReel(projectId).pipe(
       Effect.map((view) => {
-        if (ticket !== state.seen) return
+        if (n <= state.applied) return
+        state.applied = n
         show(view)
       }),
       Effect.catchTag("Failed", () => Effect.sync(() => {
-        if (ticket !== state.seen) return
+        if (n <= state.applied) return
+        state.applied = n
         later()
       }))
     ))
   }
 
+  const mutate = (run: () => Effect.Effect<ReelView, Api.Failed>, fail: () => void): void => {
+    state.next += 1
+    const n = state.next
+    state.mut = n
+    Effect.runFork(run().pipe(
+      Effect.map(() => {
+        if (n > state.applied) state.applied = n
+        refresh()
+      }),
+      Effect.catchTag("Failed", (error) => Effect.sync(() => {
+        if (n > state.applied) state.applied = n
+        if (n === state.mut) {
+          problem.textContent = error.message
+          fail()
+        }
+        refresh()
+      }))
+    ))
+  }
+
   const edited = (): void => {
-    state.seen += 1
     state.dirty = true
     make.disabled = true
     hooks.note({ note: "", done: false })
@@ -122,43 +144,17 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
         problem.textContent = NOT_SAVED
         return
       }
-      state.seen += 1
-      const ticket = state.seen
-      Effect.runFork(Api.buildReel(projectId).pipe(
-        Effect.map((view) => {
-          if (ticket !== state.seen) {
-            refresh()
-            return
-          }
-          show(view)
-        }),
-        Effect.catchTag("Failed", (error) => Effect.sync(() => {
-          if (ticket !== state.seen) return
-          problem.textContent = error.message
-          make.disabled = state.dirty || hooks.pending()
-        }))
-      ))
+      mutate(() => Api.buildReel(projectId), () => {
+        make.disabled = state.dirty || hooks.pending()
+      })
     })
   })
 
   cancel.addEventListener("click", () => {
     cancel.disabled = true
-    state.seen += 1
-    const ticket = state.seen
-    Effect.runFork(Api.cancelReel(projectId).pipe(
-      Effect.map((view) => {
-        if (ticket !== state.seen) {
-          refresh()
-          return
-        }
-        show(view)
-      }),
-      Effect.catchTag("Failed", (error) => Effect.sync(() => {
-        if (ticket !== state.seen) return
-        problem.textContent = error.message
-        cancel.disabled = false
-      }))
-    ))
+    mutate(() => Api.cancelReel(projectId), () => {
+      cancel.disabled = false
+    })
   })
 
   return { node, refresh, pause: () => { player.pause() }, edited, settled }

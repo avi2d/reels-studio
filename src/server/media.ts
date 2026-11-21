@@ -9,7 +9,7 @@ import { GazeFailed, listen, look, places, previewIsFresh, readPlan, readTranscr
 import { Projects } from "./projects.ts"
 import { gatherLibrary, heardIn, keysIn, reuse as reuseOne, sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
-import { buildReel, readReel, reelPlaces } from "./reel.ts"
+import { buildReel, publishedReel, readReel } from "./reel.ts"
 import { readCut, readTimeline, writeEdits } from "./timeline-files.ts"
 
 const UNAVAILABLE = "Видео недоступно. Попробуйте открыть страницу ещё раз."
@@ -200,10 +200,9 @@ const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, r
   }, orBroken, Effect.provideContext(context))
 
   const reelFile = Effect.fn("Media.reelFile")(function*(id: string) {
-    const fs = yield* FileSystem.FileSystem
-    const target = reelPlaces(yield* folder(id)).file
-    if (!(yield* fs.exists(target))) return yield* notFound("Ролик ещё не собран")
-    return target
+    const published = yield* publishedReel(yield* folder(id))
+    if (published === undefined) return yield* notFound("Ролик ещё не собран")
+    return published.target
   }, orBroken, Effect.provideContext(context))
 
   const cancelReel = Effect.fn("Media.cancelReel")(function*(id: string) {

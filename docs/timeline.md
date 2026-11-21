@@ -103,5 +103,5 @@ Each video folder holds these next to `plan.json`:
 | `gaze/<video>.txt` | The share of looks into the camera for each stretch of speech, which the chat model reads |
 | `blocks.json` | The blocks and their takes, written by the chat model |
 | `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes and the removed pauses |
-| `reel/reel.mp4` | The built reel |
-| `reel/reel.json` | When the reel was built and the parts it holds, so the stage can tell whether the cut changed since |
+| `reel/reel-<stamp>.mp4` | One built reel per build, named by its build time |
+| `reel/reel.json` | The build time, the video file it published and the parts it holds, so the stage can tell whether the cut changed since |

@@ -7,16 +7,28 @@ import { Settings } from "./settings.ts"
 
 const Record = Schema.Struct({
   made: Schema.String,
+  video: Schema.String,
   parts: Schema.Array(Schema.Struct({ video: Schema.String, start: Schema.Finite, frames: Schema.Int }))
 })
 const RecordFile = Schema.fromJsonString(Record)
 const decodeRecord = Schema.decodeUnknownOption(RecordFile)
 const encodeRecord = Schema.encodeEffect(RecordFile)
 
-export const reelPlaces = (dir: string): Readonly<Record<"file" | "record" | "work", string>> => ({
-  file: `${dir}/reel/reel.mp4`,
+export const reelPlaces = (dir: string): { readonly record: string; readonly work: string; readonly video: (name: string) => string } => ({
   record: `${dir}/reel/reel.json`,
-  work: `${dir}/reel/work`
+  work: `${dir}/reel/work`,
+  video: (name: string) => `${dir}/reel/${name}`
+})
+
+export const publishedReel = Effect.fnUntraced(function*(dir: string) {
+  const fs = yield* FileSystem.FileSystem
+  const place = reelPlaces(dir)
+  if (!(yield* fs.exists(place.record))) return undefined
+  const record = Option.getOrUndefined(decodeRecord(yield* fs.readFileString(place.record)))
+  if (record === undefined) return undefined
+  const target = place.video(record.video)
+  if (!(yield* fs.exists(target))) return undefined
+  return { target, record } as const
 })
 
 const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, onDone: (share: number) => Effect.Effect<void>) {
@@ -43,11 +55,23 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray
   }
   yield* fs.writeFileString(`${place.work}/parts.txt`, joinList(names))
   yield* tool("ffmpeg", joinArgs(`${place.work}/parts.txt`, `${place.work}/reel.mp4`), settings.heavy)
-  yield* fs.writeFileString(`${place.work}/reel.json`, yield* encodeRecord({ made: DateTime.formatIso(yield* DateTime.now), parts }))
-  yield* Effect.uninterruptible(Effect.gen(function*() {
-    yield* fs.rename(`${place.work}/reel.mp4`, place.file)
-    yield* fs.rename(`${place.work}/reel.json`, place.record)
-  }))
+  const made = DateTime.formatIso(yield* DateTime.now)
+  const video = `reel-${made.replace(/:/g, "-")}.mp4`
+  const previous = (yield* fs.exists(place.record))
+    ? Option.getOrUndefined(decodeRecord(yield* fs.readFileString(place.record)))?.video
+    : undefined
+  yield* fs.writeFileString(`${place.work}/reel.json`, yield* encodeRecord({ made, video, parts }))
+  yield* fs.rename(`${place.work}/reel.mp4`, place.video(video))
+  yield* Effect.uninterruptible(fs.rename(`${place.work}/reel.json`, place.record)).pipe(
+    Effect.tapError(() => fs.remove(place.video(video), { force: true }).pipe(
+      Effect.catch((error) => Effect.logError("the unpublished reel video was not removed", error))
+    ))
+  )
+  if (previous !== undefined && previous !== video) {
+    yield* fs.remove(place.video(previous), { force: true }).pipe(
+      Effect.catch((error) => Effect.logError("the previous reel video was not removed", error))
+    )
+  }
 })
 
 export const buildReel = Effect.fn("Reel.build")(function*(dir: string, clips: ReadonlyArray<Clip>, onDone: (share: number) => Effect.Effect<void>) {
@@ -59,13 +83,11 @@ export const buildReel = Effect.fn("Reel.build")(function*(dir: string, clips: R
 
 export const readReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, job: ReelView["job"]) {
   const fs = yield* FileSystem.FileSystem
-  const place = reelPlaces(dir)
   const parts = partsOf(clips)
   const cut = secondsOf(parts)
-  if (!(yield* fs.exists(place.file)) || !(yield* fs.exists(place.record))) return { job, cut } satisfies ReelView
-  const record = Option.getOrUndefined(decodeRecord(yield* fs.readFileString(place.record)))
-  if (record === undefined) return { job, cut } satisfies ReelView
-  const size = Number((yield* fs.stat(place.file)).size)
-  const file = { made: record.made, seconds: secondsOf(record.parts), size, fresh: sameParts(record.parts, parts) }
+  const published = yield* publishedReel(dir)
+  if (published === undefined) return { job, cut } satisfies ReelView
+  const size = Number((yield* fs.stat(published.target)).size)
+  const file = { made: published.record.made, seconds: secondsOf(published.record.parts), size, fresh: sameParts(published.record.parts, parts) }
   return { job, cut, file } satisfies ReelView
 })
