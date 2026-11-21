@@ -45,6 +45,9 @@ export interface Hooks {
   readonly ask: (text: string) => void
   readonly openTakes: () => void
   readonly status: (status: Status) => void
+  readonly edited?: () => void
+  readonly settled?: (ok: boolean) => void
+  readonly active?: () => boolean
 }
 
 const GAZE_CAUSE: Readonly<Record<GazeFailure, string>> = {

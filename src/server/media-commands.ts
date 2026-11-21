@@ -1,5 +1,5 @@
 import type { Transcript } from "../shared/plan.ts"
-import { cameraShare, type Gaze } from "../shared/timeline.ts"
+import { cameraShare, FADE, type Clip, type Gaze } from "../shared/timeline.ts"
 
 const HDR_TRANSFERS = new Set(["arib-std-b67", "smpte2084"])
 
@@ -32,6 +32,78 @@ export const refreshArgs = (source: string, preview: string, hdr: boolean, encod
   "-hide_banner", "-loglevel", "error", "-y", "-i", source,
   "-map", "0:v:0", "-map", "0:a:0", "-vf", videoFilter(hdr),
   "-c:v", encoder, "-b:v", "1500k", "-g", String(KEY_FRAME_EVERY), "-c:a", "aac", "-b:a", "96k", "-ac", "1", "-movflags", "+faststart", "-f", "mp4", preview
+]
+
+const REEL_RATE = 30
+
+export interface Part {
+  readonly video: string
+  readonly start: number
+  readonly frames: number
+}
+
+// Each part lasts whole frames, so its sound and its picture end together and the joined reel does not drift.
+export const partsOf = (clips: ReadonlyArray<Clip>): ReadonlyArray<Part> =>
+  clips.flatMap((clip) => {
+    const first = Math.round(clip.start * REEL_RATE)
+    const frames = Math.round(clip.end * REEL_RATE) - first
+    return frames > 0 ? [{ video: clip.video, start: first / REEL_RATE, frames }] : []
+  })
+
+export const secondsOf = (parts: ReadonlyArray<Part>): number =>
+  parts.reduce((total, part) => total + part.frames, 0) / REEL_RATE
+
+export const sameParts = (left: ReadonlyArray<Part>, right: ReadonlyArray<Part>): boolean =>
+  left.length === right.length && left.every((part, index) => {
+    const other = right[index]
+    return other !== undefined && other.video === part.video && other.start === part.start && other.frames === part.frames
+  })
+
+const REEL_VIDEO = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1"
+
+const fadesOf = (seconds: number): string => {
+  const fade = Math.min(FADE, seconds / 2)
+  return `afade=t=in:d=${fade},afade=t=out:st=${(seconds - fade).toFixed(4)}:d=${fade}`
+}
+
+export const partArgs = (source: string, part: Part, hdr: boolean, encoder: string, output: string): ReadonlyArray<string> => {
+  const seconds = part.frames / REEL_RATE
+  return [
+    "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y",
+    "-ss", part.start.toFixed(4), "-i", source,
+    "-map", "0:v:0", "-map", "0:a:0", "-frames:v", String(part.frames), "-t", seconds.toFixed(6),
+    "-vf", `fps=${REEL_RATE},${hdr ? TO_SDR : "format=yuv420p"},${REEL_VIDEO}`, "-af", fadesOf(seconds),
+    "-c:v", encoder, "-profile:v", "high", "-b:v", "10M", "-maxrate", "12M", "-bufsize", "24M", "-g", String(REEL_RATE * 2),
+    "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
+    "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2", "-map_metadata", "-1", "-f", "mov", output
+  ]
+}
+
+export const joinList = (names: ReadonlyArray<string>): string =>
+  ["ffconcat version 1.0", ...names.map((name) => `file '${name}'`)].join("\n") + "\n"
+
+export const joinArgs = (list: string, output: string): ReadonlyArray<string> => [
+  "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-i", list,
+  "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+  "-map_metadata", "-1", "-movflags", "+faststart", "-f", "mp4", output
+]
+
+export const progressSeconds = (line: string): number | undefined => {
+  const match = /^out_time_us=(\d+)$/.exec(line.trim())
+  return match?.[1] === undefined ? undefined : Number(match[1]) / 1_000_000
+}
+
+export interface RecognizerFiles {
+  readonly wav: string
+  readonly words: string
+}
+
+// onnxruntime offers CoreML first on macOS, and the GigaAM encoder fails there with error code -1 while the CPU provider hears it.
+const recognizerProviders = (platform: NodeJS.Platform): ReadonlyArray<string> =>
+  platform === "darwin" ? ["--providers", "CPUExecutionProvider"] : []
+
+export const recognizerArgs = (transcriber: string, files: RecognizerFiles, platform: NodeJS.Platform): ReadonlyArray<string> => [
+  "run", "--project", transcriber, "python", `${transcriber}/transcribe.py`, ...recognizerProviders(platform), files.wav, files.words
 ]
 
 const LINE_PAUSE = 0.1

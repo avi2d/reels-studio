@@ -54,3 +54,7 @@ test("a write into project-local trust folders is blocked, not just source and c
   expect(judge(scope, "write", ".agents/skills/x.md").allowed).toBe(false)
   expect(judge(scope, "write", "notes.md").allowed).toBe(true)
 })
+
+test("the chat model cannot overwrite the reel the studio built", () => {
+  expect(judge(scope, "write", "/data/projects/p1/reel/reel.mp4").allowed).toBe(false)
+})

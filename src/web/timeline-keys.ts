@@ -63,13 +63,14 @@ const act = (event: KeyboardEvent, { open, placed }: Now, actions: KeyActions): 
   return actOnOpen(event, open, placed, actions)
 }
 
-export const onKeys = (anchor: { readonly isConnected: boolean }, now: () => Now, actions: KeyActions): void => {
+export const onKeys = (anchor: { readonly isConnected: boolean }, now: () => Now, actions: KeyActions, enabled?: () => boolean): void => {
   const listen = (event: KeyboardEvent): void => {
     if (!anchor.isConnected) {
       document.removeEventListener("keydown", listen)
       return
     }
     if (event.ctrlKey || event.metaKey || event.altKey) return
+    if (enabled?.() === false) return
     if (act(event, now(), actions)) event.preventDefault()
   }
   document.addEventListener("keydown", listen)
