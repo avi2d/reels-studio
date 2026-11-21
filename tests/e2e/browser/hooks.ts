@@ -115,7 +115,7 @@ const attachment: ProductCheck = {
     await createProject(page, "Ролик с картинкой")
     await page.getByRole("button", { name: "Чат", exact: true }).click()
     const [chooser] = await Promise.all([
-      page.waitForEvent("filechooser"),
+      page.waitForEvent("filechooser", { timeout }),
       page.getByRole("button", { name: "Приложить файлы", exact: true }).click()
     ])
     await chooser.setFiles(join(setting("REELS_BROWSER_DIR"), CHAT_PICTURE))

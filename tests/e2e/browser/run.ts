@@ -7,6 +7,8 @@ import { CHAT_PICTURE, SOURCE_VIDEO } from "./scenario.ts"
 
 const PORT = "18765"
 const studioUrl = `http://127.0.0.1:${PORT}`
+const BROWSER_DEADLINE_MS = 8 * 60_000
+const FFMPEG_DEADLINE_MS = 2 * 60_000
 const site = config.browser?.site
 
 const studioReady = async (server: Bun.Subprocess): Promise<void> => {
@@ -30,9 +32,26 @@ const snapshotHome = async (directory: string): Promise<void> => {
   }))
 }
 
+const awaitExit = async (command: Bun.Subprocess, label: string, deadlineMs: number): Promise<void> => {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    const stalled = await Promise.race([
+      command.exited.then(() => false),
+      new Promise<true>((resolve) => { timer = setTimeout(() => resolve(true), deadlineMs) })
+    ])
+    if (!stalled) return
+    command.kill()
+    await command.exited
+    throw new Error(`${label} stalled`)
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 const ffmpeg = async (args: readonly string[]): Promise<void> => {
   const command = Bun.spawn(["ffmpeg", "-nostdin", "-v", "error", "-y", ...args], { stderr: "inherit" })
-  assert.equal(await command.exited, 0, "ffmpeg could not make the browser fixture")
+  await awaitExit(command, "ffmpeg", FFMPEG_DEADLINE_MS)
+  assert.equal(command.exitCode, 0, "ffmpeg could not make the browser fixture")
 }
 
 const makeMedia = (directory: string) => Promise.all([
@@ -60,11 +79,14 @@ const runBrowserChecks = async (directory: string, staticSite: string): Promise<
     await studioReady(server)
     // The kit serves only static files; its hooks visit the live studio.
     await snapshotHome(staticSite)
-    return await Bun.spawn([process.execPath, "x", "--no-install", "checks-browser", "--pr"], {
+    const browser = Bun.spawn([process.execPath, "x", "--no-install", "checks-browser", "--pr"], {
       env: { ...process.env, REELS_BROWSER_URL: studioUrl, REELS_BROWSER_DIR: directory },
       stdout: "inherit",
       stderr: "inherit"
-    }).exited
+    })
+    // A silent child would die with the job timeout instead of this cause.
+    await awaitExit(browser, "The browser checks", BROWSER_DEADLINE_MS)
+    return browser.exitCode ?? 1
   } finally {
     server.kill()
     await server.exited
