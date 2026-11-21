@@ -41,9 +41,7 @@ interface ReelState {
   made: string | undefined
   dirty: boolean
   busy: boolean
-  next: number
-  applied: number
-  mut: number
+  gen: number
 }
 
 interface ReelUi {
@@ -67,9 +65,8 @@ interface Pane {
   readonly ui: ReelUi
 }
 
-const later = (pane: Pane): void => {
-  globalThis.clearTimeout(pane.state.timer)
-  pane.state.timer = Number(globalThis.setTimeout(() => refresh(pane), pane.state.busy ? POLL_MS : IDLE_MS))
+const invalidate = (pane: Pane): void => {
+  pane.state.gen += 1
 }
 
 const show = (pane: Pane, view: ReelView): void => {
@@ -96,42 +93,35 @@ const show = (pane: Pane, view: ReelView): void => {
     ui.stale.hidden = state.busy || (view.file.fresh && !state.dirty)
   }
   hooks.note({ note: "", done: view.file?.fresh === true && !state.dirty })
-  later(pane)
 }
 
 const refresh = (pane: Pane): void => {
   const { state, ui } = pane
   globalThis.clearTimeout(state.timer)
   if (!ui.node.isConnected) return
-  state.next += 1
-  const n = state.next
+  state.timer = Number(globalThis.setTimeout(() => refresh(pane), state.busy ? POLL_MS : IDLE_MS))
+  const g = state.gen
   Effect.runFork(Api.getReel(pane.projectId).pipe(
     Effect.map((view) => {
-      if (n <= state.applied) return
-      state.applied = n
+      if (g !== state.gen) return
       show(pane, view)
     }),
-    Effect.catchTag("Failed", () => Effect.sync(() => {
-      if (n <= state.applied) return
-      state.applied = n
-      later(pane)
-    }))
+    Effect.catchTag("Failed", () => Effect.void)
   ))
 }
 
 const mutate = (pane: Pane, run: () => Effect.Effect<ReelView, Api.Failed>, fail: () => void): void => {
-  const { state } = pane
-  state.next += 1
-  const n = state.next
-  state.mut = n
+  invalidate(pane)
+  const g = pane.state.gen
   Effect.runFork(run().pipe(
     Effect.map(() => {
-      if (n > state.applied) state.applied = n
+      invalidate(pane)
       refresh(pane)
     }),
     Effect.catchTag("Failed", (error) => Effect.sync(() => {
-      if (n > state.applied) state.applied = n
-      if (n === state.mut) {
+      const current = g === pane.state.gen
+      invalidate(pane)
+      if (current) {
         pane.ui.problem.textContent = error.message
         fail()
       }
@@ -147,7 +137,7 @@ export const reelPane = (projectId: string, hooks: ReelHooks): {
   readonly edited: () => void
   readonly settled: (ok: boolean) => void
 } => {
-  const state: ReelState = { timer: 0, made: undefined, dirty: false, busy: false, next: 0, applied: 0, mut: 0 }
+  const state: ReelState = { timer: 0, made: undefined, dirty: false, busy: false, gen: 0 }
   const status = h("p", { class: "muted", role: "status" })
   const bar = h("progress", { max: "1", value: "0", hidden: true })
   const problem = h("p", { class: "error", role: "alert" })
@@ -164,20 +154,18 @@ export const reelPane = (projectId: string, hooks: ReelHooks): {
   player.addEventListener("play", hooks.playing)
 
   const edited = (): void => {
-    state.next += 1
-    state.applied = state.next
+    invalidate(pane)
     state.dirty = true
     make.disabled = true
     hooks.note({ note: "", done: false })
     if (!file.hidden) stale.hidden = false
   }
   const settled = (ok: boolean): void => {
+    invalidate(pane)
     if (!ok) {
       make.disabled = true
       if (!file.hidden) stale.hidden = false
-      return
-    }
-    state.dirty = false
+    } else state.dirty = false
     refresh(pane)
   }
   make.addEventListener("click", () => {
