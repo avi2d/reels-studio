@@ -24,12 +24,27 @@
 .tag { position: absolute; z-index: 2; left: 8px; top: 8px; max-width: calc(100% - 16px); padding: 3px 10px; border-radius: 99px; background: var(--wa-color-overlay-media); font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tag b { margin-right: 6px; color: var(--wa-color-brand-fill-loud); }
 
+.zones { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.zone { position: absolute; background: color-mix(in oklab, var(--wa-color-danger-fill-loud) 35%, transparent); }
+.zone-top { top: 0; left: 0; right: 0; height: var(--top); }
+.zone-bottom { bottom: 0; left: 0; right: 0; height: var(--bottom); }
+.zone-left { top: var(--top); bottom: var(--bottom); left: 0; width: var(--left); }
+.zone-right { top: var(--top); bottom: var(--bottom); right: 0; width: var(--right); }
+
 .transport { display: grid; grid-template-columns: auto minmax(0, 1fr) repeat(3, auto); align-items: center; gap: 8px; }
 .clock { grid-area: 1 / 1; min-width: 5.5em; color: var(--wa-color-text-quiet); }
 .transport .facts { grid-area: 1 / 2; min-width: 0; color: var(--wa-color-text-quiet); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .transport .prev { grid-area: 1 / 3; }
 .transport .go { grid-area: 1 / 4; }
 .transport .next { grid-area: 1 / 5; }
+.transport .gear { grid-area: 1 / 6; }
+.zone-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; color: var(--wa-color-text-quiet); font-size: 12.5px; }
+.zone-bar wa-select { width: 180px; }
+.settings { width: min(340px, calc(100vw - 32px)); padding: 16px 18px; border: 0; border-radius: 12px; background: var(--wa-color-surface-default); color: var(--wa-color-text-normal); }
+.settings-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 12px; }
+.settings h2 { margin: 0; font-size: 16px; }
+.settings .zone-bar { flex-direction: column; align-items: stretch; }
+.settings .zone-bar wa-select { width: 100%; }
 
 .dock { grid-area: dock; padding-bottom: 8px; color: var(--wa-color-text-quiet); font-size: 13px; }
 .dock:has(.sum:empty) { display: none; }
@@ -114,10 +129,11 @@
   }
   .viewer.mini .stage { grid-area: thumb; width: 36px; height: 64px; border-radius: 6px; background: none; cursor: pointer; }
   .viewer.mini .frame { border-radius: 6px; }
-  .viewer.mini .tag { display: none; }
+  .viewer.mini .tag, .viewer.mini .zones { display: none; }
   .viewer.mini .overview { grid-area: strip; }
   .viewer.mini .transport { display: contents; }
-  .viewer.mini .transport > :not(.clock, .go) { display: none; }
+  .viewer.mini .transport > :not(.clock, .go, .gear) { display: none; }
   .viewer.mini .clock { grid-area: clock; font-size: 12.5px; }
+  .viewer.mini .gear { grid-area: clock; justify-self: end; }
   .viewer.mini .go { grid-area: go; }
 }
