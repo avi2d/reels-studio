@@ -10,6 +10,7 @@ export class GatherState extends Context.Service<GatherState, {
   readonly track: <A, E, R>(id: string, task: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
   readonly settled: (id: string) => Effect.Effect<void>
   readonly trackAlone: <A, E, R>(id: string, task: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+  readonly working: (id: string) => Effect.Effect<boolean>
   readonly blocked: (id: string) => Effect.Effect<boolean>
   readonly withoutGather: <A, E, R>(id: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }>()("reels-studio/GatherState") {
@@ -68,6 +69,9 @@ export class GatherState extends Context.Service<GatherState, {
           })
         )
 
+      const working = (id: string): Effect.Effect<boolean> =>
+        Effect.map(Ref.get(alone), (map) => (map.get(id) ?? []).length > 0)
+
       const blocked = (id: string): Effect.Effect<boolean> =>
         Effect.map(Ref.get(closed), (set) => set.has(id))
 
@@ -88,7 +92,7 @@ export class GatherState extends Context.Service<GatherState, {
           () => Ref.update(closed, (set) => new Set([...set].filter((other) => other !== id)))
         )
 
-      return GatherState.of({ running, track, settled, trackAlone, blocked, withoutGather })
+      return GatherState.of({ running, track, settled, trackAlone, working, blocked, withoutGather })
     })
   )
 }

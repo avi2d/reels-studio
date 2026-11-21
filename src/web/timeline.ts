@@ -64,8 +64,8 @@ interface State {
   edits: Edits
   acked: Edits
   changes: number
-  history: Array<Edits>
-  undone: Array<Edits>
+  history: Array<{ readonly before: Edits; readonly after: Edits }>
+  undone: Array<{ readonly before: Edits; readonly after: Edits }>
   selected: string | undefined
   open: Placed | undefined
   base: number | undefined
@@ -309,23 +309,23 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
   }
 
   const change = (edits: Edits): void => {
-    state.history.push(state.edits)
+    state.history.push({ before: state.edits, after: edits })
     state.undone.length = 0
     apply(edits)
   }
 
   const undo = (): void => {
-    const before = state.history.pop()
-    if (before === undefined) return
-    state.undone.push(state.edits)
-    apply(before)
+    const step = state.history.pop()
+    if (step === undefined) return
+    state.undone.push(step)
+    apply(mergeEdits(step.after, step.before, state.edits))
   }
 
   const redo = (): void => {
-    const after = state.undone.pop()
-    if (after === undefined) return
-    state.history.push(state.edits)
-    apply(after)
+    const step = state.undone.pop()
+    if (step === undefined) return
+    state.history.push(step)
+    apply(mergeEdits(step.before, step.after, state.edits))
   }
 
   const select = (block: string): void => {

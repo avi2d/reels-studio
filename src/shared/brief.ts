@@ -21,7 +21,7 @@ export const PlanView = Schema.Union([
 ])
 export type PlanView = typeof PlanView.Type
 
-export const BriefView = Schema.Struct({ brief: Schema.String, plan: PlanView })
+export const BriefView = Schema.Struct({ brief: Schema.String, plan: PlanView, working: Schema.Boolean })
 export type BriefView = typeof BriefView.Type
 
 export const planView = (text: string | undefined, approval: Approval | undefined): PlanView => {

@@ -5,12 +5,14 @@ import { button } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatPause } from "./format.ts"
 import { run } from "./run.ts"
+import { POLL_MS } from "./timeline-save.ts"
 
 const ASK_PLAN = "Составь один план всего ролика по заданию."
 const YES = "Согласна"
 
 const BRIEF_HINT = "Напишите в двух или трёх предложениях, о чём ролик, для кого он и что в нём обязательно оставить."
 const PROPOSED = "Если план подходит, нажмите «Согласна». Студия сама собирает блоки, выбирает лучшие дубли и укорачивает паузы в выбранных дублях, а потом пишет здесь, что сделала. Чтобы поправить план, напишите в чат."
+const WORKING = "Студия выполняет план: выбирает дубли и укорачивает паузы. Список появится здесь сам."
 
 const sentence = (text: string): string => /[.!?…]$/u.test(text.trim()) ? text.trim() : `${text.trim()}.`
 
@@ -28,10 +30,12 @@ const doneLine = (done: Done): string => {
 const approvedAt = (iso: string): string =>
   new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }).format(new Date(iso))
 
-const planBody = (plan: Exclude<PlanView, { readonly state: "none" }>, ask: (text: string) => void): ReadonlyArray<HTMLElement> => {
+const planBody = (plan: Exclude<PlanView, { readonly state: "none" }>, working: boolean, ask: (text: string) => void): ReadonlyArray<HTMLElement> => {
   const text = h("p", { class: "plan-text" }, plan.text.trim())
   if (plan.state === "proposed") {
-    return [text, h("p", { class: "muted" }, PROPOSED), button("primary", { class: "end", click: () => { ask(YES) } }, YES)]
+    return working
+      ? [text, h("p", { class: "muted" }, WORKING)]
+      : [text, h("p", { class: "muted" }, PROPOSED), button("primary", { class: "end", click: () => { ask(YES) } }, YES)]
   }
   return [
     text,
@@ -48,7 +52,7 @@ export const briefCards = (projectId: string, ask: (text: string) => void): {
   const field = h("wa-textarea", { name: "brief", rows: "3", resize: "auto", maxlength: String(MAX_BRIEF), hint: BRIEF_HINT },
     h("span", { slot: "label", class: "visually-hidden" }, "Задание"))
   const problem = h("p", { class: "error", role: "alert" })
-  const state = { filled: false, shown: "" }
+  const state = { filled: false, shown: "", timer: 0, working: false }
   const make = button("primary", {
     class: "end",
     click: () => {
@@ -72,21 +76,30 @@ export const briefCards = (projectId: string, ask: (text: string) => void): {
   const task = h("section", { class: "card" }, h("h2", {}, "Задание"), field, make, problem)
   const body = h("div", { class: "pane" })
   const plan = h("section", { class: "card", hidden: true }, h("h2", {}, "План ролика"), body)
+  const tick = (): void => {
+    state.timer = 0
+    refresh()
+  }
   const show = (view: BriefView): void => {
+    state.working = view.working
     if (!state.filled) {
       field.value = view.brief.trim()
       state.filled = true
     }
-    const seen = JSON.stringify(view.plan)
+    if (view.working && state.timer === 0 && plan.isConnected) state.timer = Number(globalThis.setTimeout(tick, POLL_MS))
+    const seen = JSON.stringify([view.plan, view.working])
     if (seen === state.shown) return
     state.shown = seen
     plan.hidden = view.plan.state === "none"
-    body.replaceChildren(...(view.plan.state === "none" ? [] : planBody(view.plan, ask)))
+    body.replaceChildren(...(view.plan.state === "none" ? [] : planBody(view.plan, view.working, ask)))
   }
   const refresh = (): void => {
     Effect.runFork(Api.getBrief(projectId).pipe(
       Effect.map(show),
-      Effect.catchTag("Failed", (failure) => Effect.sync(() => { problem.textContent = failure.message }))
+      Effect.catchTag("Failed", (failure) => Effect.sync(() => {
+        problem.textContent = failure.message
+        if (state.working && state.timer === 0 && plan.isConnected) state.timer = Number(globalThis.setTimeout(tick, POLL_MS))
+      }))
     ))
   }
   return { nodes: [task, plan], refresh }

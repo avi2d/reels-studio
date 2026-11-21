@@ -19,7 +19,8 @@ export class Brief extends Context.Service<Brief, {
   readonly view: (id: string) => Effect.Effect<BriefView, ApiError>
   readonly write: (id: string, text: string) => Effect.Effect<void, ApiError>
   readonly plan: (id: string) => Effect.Effect<PlanView, ApiError>
-  readonly workAlone: (id: string, plan: string) => Effect.Effect<void, ApiError>
+  readonly workAlone: (id: string, plan: string, replied: Effect.Effect<void>) => Effect.Effect<void, ApiError>
+  readonly working: (id: string) => Effect.Effect<boolean>
 }>()("reels-studio/Brief") {
   static readonly layer = Layer.effect(
     Brief,
@@ -51,7 +52,7 @@ export class Brief extends Context.Service<Brief, {
       const view = Effect.fn("Brief.view")(function*(id: string) {
         const dir = yield* projects.folder(id)
         const brief = (yield* readText(path.join(dir, "brief.md")).pipe(orBroken)) ?? ""
-        return { brief, plan: yield* plan(id) }
+        return { brief, plan: yield* plan(id), working: yield* state.working(id) }
       })
 
       const write = Effect.fn("Brief.write")(function*(id: string, text: string) {
@@ -76,8 +77,11 @@ export class Brief extends Context.Service<Brief, {
         }
       })
 
-      const workAlone = Effect.fn("Brief.workAlone")(function*(id: string, approved: string) {
+      const working = (id: string): Effect.Effect<boolean> => state.working(id)
+
+      const workAlone = Effect.fn("Brief.workAlone")(function*(id: string, approved: string, replied: Effect.Effect<void>) {
         return yield* state.trackAlone(id, Effect.gen(function*() {
+          yield* replied
           const dir = yield* projects.folder(id)
           yield* settleGathering(id, dir)
           const { timeline } = yield* media.timeline(id)
@@ -94,7 +98,7 @@ export class Brief extends Context.Service<Brief, {
         }))
       })
 
-      return Brief.of({ view, write, plan, workAlone })
+      return Brief.of({ view, write, plan, workAlone, working })
     })
   )
 }
