@@ -95,8 +95,9 @@ export const uploadedView = (): HTMLElement => {
   const uploads = h("ul", { class: "uploads" }, ...rows)
   const known = h("ul", { class: "uploads" })
   const none = h("p", { class: "muted", hidden: true }, "Видео пока нет. Нажмите «Загрузить видео» и выберите файлы.")
+  const loadError = h("p", { class: "error", role: "alert" })
   const node = h("section", { class: "uploaded", "aria-label": "Загруженные видео" },
-    h("div", { class: "row" }, open, input), uploads, known, none,
+    h("div", { class: "row" }, open, input), loadError, uploads, known, none,
     h("p", { class: "muted" }, "Видео загружаются по очереди. Загрузка продолжится, если перейти в ролик, но не закрывайте вкладку. Чтобы взять видео в ролик, откройте ролик и нажмите «Выбрать видео». Исходные видео студия не меняет."))
   const state = { timer: 0, signature: "" }
   const show = (videos: ReadonlyArray<UploadedVideo>): void => {
@@ -106,6 +107,7 @@ export const uploadedView = (): HTMLElement => {
       known.replaceChildren(...videos.map((video) => uploadedItem(video, retry)))
     }
     none.hidden = videos.length > 0 || rows.length > 0
+    if (loadError.textContent !== "") loadError.textContent = ""
     globalThis.clearTimeout(state.timer)
     if (videos.some((video) => video.state === "waiting")) state.timer = Number(globalThis.setTimeout(refresh, POLL_MS))
   }
@@ -115,7 +117,8 @@ export const uploadedView = (): HTMLElement => {
     return Effect.map(Api.getUploaded, ({ videos }) => { show(videos) })
   })
   function refresh(): void {
-    Effect.runFork(reload().pipe(Effect.catchTag("Failed", () => Effect.sync(() => {
+    Effect.runFork(reload().pipe(Effect.catchTag("Failed", (error) => Effect.sync(() => {
+      if (loadError.textContent !== error.message) loadError.textContent = error.message
       globalThis.clearTimeout(state.timer)
       state.timer = Number(globalThis.setTimeout(refresh, POLL_MS))
     }))))
