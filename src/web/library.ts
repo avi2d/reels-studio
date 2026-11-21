@@ -9,6 +9,10 @@ import { addLabel, formatLength, formatSize, fromProjects, listeningNote } from 
 
 const POLL_MS = 4000
 
+type Entry = { readonly video: LibraryVideo; readonly node: HTMLElement }
+type Chosen = Map<HTMLInputElement, Entry>
+type Row = { readonly box: HTMLInputElement; readonly video: LibraryVideo; readonly node: HTMLElement }
+
 const detailsOf = (video: LibraryVideo): string => {
   const facts = `${formatLength(video.duration)} · ${formatSize(video.size)}`
   return video.from === "library" ? facts : `${facts} · ${fromProjects(video.titles)}`
@@ -18,6 +22,81 @@ const choice = (video: LibraryVideo, onChange: () => void): { readonly node: HTM
   const box = h("input", { type: "checkbox", change: onChange })
   const node = h("li", {}, h("label", { class: "choice" }, box, h("span", {}, h("span", { class: "name" }, video.name), h("span", { class: "muted" }, detailsOf(video)))))
   return { node, box }
+}
+
+const rowKey = (video: LibraryVideo): string => JSON.stringify(pickOf(video))
+
+const keepRow = (kept: Row | undefined, video: LibraryVideo, onChange: () => void): Row => {
+  if (kept !== undefined && JSON.stringify(kept.video) === JSON.stringify(video)) return kept
+  const fresh = choice(video, onChange)
+  if (kept !== undefined) {
+    kept.node.remove()
+    fresh.box.checked = kept.box.checked
+  }
+  return { video, ...fresh }
+}
+
+const orderRows = (list: HTMLElement, made: ReadonlyArray<Row>): void => {
+  let position = 0
+  for (const { node } of made) {
+    const current = list.children[position]
+    if (current !== node) list.insertBefore(node, current ?? null)
+    position += 1
+  }
+}
+
+const syncRows = (list: HTMLElement, chosen: Chosen, videos: ReadonlyArray<LibraryVideo>, onChange: () => void): Chosen => {
+  const previous = new Map<string, Row>()
+  for (const [box, entry] of chosen) previous.set(rowKey(entry.video), { box, video: entry.video, node: entry.node })
+  const made: Array<Row> = []
+  for (const video of videos) {
+    const key = rowKey(video)
+    const kept = previous.get(key)
+    previous.delete(key)
+    made.push(keepRow(kept, video, onChange))
+  }
+  for (const entry of previous.values()) entry.node.remove()
+  orderRows(list, made)
+  return new Map(made.map(({ box, video, node }): [HTMLInputElement, Entry] => [box, { video, node }]))
+}
+
+interface AddRequest {
+  readonly projectId: string
+  readonly onAdded: () => Effect.Effect<void, Api.Failed>
+  readonly state: { readonly chosen: Chosen; adding: boolean }
+  readonly add: WaButton
+  readonly problem: HTMLElement
+  readonly recount: () => void
+  readonly show: (shown: boolean) => void
+  readonly reload: () => void
+}
+
+const submitAdd = ({ projectId, onAdded, state, add, problem, recount, show, reload }: AddRequest): void => {
+  const picks = [...state.chosen].filter(([box]) => box.checked).map(([, entry]) => pickOf(entry.video))
+  state.adding = true
+  add.disabled = true
+  add.textContent = "Добавляем…"
+  problem.textContent = ""
+  Effect.runFork(Api.addVideos(projectId, picks).pipe(
+    Effect.andThen(onAdded()),
+    Effect.map(() => {
+      for (const box of state.chosen.keys()) box.checked = false
+      state.adding = false
+      recount()
+      show(false)
+      reload()
+    }),
+    Effect.catchTag("Failed", (error) =>
+      Effect.andThen(
+        Effect.catchTag(onAdded(), "Failed", () => Effect.void),
+        Effect.sync(() => {
+          state.adding = false
+          problem.textContent = error.message
+          reload()
+          recount()
+        })
+      ))
+  ))
 }
 
 export interface Picker {
@@ -42,7 +121,7 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
     h("legend", {}, "Загруженные видео"),
     h("p", { class: "muted" }, "Студия уже прослушала эти видео. Отмеченные появятся в ролике сразу, вместе с текстом."),
     list, listening, h("div", { class: "row" }, add, cancel), problem)
-  const state = { chosen: new Map<HTMLInputElement, { video: LibraryVideo; node: HTMLElement }>(), shown: false, timer: 0, adding: false }
+  const state = { chosen: new Map<HTMLInputElement, Entry>(), shown: false, timer: 0, adding: false }
   const recount = (): void => {
     if (state.adding) {
       add.textContent = "Добавляем…"
@@ -60,30 +139,7 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
     problem.textContent = ""
   }
   const fill = ({ videos, listening: waiting }: Offer): void => {
-    const previous = new Map<string, { box: HTMLInputElement; video: LibraryVideo; node: HTMLElement }>()
-    for (const [box, entry] of state.chosen) previous.set(JSON.stringify(pickOf(entry.video)), { box, video: entry.video, node: entry.node })
-    const made: Array<{ box: HTMLInputElement; video: LibraryVideo; node: HTMLElement }> = []
-    for (const video of videos) {
-      const kept = previous.get(JSON.stringify(pickOf(video)))
-      previous.delete(JSON.stringify(pickOf(video)))
-      if (kept !== undefined && JSON.stringify(kept.video) === JSON.stringify(video)) made.push(kept)
-      else {
-        const fresh = choice(video, recount)
-        if (kept !== undefined) {
-          kept.node.remove()
-          fresh.box.checked = kept.box.checked
-        }
-        made.push({ video, ...fresh })
-      }
-    }
-    for (const entry of previous.values()) entry.node.remove()
-    let position = 0
-    for (const { node } of made) {
-      const current = list.children[position]
-      if (current !== node) list.insertBefore(node, current ?? null)
-      position += 1
-    }
-    state.chosen = new Map(made.map(({ box, video, node }): [HTMLInputElement, { video: LibraryVideo; node: HTMLElement }] => [box, { video, node }]))
+    state.chosen = syncRows(list, state.chosen, videos, recount)
     list.hidden = videos.length === 0
     listening.textContent = listeningNote(waiting)
     if (loadError.textContent !== "") loadError.textContent = ""
@@ -116,31 +172,7 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
   open.addEventListener("click", () => { show(!state.shown) })
   cancel.addEventListener("click", () => { show(false) })
   add.addEventListener("click", () => {
-    const picks = [...state.chosen].filter(([box]) => box.checked).map(([, entry]) => pickOf(entry.video))
-    state.adding = true
-    add.disabled = true
-    add.textContent = "Добавляем…"
-    problem.textContent = ""
-    Effect.runFork(Api.addVideos(projectId, picks).pipe(
-      Effect.andThen(onAdded()),
-      Effect.map(() => {
-        for (const box of state.chosen.keys()) box.checked = false
-        state.adding = false
-        recount()
-        show(false)
-        reload()
-      }),
-      Effect.catchTag("Failed", (error) =>
-        Effect.andThen(
-          Effect.catchTag(onAdded(), "Failed", () => Effect.void),
-          Effect.sync(() => {
-            state.adding = false
-            problem.textContent = error.message
-            reload()
-            recount()
-          })
-        ))
-    ))
+    submitAdd({ projectId, onAdded, state, add, problem, recount, show, reload })
   })
   return { open, panel, hint, loadError, reload }
 }

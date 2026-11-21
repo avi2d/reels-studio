@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { UploadedVideo } from "../shared/library.ts"
 import * as Api from "./api.ts"
-import { button } from "./controls.ts"
+import { button, retryPair, type Retry } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatLength, formatSize } from "./format.ts"
 import { oneAfterAnother } from "./queue.ts"
@@ -77,23 +77,10 @@ const uploadRow = (file: File) => {
   return { node, work }
 }
 
-type Retry = (name: string, onFailure: (message: string) => void) => void
-
 const stateOf = (video: UploadedVideo, retry: Retry): ReadonlyArray<HTMLElement> => {
   if (video.state === "ready") return [h("p", { class: "muted" }, `Длина ${formatLength(video.duration)}. Видео можно добавить в ролик.`)]
   if (video.state === "waiting") return [h("p", { class: "muted", role: "status" }, "Студия слушает видео. Это займёт несколько минут.")]
-  const trouble = h("p", { class: "error", role: "alert" })
-  const again = button("normal", {
-    class: "end",
-    click: () => {
-      again.disabled = true
-      trouble.textContent = ""
-      retry(video.name, (message) => {
-        again.disabled = false
-        trouble.textContent = message
-      })
-    }
-  }, "Попробовать ещё раз")
+  const { again, trouble } = retryPair(video.name, retry)
   return [h("p", { class: "error" }, "Студия не расслышала это видео."), again, trouble]
 }
 
