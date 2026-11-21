@@ -109,6 +109,17 @@ test("eyes first seen down after the word has ended do not name the word, though
   expect(trim.spoken).toBe(undefined)
 })
 
+test("an eyes-down last sample at the exclusive end of a recording is cut instead of missed as absent", () => {
+  const lastAway: VideoFaces = { video: "a", step: 0.2, heads: [], gaze: Array.from({ length: 15 }, (_, index): VideoFaces["gaze"][number] => index === 14 ? "away" : "camera") }
+  const long = [clip("a", "one", 0, 3), clip("b", "two", 0.5, 2)]
+  const [join] = joinsOf(long)
+  if (join === undefined) throw new Error("no join")
+  const trim = trimOf(join, new Map([["a", lastAway], ["b", looking("b", [])]]), said)
+  expect(trim.end).toBeCloseTo(2.7)
+  expect(trim.cut).toBeCloseTo(0.3)
+  expect(trim.spoken).toBe(undefined)
+})
+
 test("eyes on the camera at a join leave nothing to cut instead of trimming the pause anyway", () => {
   expect(trimOfPair([], [])).toEqual({ end: 2, start: 0.2, cut: 0, spoken: undefined })
 })

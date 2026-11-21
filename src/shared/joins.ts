@@ -75,8 +75,8 @@ const isOff = (faces: VideoFaces, index: number): boolean => {
 }
 
 const offFrom = (faces: VideoFaces, from: number, to: number): number => {
-  let index = Math.floor(to / faces.step + SAME_MOMENT)
-  if (!isOff(faces, index)) return to
+  let index = Math.min(Math.floor(to / faces.step + SAME_MOMENT), faces.gaze.length - 1)
+  if (index * faces.step < from - SAME_MOMENT || !isOff(faces, index)) return to
   while (index * faces.step >= from && isOff(faces, index)) index -= 1
   return Math.max(from, Math.min(to, (index + 0.5) * faces.step))
 }

@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test"
 import { videoLines } from "../../src/server/chat.ts"
 import { gazeText } from "../../src/server/media-commands.ts"
-import type { Transcript } from "../../src/shared/plan.ts"
+import { lengthOf, type Transcript } from "../../src/shared/plan.ts"
 import {
-  arrange, assemble, cameraShare, chosenTake, clipsOf, fadeGain, mergeEdits, NO_EDITS, offsetIn, pausesOf, playedSpans, soundBlocks, withChoice, withDeleted,
+  arrange, assemble, cameraShare, chosenTake, clipsOf, fadeGain, mergeEdits, NO_EDITS, offsetIn, pausesOf, playedPause, playedSpans, soundBlocks, withChoice, withDeleted,
   withPauses, within,
-  type Block, type Edits, type Gaze
+  type Block, type Edits, type Gaze, type Pause, type Placed
 } from "../../src/shared/timeline.ts"
 
 const word = (start: number, end: number, text: string) => ({ start, end, text })
@@ -50,6 +50,15 @@ test("a removed pause leaves 0.2 s of rest between its two words, not a cut at t
 test("a removed pause after the last word ends the take 0.2 s after that word, not at the next take", () => {
   const edits = withPauses(NO_EDITS, [{ video: "a", after: 1 }, { video: "a", after: 4 }], true)
   expect(playedSpans(first, take("a", 0, 4), edits)).toEqual([{ start: 1, end: 2.1 }, { start: 2.9, end: 4.8 }])
+})
+
+test("only the part of a kept pause inside the trimmed reel counts as remaining silence, not the whole pause", () => {
+  const pause: Pause = { after: 4, start: 1.8, end: 3.05, removed: false }
+  const one = { block: advance, take: take("a", 0, 4), pauses: [pause], spans: [{ start: 0, end: 1.9 }] } satisfies Placed
+  const shown = playedPause(one, pause)
+  expect(shown).toEqual([{ after: 4, start: 1.8, end: 1.9, removed: false }])
+  expect(lengthOf(shown)).toBeCloseTo(0.1)
+  expect(playedPause({ ...one, spans: [{ start: 0, end: 1.7 }] }, pause)).toEqual([])
 })
 
 test("a pause removed and then returned plays again, and a pause of another video is not touched", () => {

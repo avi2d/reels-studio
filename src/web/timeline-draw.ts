@@ -1,6 +1,6 @@
 import { lengthOf, type Transcript } from "../shared/plan.ts"
 import { facesByVideo, openPlaces, placesOf, trimmed } from "../shared/joins.ts"
-import { arrange, assemble, chosenTake, clipsOf, withManualPauses, type Edits, type GazeFailure, type Placed, type Take, type TimelinePage, type TimelineView } from "../shared/timeline.ts"
+import { arrange, assemble, chosenTake, clipsOf, playedPause, withManualPauses, type Edits, type GazeFailure, type Placed, type Take, type TimelinePage, type TimelineView } from "../shared/timeline.ts"
 import type WaButton from "@awesome.me/webawesome/dist/components/button/button.js"
 import { button, focusWhenReady, iconButton, tooltip } from "./controls.ts"
 import { h } from "./dom.ts"
@@ -89,8 +89,9 @@ export const notesOf = ({ transcripts, view }: Loaded, ask: (text: string) => vo
 const summaryOf = (placed: ReadonlyArray<Placed>): string => {
   if (placed.length === 0) return "Все блоки удалены"
   const pauses = placed.flatMap((one) => one.pauses.filter((pause) => !pause.removed))
+  const shown = placed.flatMap((one) => one.pauses.filter((pause) => !pause.removed).flatMap((pause) => playedPause(one, pause)))
   const length = formatLength(lengthOf(placed.flatMap((one) => one.spans)))
-  const kept = pauses.length === 0 ? "пауз нет" : `пауз: ${pauses.length} на ${formatLength(lengthOf(pauses))}`
+  const kept = pauses.length === 0 ? "пауз нет" : `пауз: ${pauses.length} на ${formatLength(lengthOf(shown))}`
   return `Блоков: ${placed.length} · ролик ${length} · ${kept}`
 }
 

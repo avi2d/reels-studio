@@ -187,6 +187,9 @@ export interface Placed {
   readonly spans: ReadonlyArray<Span>
 }
 
+export const playedPause = (one: Placed, pause: Pause): ReadonlyArray<Pause> =>
+  one.spans.flatMap((span) => within([pause], span))
+
 export const assemble = (blocks: ReadonlyArray<Block>, edits: Edits, transcripts: Transcripts): ReadonlyArray<Placed> =>
   arrange(blocks, edits).placed.flatMap((block): ReadonlyArray<Placed> => {
     const take = chosenTake(block, edits)
