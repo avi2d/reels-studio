@@ -44,6 +44,11 @@ test("a home shortcut or scheme never reaches the project, even when joined with
   expect(judge(scope, "write", "~/projects/p1/notes.md").allowed).toBe(false)
 })
 
+test("a write into the gathering session folder is blocked, like the chat folder", () => {
+  expect(judge(scope, "write", "gather/session.json").allowed).toBe(false)
+  expect(judge(scope, "write", "chat/session.json").allowed).toBe(false)
+})
+
 test("a write into project-local trust folders is blocked, not just source and chat", () => {
   expect(judge(scope, "write", ".pi/extensions/evil.ts").allowed).toBe(false)
   expect(judge(scope, "write", ".agents/skills/x.md").allowed).toBe(false)
