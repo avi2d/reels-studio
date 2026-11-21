@@ -4,7 +4,7 @@ import type { VideoView } from "../shared/plan.ts"
 import type { ReelJob, ReelView } from "../shared/reel.ts"
 import { type Edits, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
 import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
-import { openLibrary } from "./library.ts"
+import { openLibrary, removeFiles, uploadedJob } from "./library.ts"
 import { makeExchange, type Needs } from "./media-exchange.ts"
 import { GazeFailed, listen, look, places, previewIsFresh, readGaze, readPlan, readTranscript, refreshPreview, type Job } from "./media-jobs.ts"
 import { Projects } from "./projects.ts"
@@ -237,7 +237,20 @@ const asUploaded = Effect.fnUntraced(function*(dir: string, video: VideoView) {
   return uploaded
 })
 
-const makeShelves = (projects: Projects["Service"], unheard: Unheard, context: Context.Context<Needs>) => {
+type Shield = <A, E, R>(dir: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+
+const forgetFailures = (failures: Failures, job: Job): Effect.Effect<void> => {
+  const key = keyOf(job)
+  const without = (set: ReadonlySet<string>): ReadonlySet<string> => new Set([...set].filter((other) => other !== key))
+  return Effect.all([
+    Ref.update(failures.unheard, without),
+    Ref.update(failures.stale, without),
+    Ref.update(failures.unseen, (map) => new Map([...map].filter(([other]) => other !== key)))
+  ], { discard: true })
+}
+
+const makeShelves = (projects: Projects["Service"], failures: Failures, withoutWork: Shield, context: Context.Context<Needs>) => {
+  const { unheard } = failures
   const uploaded = Effect.gen(function*() {
     const dir = yield* openLibrary
     return yield* Effect.forEach(yield* videosIn(unheard, dir), (video) => asUploaded(dir, video))
@@ -247,6 +260,19 @@ const makeShelves = (projects: Projects["Service"], unheard: Unheard, context: C
     const dir = yield* openLibrary
     return yield* asUploaded(dir, yield* listenAgain(unheard, dir, name, "Такого загруженного видео нет"))
   }, orBroken, Effect.provideContext(context))
+
+  const uploadedPreview = Effect.fn("Media.uploadedPreview")(function*(name: string) {
+    const fs = yield* FileSystem.FileSystem
+    const target = places(yield* uploadedJob(name)).preview
+    if (!(yield* fs.exists(target))) return yield* notFound("Этот файл ещё не готов")
+    return target
+  }, orBroken, Effect.provideContext(context))
+
+  const removeUploaded = Effect.fn("Media.removeUploaded")(function*(name: string) {
+    const job = yield* uploadedJob(name)
+    yield* withoutWork(job.dir, removeFiles(job))
+    yield* forgetFailures(failures, job)
+  }, orUnavailable("the uploaded video was not removed", "Не получилось удалить видео. Попробуйте ещё раз."), Effect.provideContext(context))
 
   const library = Effect.fn("Media.library")(function*(id: string) {
     const here = yield* keysIn(yield* projects.folder(id))
@@ -275,7 +301,7 @@ const makeShelves = (projects: Projects["Service"], unheard: Unheard, context: C
     }), { discard: true })
   }, orUnavailable("the reuse failed", "Не получилось добавить видео. Попробуйте ещё раз."), Effect.provideContext(context))
 
-  return { uploaded, retryUploaded, library, reuse }
+  return { uploaded, retryUploaded, uploadedPreview, removeUploaded, library, reuse }
 }
 
 export class Media extends Context.Service<Media, {
@@ -286,6 +312,8 @@ export class Media extends Context.Service<Media, {
   readonly reuse: (id: string, picks: ReadonlyArray<Pick>) => Effect.Effect<void, ApiError>
   readonly uploaded: Effect.Effect<ReadonlyArray<UploadedVideo>, ApiError>
   readonly retryUploaded: (name: string) => Effect.Effect<UploadedVideo, ApiError>
+  readonly uploadedPreview: (name: string) => Effect.Effect<string, ApiError>
+  readonly removeUploaded: (name: string) => Effect.Effect<void, ApiError>
   readonly timeline: (id: string) => Effect.Effect<TimelineView, ApiError>
   readonly exchangeEdits: <A>(id: string, compute: (current: Edits) => { readonly edits: Edits; readonly value: A }) => Effect.Effect<A, ApiError>
   readonly mergeEdits: (id: string, base: Edits, local: Edits) => Effect.Effect<Edits, ApiError>
@@ -332,17 +360,6 @@ export class Media extends Context.Service<Media, {
         return yield* listenAgain(unheard, yield* projects.folder(id), name, "Такого видео в ролике нет")
       }, orBroken, Effect.provideContext(context))
 
-      const { uploaded, retryUploaded, library, reuse } = makeShelves(projects, unheard, context)
-
-      const timeline = Effect.fn("Media.timeline")(function*(id: string) {
-        const dir = yield* projects.folder(id)
-        return yield* readTimeline(dir, yield* sourceNames(dir), yield* Ref.get(unseen))
-      }, orBroken, Effect.provideContext(context))
-
-      const { exchangeEdits, mergeEdits } = yield* makeExchange(projects, context)
-
-      const { reel, buildReel: queueReel, cancelReel, reelFile } = reelHandlers(projects.folder, reels, work, context)
-
       const withoutWork = <A, E, R>(dir: string, use: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
         Effect.acquireUseRelease(
           Effect.gen(function*() {
@@ -358,7 +375,18 @@ export class Media extends Context.Service<Media, {
           () => Ref.update(work, (state) => ({ ...state, closed: new Set([...state.closed].filter((other) => other !== dir)) }))
         )
 
-      return Media.of({ videos, preview, retry, library, reuse, uploaded, retryUploaded, timeline, exchangeEdits, mergeEdits, reel, buildReel: queueReel, cancelReel, reelFile, withoutWork })
+      const { uploaded, retryUploaded, uploadedPreview, removeUploaded, library, reuse } = makeShelves(projects, { unheard, unseen, stale, reels }, withoutWork, context)
+
+      const timeline = Effect.fn("Media.timeline")(function*(id: string) {
+        const dir = yield* projects.folder(id)
+        return yield* readTimeline(dir, yield* sourceNames(dir), yield* Ref.get(unseen))
+      }, orBroken, Effect.provideContext(context))
+
+      const { exchangeEdits, mergeEdits } = yield* makeExchange(projects, context)
+
+      const { reel, buildReel: queueReel, cancelReel, reelFile } = reelHandlers(projects.folder, reels, work, context)
+
+      return Media.of({ videos, preview, retry, library, reuse, uploaded, retryUploaded, uploadedPreview, removeUploaded, timeline, exchangeEdits, mergeEdits, reel, buildReel: queueReel, cancelReel, reelFile, withoutWork })
     })
   )
 }

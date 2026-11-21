@@ -155,6 +155,16 @@ const uploads = Layer.mergeAll(
     const media = yield* Media
     return json({ video: yield* media.retryUploaded(yield* param("name")) })
   }))),
+  HttpRouter.add("DELETE", "/api/library/:name", reply(Effect.gen(function*() {
+    const media = yield* Media
+    const name = yield* param("name")
+    yield* media.removeUploaded(name)
+    return json({ removed: name })
+  }))),
+  HttpRouter.add("GET", "/api/library/:name/preview", (request) => reply(Effect.gen(function*() {
+    const media = yield* Media
+    return yield* sendFile(yield* media.uploadedPreview(yield* param("name")), "video/mp4", request.headers["range"])
+  }))),
   HttpRouter.add("*", "/api/projects/:id/attachments", startUpload(attachmentShelf)),
   HttpRouter.add("*", "/api/projects/:id/attachments/:upload", resumeUpload(projectFolder)),
   HttpRouter.add("GET", "/api/projects/:id/attachments/:name/cover", reply(Effect.gen(function*() {

@@ -51,8 +51,8 @@ const uploadOnVideosPage = async (page: Page): Promise<void> => {
   if (!listedNames(await listed.json()).includes(SOURCE_VIDEO)) {
     await page.locator('input[type="file"][accept="video/*"]').setInputFiles(join(setting("REELS_BROWSER_DIR"), SOURCE_VIDEO))
   }
-  await page.getByRole("region", { name: "Загруженные видео" }).getByRole("listitem")
-    .filter({ hasText: SOURCE_VIDEO }).filter({ hasText: "Видео можно добавить в ролик." }).waitFor()
+  await page.getByRole("region", { name: "Загруженные видео" }).getByRole("listitem").filter({ hasText: SOURCE_VIDEO })
+    .getByRole("button", { name: `Посмотреть видео «${SOURCE_VIDEO}»`, exact: true }).waitFor()
 }
 
 const addFromList = async (page: Page): Promise<void> => {
@@ -168,4 +168,31 @@ const attachment: ProductCheck = {
   }
 }
 
-export const checks = [projectAndUpload, preview, attachment] satisfies readonly ProductCheck[]
+const removeUploaded = async (page: Page): Promise<void> => {
+  page.setDefaultTimeout(timeout)
+  await page.goto(new URL("#/videos", setting("REELS_BROWSER_URL")).href)
+  const item = page.getByRole("region", { name: "Загруженные видео" }).getByRole("listitem").filter({ hasText: SOURCE_VIDEO })
+  await item.getByRole("button", { name: `Удалить видео «${SOURCE_VIDEO}»`, exact: true }).click()
+  const [removed] = await Promise.all([
+    page.waitForResponse((response) => response.request().method() === "DELETE" && new URL(response.url()).pathname.startsWith("/api/library/"), { timeout }),
+    page.getByRole("dialog", { name: `Удалить видео «${SOURCE_VIDEO}»?` }).getByRole("button", { name: "Удалить видео", exact: true }).click()
+  ])
+  assert(removed.ok(), `The studio refused to delete the video: ${removed.status()}`)
+  await item.waitFor({ state: "detached" })
+}
+
+const removal: ProductCheck = {
+  name: "deleting an uploaded video drops its card and shared file without taking the copy out of a reel that uses it",
+  run: async (page) => {
+    await removeUploaded(page)
+    const shared = join(setting("REELS_BROWSER_DIR"), "projects", ".library", "source", SOURCE_VIDEO)
+    assert.equal(await Bun.file(shared).exists(), false, "Deleting must remove the uploaded file")
+    await page.goto(setting("REELS_BROWSER_URL"))
+    await page.getByRole("link", { name: /Сборка ролика/u }).click()
+    await page.getByRole("heading", { name: "Сборка ролика", exact: true }).waitFor()
+    await assertOriginal(projectFolder(page), "source", SOURCE_VIDEO)
+    return { targets: ["card removed", "shared file removed", "reel copy kept"], found: [] }
+  }
+}
+
+export const checks = [projectAndUpload, preview, attachment, removal] satisfies readonly ProductCheck[]

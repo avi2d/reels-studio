@@ -114,6 +114,12 @@ export const getUploaded: Effect.Effect<typeof Uploaded.Type, Failed> = call(Upl
 export const retryUploaded = (name: string): Effect.Effect<void, Failed> =>
   call(Schema.Struct({ video: UploadedVideo }), `/api/library/${encodeURIComponent(name)}/retry`, { method: "POST" }).pipe(Effect.asVoid)
 
+export const removeUploaded = (name: string): Effect.Effect<void, Failed> =>
+  call(Schema.Struct({ removed: Schema.String }), `/api/library/${encodeURIComponent(name)}`, { method: "DELETE" }).pipe(Effect.asVoid)
+
+export const uploadedPreviewUrl = (name: string): string =>
+  `/api/library/${encodeURIComponent(name)}/preview`
+
 export const addVideos = (id: string, videos: ReadonlyArray<Pick>): Effect.Effect<typeof OneProject.Type, Failed> =>
   call(OneProject, `/api/projects/${id}/videos`, post({ videos }))
 
