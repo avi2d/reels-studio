@@ -1,4 +1,5 @@
 import { Effect } from "effect"
+import { HOME_PATH, PROJECT_PREFIX, VIDEOS_PATH, projectPath } from "../shared/page.ts"
 import * as Api from "./api.ts"
 import { briefCards } from "./brief.ts"
 import { chatDrawer } from "./chat.ts"
@@ -28,7 +29,7 @@ const show = (...nodes: ReadonlyArray<Node>): void => {
 }
 
 const showFailure = (message: string): void => {
-  show(h("div", { class: "home" }, h("p", { class: "error", role: "alert" }, message), h("a", { class: "back", href: "#/" }, "← Все ролики")))
+  show(h("div", { class: "home" }, h("p", { class: "error", role: "alert" }, message), h("a", { class: "back", href: HOME_PATH }, "← Все ролики")))
 }
 
 const fileList = (project: Api.ProjectView): HTMLElement =>
@@ -108,9 +109,9 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
     const chat = chatDrawer(project, messages, models, refresh)
     const remove = button("quiet", {
       class: "end",
-      click: () => { askToRemove(project, () => { location.hash = "#/" }) }
+      click: () => { askToRemove(project, () => { navigate(HOME_PATH) }) }
     }, "Удалить ролик")
-    const back = iconButton("plain", "back", "Все ролики", { class: "back", href: "#/" })
+    const back = iconButton("plain", "back", "Все ролики", { class: "back", href: HOME_PATH })
     const { panels } = timeline
     const stages = stageRail(
       { brief: h("div", { class: "pane" }, videoCard(project, refresh), ...brief.nodes, videos.node, remove), takes: panels.takes, pauses: panels.pauses, file: built.node },
@@ -136,20 +137,60 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
     refresh()
   })
 
-const VIDEOS = "#/videos"
+type Page = { readonly kind: "home" } | { readonly kind: "videos" } | { readonly kind: "project"; readonly id: string }
+
+const pageAt = (pathname: string): Page | undefined => {
+  if (pathname === HOME_PATH) return { kind: "home" }
+  const path = pathname.replace(/\/$/, "")
+  if (path === VIDEOS_PATH) return { kind: "videos" }
+  const id = path.startsWith(PROJECT_PREFIX) ? path.slice(PROJECT_PREFIX.length) : ""
+  return /^[a-z0-9-]+$/.test(id) ? { kind: "project", id } : undefined
+}
+
+let stopPageLoad: (() => void) | undefined
 
 const route = (): void => {
-  const match = /^#\/p\/([a-z0-9-]+)$/.exec(location.hash)
+  stopPageLoad?.()
+  stopPageLoad = undefined
+  const page = pageAt(location.pathname)
   document.title = "Студия Reels"
-  if (location.hash === VIDEOS) {
+  if (page?.kind === "videos") {
     document.title = "Загруженные видео · Студия Reels"
     show(uploadedView())
     return
   }
-  const view = match?.[1] === undefined ? Effect.map(Api.listProjects, ({ projects }) => { show(homeView(projects, route)) }) : projectView(match[1])
-  run(view, showFailure)
+  const view = page?.kind === "project" ? projectView(page.id) : Effect.map(Api.listProjects, ({ projects }) => {
+    show(homeView(projects, {
+      created: (id) => { navigate(projectPath(id)) },
+      removed: route
+    }))
+  })
+  stopPageLoad = run(view, showFailure)
 }
 
+function navigate(address: string | URL): void {
+  history.pushState(null, "", address)
+  route()
+}
+
+const clickedPage = (event: MouseEvent): URL | undefined => {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+  const link = event.composedPath().find((node) => node instanceof HTMLAnchorElement)
+  if (link === undefined || !link.hasAttribute("href") || (link.target !== "" && link.target !== "_self") || link.hasAttribute("download")) return
+  const url = new URL(link.href)
+  if (url.origin === location.origin && url.hash === "" && pageAt(url.pathname) !== undefined) return url
+}
+
+if (location.pathname === HOME_PATH && location.hash.startsWith("#/")) {
+  const path = location.hash.slice(1)
+  if (pageAt(path) !== undefined) history.replaceState(history.state, "", path + location.search)
+}
 startKit()
-globalThis.addEventListener("hashchange", route)
+document.addEventListener("click", (event) => {
+  const url = clickedPage(event)
+  if (url === undefined) return
+  event.preventDefault()
+  navigate(url)
+})
+globalThis.addEventListener("popstate", route)
 route()

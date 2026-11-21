@@ -1,4 +1,5 @@
 import { Effect } from "effect"
+import { VIDEOS_PATH } from "../shared/page.ts"
 import { type LibraryVideo, type Offer, pickOf } from "../shared/library.ts"
 import * as Api from "./api.ts"
 import type WaButton from "@awesome.me/webawesome/dist/components/button/button.js"
@@ -110,7 +111,7 @@ export interface Picker {
 export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<void, Api.Failed>): Picker => {
   const open = button("primary", { hidden: true }, "Выбрать видео")
   setExpanded(open, false)
-  const hint = h("p", { class: "muted hint", hidden: true }, "Загрузите видео на странице ", h("a", { href: "#/videos" }, "«Загруженные видео»"), ", и его можно будет добавить в ролик.")
+  const hint = h("p", { class: "muted hint", hidden: true }, "Загрузите видео на странице ", h("a", { href: VIDEOS_PATH }, "«Загруженные видео»"), ", и его можно будет добавить в ролик.")
   const list = h("ul", { class: "choices" })
   const listening = h("p", { class: "muted", role: "status" })
   const add = button("primary", { disabled: true }, addLabel(0))
