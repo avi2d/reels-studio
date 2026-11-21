@@ -43,7 +43,7 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
   const player = h("video", { class: "player", controls: true, playsinline: true, preload: "metadata" })
   const facts = h("p", { class: "muted" })
   const stale = h("p", { class: "stale", hidden: true }, STALE)
-  const save = button("normal", { href: Api.reelDownloadUrl(projectId), download: "" }, "Скачать")
+  const save = button("normal", { download: "" }, "Скачать")
   const file = h("div", { class: "built", hidden: true }, player, h("div", { class: "built-facts" }, facts, save, h("p", { class: "muted" }, SAVE_HINT)))
   const make = button("primary", {}, "Собрать ролик")
   const cancel = button("quiet", { hidden: true }, "Остановить сборку")
@@ -73,6 +73,7 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
       if (state.made !== view.file.made) {
         state.made = view.file.made
         player.src = Api.reelUrl(projectId, view.file.made)
+        save.setAttribute("href", Api.reelDownloadUrl(projectId, view.file.made))
       }
       facts.textContent = `Длина ${formatLength(view.file.seconds)} · ${formatSize(view.file.size)} · собран ${madeAt(view.file.made)}`
       stale.hidden = state.busy || (view.file.fresh && !state.dirty)

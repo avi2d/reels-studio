@@ -9,7 +9,7 @@ import { GazeFailed, listen, look, places, previewIsFresh, readPlan, readTranscr
 import { Projects } from "./projects.ts"
 import { gatherLibrary, heardIn, keysIn, reuse as reuseOne, sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
-import { buildReel, publishedReel, readReel } from "./reel.ts"
+import { buildReel, readReel, reelVideoAt } from "./reel.ts"
 import { readCut, readTimeline, writeEdits } from "./timeline-files.ts"
 
 const UNAVAILABLE = "Видео недоступно. Попробуйте открыть страницу ещё раз."
@@ -199,10 +199,10 @@ const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, r
     return yield* reelOf(dir)
   }, orBroken, Effect.provideContext(context))
 
-  const reelFile = Effect.fn("Media.reelFile")(function*(id: string) {
-    const published = yield* publishedReel(yield* folder(id))
-    if (published === undefined) return yield* notFound("Ролик ещё не собран")
-    return published.target
+  const reelFile = Effect.fn("Media.reelFile")(function*(id: string, made: string) {
+    const target = yield* reelVideoAt(yield* folder(id), made)
+    if (target === undefined) return yield* notFound("Ролик ещё не собран")
+    return target
   }, orBroken, Effect.provideContext(context))
 
   const cancelReel = Effect.fn("Media.cancelReel")(function*(id: string) {
@@ -225,7 +225,7 @@ export class Media extends Context.Service<Media, {
   readonly reel: (id: string) => Effect.Effect<ReelView, ApiError>
   readonly buildReel: (id: string) => Effect.Effect<ReelView, ApiError>
   readonly cancelReel: (id: string) => Effect.Effect<ReelView, ApiError>
-  readonly reelFile: (id: string) => Effect.Effect<string, ApiError>
+  readonly reelFile: (id: string, made: string) => Effect.Effect<string, ApiError>
   readonly withoutWork: <A, E, R>(dir: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }>()("reels-studio/Media") {
   static readonly layer = Layer.effect(

@@ -20,6 +20,8 @@ export const reelPlaces = (dir: string): { readonly record: string; readonly wor
   video: (name: string) => `${dir}/reel/${name}`
 })
 
+export const videoOf = (made: string): string => `reel-${made.replace(/:/g, "-")}.mp4`
+
 export const publishedReel = Effect.fnUntraced(function*(dir: string) {
   const fs = yield* FileSystem.FileSystem
   const place = reelPlaces(dir)
@@ -31,6 +33,28 @@ export const publishedReel = Effect.fnUntraced(function*(dir: string) {
   return { target, record } as const
 })
 
+export const reelVideoAt = Effect.fnUntraced(function*(dir: string, made: string) {
+  const fs = yield* FileSystem.FileSystem
+  const target = reelPlaces(dir).video(videoOf(made))
+  if (!(yield* fs.exists(target))) return undefined
+  return target
+})
+
+const sweepReel = Effect.fnUntraced(function*(dir: string) {
+  const fs = yield* FileSystem.FileSystem
+  const place = reelPlaces(dir)
+  const kept = (yield* fs.exists(place.record))
+    ? Option.getOrUndefined(decodeRecord(yield* fs.readFileString(place.record)))?.video
+    : undefined
+  if (!(yield* fs.exists(`${dir}/reel`))) return
+  yield* Effect.forEach(yield* fs.readDirectory(`${dir}/reel`), (name) =>
+    name.startsWith("reel-") && name.endsWith(".mp4") && name !== kept
+      ? fs.remove(`${dir}/reel/${name}`, { force: true }).pipe(
+        Effect.catch((error) => Effect.logError("the unpublished reel video was not removed", error))
+      )
+      : Effect.void, { discard: true })
+})
+
 const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, onDone: (share: number) => Effect.Effect<void>) {
   const fs = yield* FileSystem.FileSystem
   const settings = yield* Settings
@@ -39,6 +63,7 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray
   const total = secondsOf(parts)
   yield* fs.remove(place.work, { recursive: true, force: true })
   yield* fs.makeDirectory(place.work, { recursive: true })
+  yield* sweepReel(dir)
   const hdr = new Map<string, boolean>()
   const names: Array<string> = []
   for (const part of parts) {
@@ -56,22 +81,11 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray
   yield* fs.writeFileString(`${place.work}/parts.txt`, joinList(names))
   yield* tool("ffmpeg", joinArgs(`${place.work}/parts.txt`, `${place.work}/reel.mp4`), settings.heavy)
   const made = DateTime.formatIso(yield* DateTime.now)
-  const video = `reel-${made.replace(/:/g, "-")}.mp4`
-  const previous = (yield* fs.exists(place.record))
-    ? Option.getOrUndefined(decodeRecord(yield* fs.readFileString(place.record)))?.video
-    : undefined
+  const video = videoOf(made)
   yield* fs.writeFileString(`${place.work}/reel.json`, yield* encodeRecord({ made, video, parts }))
   yield* fs.rename(`${place.work}/reel.mp4`, place.video(video))
-  yield* Effect.uninterruptible(fs.rename(`${place.work}/reel.json`, place.record)).pipe(
-    Effect.tapError(() => fs.remove(place.video(video), { force: true }).pipe(
-      Effect.catch((error) => Effect.logError("the unpublished reel video was not removed", error))
-    ))
-  )
-  if (previous !== undefined && previous !== video) {
-    yield* fs.remove(place.video(previous), { force: true }).pipe(
-      Effect.catch((error) => Effect.logError("the previous reel video was not removed", error))
-    )
-  }
+  yield* Effect.uninterruptible(fs.rename(`${place.work}/reel.json`, place.record))
+  yield* sweepReel(dir)
 })
 
 export const buildReel = Effect.fn("Reel.build")(function*(dir: string, clips: ReadonlyArray<Clip>, onDone: (share: number) => Effect.Effect<void>) {

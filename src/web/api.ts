@@ -123,8 +123,8 @@ export const cancelReel = (id: string): Effect.Effect<ReelView, Failed> =>
 export const reelUrl = (id: string, made: string): string =>
   `/api/projects/${id}/reel/file?made=${encodeURIComponent(made)}`
 
-export const reelDownloadUrl = (id: string): string =>
-  `/api/projects/${id}/reel/download`
+export const reelDownloadUrl = (id: string, made: string): string =>
+  `/api/projects/${id}/reel/download?made=${encodeURIComponent(made)}`
 
 export const removeProject = (id: string): Effect.Effect<{ readonly removed: string }, Failed> =>
   call(Schema.Struct({ removed: Schema.String }), `/api/projects/${id}`, { method: "DELETE" })

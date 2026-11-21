@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { attachment } from "../../src/server/api.ts"
+import { videoOf } from "../../src/server/reel.ts"
 import { joinList, partArgs, partsOf, progressSeconds, sameParts, secondsOf } from "../../src/server/media-commands.ts"
 import { statusOf } from "../../src/web/reel.ts"
 
@@ -48,6 +49,10 @@ test("only the out_time_us line of ffmpeg progress counts, read in microseconds"
   expect(progressSeconds("out_time_us=1500000")).toBe(1.5)
   expect(progressSeconds("out_time_ms=1500000")).toBeUndefined()
   expect(progressSeconds("out_time_us=N/A")).toBeUndefined()
+})
+
+test("a build video file name carries its build time without colons", () => {
+  expect(videoOf("2026-11-21T14:01:52.123Z")).toBe("reel-2026-11-21T14-01-52.123Z.mp4")
 })
 
 test("the download carries the Russian title encoded for filename* and a plain ASCII fallback", () => {
