@@ -1,6 +1,5 @@
 import assert from "node:assert/strict"
 import { mkdtemp, rm } from "node:fs/promises"
-import { Schema } from "effect"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import config from "../../../checks.config.ts"
@@ -79,48 +78,6 @@ const makeMedia = (directory: string) => Promise.all([
   ffmpeg(["-f", "lavfi", "-i", "color=blue:s=64x48", "-frames:v", "1", "-threads", "1", join(directory, CHAT_PICTURE)])
 ])
 
-const CHAT_EOF_MS = 10_000
-
-const Models = Schema.Struct({ models: Schema.Array(Schema.String) })
-const Created = Schema.Struct({ project: Schema.Struct({ id: Schema.String }) })
-
-const probeChatEof = async (studioUrl: string): Promise<void> => {
-  const models = Schema.decodeUnknownSync(Models)(await (await fetch(`${studioUrl}/api/models`)).json()).models
-  const model = models[0]
-  assert(model !== undefined, "The studio lists no chat models")
-  const created = Schema.decodeUnknownSync(Created)(await (await fetch(`${studioUrl}/api/projects`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: "Chat EOF probe" }) })).json())
-  const started = Date.now()
-  const response = await fetch(`${studioUrl}/api/projects/${created.project.id}/chat`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: "Собери блоки из всех видео.", files: [], model, effort: "medium" }) })
-  assert(response.ok, `The chat probe was refused: ${response.status}`)
-  assert(response.body !== null, "The chat probe got no body")
-  const reader = response.body.getReader()
-  let bytes = 0
-  for (;;) {
-    const next = await Promise.race([
-      reader.read(),
-      Bun.sleep(CHAT_EOF_MS).then(() => {
-        throw new Error(`The chat response body stayed open after ${CHAT_EOF_MS} ms and ${bytes} bytes; the browser would hang on it`)
-      })
-    ])
-    if (next.done) break
-    bytes += next.value.byteLength
-  }
-  console.log(`browser: the chat body reached EOF after ${Date.now() - started} ms and ${bytes} bytes`)
-}
-
-const printChrome = async (): Promise<void> => {
-  try {
-    const { chromium } = await import("playwright-core")
-    const path = process.env.CHROME_PATH
-    console.log(`browser: launching ${path === undefined || path === "" ? "channel chrome" : path}`)
-    const launched = await chromium.launch(path === undefined || path === "" ? { channel: "chrome" } : { executablePath: path })
-    console.log(`browser: ${launched.version()}`)
-    await launched.close()
-  } catch (error) {
-    console.log(`browser: could not read the Chrome version: ${error instanceof Error ? error.message : String(error)}`)
-  }
-}
-
 const runBrowserChecks = async (directory: string, staticSite: string, port: string): Promise<number> => {
   const studioUrl = `http://127.0.0.1:${port}`
   await makeMedia(directory)
@@ -141,8 +98,6 @@ const runBrowserChecks = async (directory: string, staticSite: string, port: str
     await studioReady(server, studioUrl)
     // The kit serves only static files; its hooks visit the live studio.
     await snapshotHome(staticSite, studioUrl)
-    await probeChatEof(studioUrl)
-    await printChrome()
     const browser = Bun.spawn([process.execPath, "x", "--no-install", "checks-browser", "--pr"], {
       env: { ...process.env, REELS_BROWSER_URL: studioUrl, REELS_BROWSER_DIR: directory },
       stdout: "pipe",

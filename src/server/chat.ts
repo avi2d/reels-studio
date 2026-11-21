@@ -1,4 +1,4 @@
-import { Array as Arr, Context, Deferred, type Duration, Effect, Fiber, FileSystem, Layer, Option, Path, type PlatformError, Ref, Schema, Stream } from "effect"
+import { Array as Arr, Context, Deferred, Effect, Fiber, FileSystem, Layer, Option, Path, type PlatformError, Ref, Schema, Stream } from "effect"
 import { type ChildProcessSpawner } from "effect/process"
 import { approves } from "../shared/brief.ts"
 import { Message, MAX_FILES } from "../shared/chat.ts"
@@ -206,8 +206,6 @@ const makeExpand = (state: Ref.Ref<RunState>) => (event: ChatEvent): Effect.Effe
   return expandSettled(state, event)
 }
 
-const SETTLE_TIMEOUT: Duration.Input = "5 seconds"
-
 const endedWith = (state: Ref.Ref<RunState>, message: string): Effect.Effect<Stream.Stream<ChatEvent>> =>
   Effect.gen(function*() {
     const shown = (yield* Ref.get(state)).pending ?? message
@@ -228,20 +226,8 @@ const stoppedStream = <E>(
   Stream.unwrap(Effect.gen(function*() {
     const last = yield* Ref.get(state)
     if (last.settled) return Stream.make<Array<ChatEvent>>()
-    const code = yield* Fiber.join(exited).pipe(
-      Effect.timeoutOption(SETTLE_TIMEOUT),
-      Effect.orElseSucceed(() => Option.none()),
-      Effect.map(Option.getOrUndefined)
-    )
-    const complaintsExit = yield* Effect.exit(Fiber.join(complaints)).pipe(
-      Effect.timeoutOption(SETTLE_TIMEOUT),
-      Effect.orElseSucceed(() => Option.none())
-    )
-    if (Option.isSome(complaintsExit)) {
-      yield* Effect.logError("pi stopped before it settled", code, complaintsExit.value)
-    } else {
-      yield* Effect.logError("pi did not settle in time", code)
-    }
+    const code = yield* Fiber.join(exited).pipe(Effect.orElseSucceed(() => undefined))
+    yield* Effect.logError("pi stopped before it settled", code, yield* Effect.exit(Fiber.join(complaints)))
     return yield* endedWith(state, code === 0 ? CLOSED : EXITED)
   }))
 
@@ -328,10 +314,10 @@ export class Chat extends Context.Service<Chat, {
         Stream.concat(names.length === 0 ? Stream.empty : Stream.make(LOOKING), Stream.unwrap(Effect.gen(function*() {
           const state = yield* Ref.make<RunState>({ text: "", base: "", pending: undefined, failed: undefined, settled: false })
           if (asker === "person") {
-            yield* Effect.addFinalizer(() => Ref.get(state).pipe(
-              Effect.flatMap((last) => append(dir, lastWords(last))),
-              Effect.catchTag("ApiError", (error) => Effect.logError("the reply was not saved", error.message))
-            ))
+            yield* Effect.addFinalizer(() =>
+              Ref.get(state).pipe(Effect.flatMap((last) => append(dir, lastWords(last))),
+                Effect.catchTag("ApiError", (error) => Effect.logError("the reply was not saved", error.message))
+              ))
           }
           const files = yield* attachments.show(dir, names)
           const task = briefNote((yield* brief.view(id)).brief) + (approving ? YES_NOTE : "")
@@ -344,15 +330,7 @@ export class Chat extends Context.Service<Chat, {
           const handle = launched.value
           const complaints = yield* handle.stderr.pipe(Stream.decodeText(), Stream.mkString, Effect.forkScoped)
           const exited = yield* handle.exitCode.pipe(Effect.forkScoped)
-          return piStream(handle.stdout, makeExpand(state), stoppedStream(state, exited, complaints)).pipe(
-            Stream.ensuring(Effect.gen(function*() {
-              const running = yield* handle.isRunning.pipe(Effect.orElseSucceed(() => true))
-              if (running) {
-                yield* handle.kill().pipe(Effect.timeoutOption(SETTLE_TIMEOUT), Effect.exit)
-              }
-              yield* handle.unref.pipe(Effect.exit)
-            }))
-          )
+          return piStream(handle.stdout, makeExpand(state), stoppedStream(state, exited, complaints))
         }))).pipe(brokenStream, Stream.provideContext(context))
       const send = Effect.fn("Chat.send")(function*(id: string, text: string, uploads: ReadonlyArray<string>, model: string, effort: Effort) {
         const trimmed = text.trim()
