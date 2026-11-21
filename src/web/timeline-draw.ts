@@ -8,7 +8,7 @@ import { formatLength } from "./format.ts"
 import { margins, type Margins } from "./margins.ts"
 import { blockDetail, deletedList, pauseList, type DetailActions } from "./timeline-detail.ts"
 import { cutMap } from "./timeline-map.ts"
-import { placeList, type PlaceActions } from "./timeline-places.ts"
+import { placeList, type PlaceActions, type PlaceCoverage } from "./timeline-places.ts"
 import { blockRow, type RowActions } from "./timeline-row.ts"
 
 export const STOP = "Остановить"
@@ -38,6 +38,7 @@ export interface Status {
   readonly blocks: number | undefined
   readonly pauses: { readonly removed: number; readonly total: number }
   readonly places: number
+  readonly placesComplete: boolean
 }
 
 export interface Hooks {
@@ -188,15 +189,19 @@ const replaceLists = (holder: HTMLElement, ...nodes: ReadonlyArray<HTMLElement>)
   for (const list of lists()) list.scrollTop = offsets.get(list.dataset.scrollKey) ?? 0
 }
 
-const measuringHeads = (view: TimelineView, placed: ReadonlyArray<Placed>): boolean => {
-  const measured = new Set(view.faces.map((one) => one.video))
+const placeCoverage = (view: TimelineView, placed: ReadonlyArray<Placed>): PlaceCoverage => {
+  const waiting = new Set(view.looks.flatMap((look) => look.state === "waiting" ? [look.video] : []))
   const failed = new Set(view.looks.flatMap((look) => look.state === "failed" ? [look.video] : []))
-  return placed.some((one) => !measured.has(one.take.video) && !failed.has(one.take.video))
+  return {
+    waiting: placed.some((one) => waiting.has(one.take.video)),
+    failed: [...new Set(placed.flatMap((one) => failed.has(one.take.video) ? [one.take.video] : []))]
+  }
 }
 
 export interface DrawnStatus {
   readonly pauses: Status["pauses"]
   readonly places: number
+  readonly placesComplete: boolean
 }
 
 export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { readonly open: Placed | undefined; readonly status: DrawnStatus } => {
@@ -233,9 +238,10 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { reado
     ...(open === undefined ? [] : [blockDetail(open.block, index + 1, chosenTake(open.block, edits), loaded.transcripts, edits, actions)]),
     ...(deleted.length === 0 ? [] : [deletedList(deleted, actions)]))
   const places = placesOf(clipsOf(placed), faces, loaded.transcripts, edits)
-  parts.placeHolder.replaceChildren(placeList(places, displayed, measuringHeads(loaded.view, placed), actions))
+  const coverage = placeCoverage(loaded.view, placed)
+  replaceLists(parts.placeHolder, placeList(places, displayed, coverage, actions))
   replaceLists(parts.pauseHolder, pauseList(displayed, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
-  return { open, status: { pauses: { removed: pauses.filter((pause) => pause.removed).length, total: pauses.length }, places: openPlaces(places) } }
+  return { open, status: { pauses: { removed: pauses.filter((pause) => pause.removed).length, total: pauses.length }, places: openPlaces(places), placesComplete: !coverage.waiting && coverage.failed.length === 0 } }
 }
 
 export interface Panels {

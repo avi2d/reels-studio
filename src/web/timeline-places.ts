@@ -8,6 +8,11 @@ export interface PlaceActions {
   readonly answer: (join: Join, answer: JoinAnswer) => void
 }
 
+export interface PlaceCoverage {
+  readonly waiting: boolean
+  readonly failed: ReadonlyArray<string>
+}
+
 interface AnswerText {
   readonly label: string
   readonly does: string
@@ -76,17 +81,24 @@ const placeItem = (place: Place, number: number, placed: ReadonlyArray<Placed>, 
       }, ...spoken(label, `${label}: склейка ${number}`)))))
 }
 
-const countOf = (places: ReadonlyArray<Place>): string => {
+const countOf = (places: ReadonlyArray<Place>, coverage: PlaceCoverage): string => {
   const open = openPlaces(places)
-  if (places.length === 0) return "Голова нигде не прыгает на склейках."
-  return open === 0 ? `Все места проверены: ${places.length}.` : `Осталось проверить ${open} из ${places.length}.`
+  const failed = coverage.failed.length === 0 ? "" : ` Взгляд не удалось измерить в видео: ${coverage.failed.join(", ")}. Проверка этих склеек неполная.`
+  if (places.length === 0) {
+    if (!coverage.waiting && failed === "") return "Голова нигде не прыгает на склейках."
+    if (!coverage.waiting) return `Мест для проверки пока нет.${failed}`
+    return `Студия ещё измеряет, где голова в кадре. Места появятся, когда она закончит.${failed}`
+  }
+  const done = open === 0 ? `Все места проверены: ${places.length}.` : `Осталось проверить ${open} из ${places.length}.`
+  const waiting = coverage.waiting ? " Студия ещё измеряет, мест может стать больше." : ""
+  return `${done}${waiting}${failed}`
 }
 
-export const placeList = (places: ReadonlyArray<Place>, placed: ReadonlyArray<Placed>, measuring: boolean, actions: PlaceActions): HTMLElement =>
+export const placeList = (places: ReadonlyArray<Place>, placed: ReadonlyArray<Placed>, coverage: PlaceCoverage, actions: PlaceActions): HTMLElement =>
   h("div", { class: "detail" },
     h("h3", {}, "Места для проверки"),
     h("p", { class: "did" }, `На этих склейках голова заметно сдвигается. Посмотрите каждую: студия покажет ${String(AROUND_JOIN_SECONDS).replace(".", ",")} с до склейки и столько же после, так, как склейка будет в ролике.`),
     h("ul", { class: "answers-said" }, ...ANSWERS.map(([, { label, does }]) => h("li", {}, h("b", {}, `«${label}».`), ` ${does}`))),
-    ...(measuring ? [h("p", { class: "muted", role: "status" }, "Студия ещё измеряет, где голова в кадре. Места появятся, когда она закончит.")] : []),
-    h("p", { class: "muted", role: "status" }, countOf(places)),
-    h("ol", { class: "place-list" }, ...places.map((place, index) => placeItem(place, index + 1, placed, actions))))
+    ...(coverage.waiting ? [h("p", { class: "muted", role: "status" }, "Студия ещё измеряет, где голова в кадре. Места появятся, когда она закончит.")] : []),
+    h("p", { class: "muted", role: "status" }, countOf(places, coverage)),
+    h("ol", { class: "place-list", "data-scroll-key": "places" }, ...places.map((place, index) => placeItem(place, index + 1, placed, actions))))

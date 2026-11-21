@@ -183,7 +183,8 @@ const redraw = ({ hooks, parts, player, state, ui, view }: Desk, actions: Action
     heard: loaded.transcripts.size,
     blocks: drawn === undefined ? undefined : view.placedNow().length,
     pauses: drawn?.status.pauses ?? { removed: 0, total: 0 },
-    places: drawn?.status.places ?? 0
+    places: drawn?.status.places ?? 0,
+    placesComplete: drawn?.status.placesComplete ?? false
   })
   refocus([ui.panels.viewer, ui.panels.tracks, ui.panels.takes, ui.panels.pauses], active)
 }

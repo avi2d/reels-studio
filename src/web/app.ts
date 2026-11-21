@@ -140,12 +140,12 @@ const pausesNote = ({ pauses, places }: Status): string => {
   return [removed, check].filter((part) => part !== "").join(" · ")
 }
 
-const stageNotes = ({ blocks, heard, pauses, places }: Status): Readonly<Record<StageId, StageNote>> => ({
+const stageNotes = ({ blocks, heard, pauses, places, placesComplete }: Status): Readonly<Record<StageId, StageNote>> => ({
   brief: { note: countNote(heard), done: heard > 0 },
   takes: { note: countNote(blocks ?? 0), done: blocks !== undefined },
   pauses: {
-    note: pausesNote({ blocks, heard, pauses, places }),
-    done: pauses.total > 0 && pauses.removed === pauses.total && places === 0
+    note: pausesNote({ blocks, heard, pauses, places, placesComplete }),
+    done: pauses.total > 0 && pauses.removed === pauses.total && places === 0 && pausesComplete
   }
 })
 

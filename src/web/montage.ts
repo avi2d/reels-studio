@@ -157,6 +157,14 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
     state.clips = clips
     state.index = 0
     state.before = 0
+    const seen = new Set<string>()
+    for (const clip of clips) {
+      if (seen.has(clip.video)) continue
+      seen.add(clip.video)
+      const node = nodeOf(clip.video)
+      start(node)
+      node.pause()
+    }
     cue(0)
     if (state.watching) return
     state.watching = true
