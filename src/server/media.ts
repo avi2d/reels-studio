@@ -4,7 +4,7 @@ import type { Offer, Pick, UploadedVideo } from "../shared/library.ts"
 import type { VideoView } from "../shared/plan.ts"
 import { mergeEdits as joinEdits, type Edits, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
 import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
-import { libraryDir, openLibrary } from "./library.ts"
+import { openLibrary } from "./library.ts"
 import { GazeFailed, listen, look, places, previewIsFresh, readPlan, readTranscript, refreshPreview, type Job } from "./media-jobs.ts"
 import { Projects } from "./projects.ts"
 import { gatherLibrary, heardIn, keysIn, reuse as reuseOne, sourceNames } from "./reuse.ts"
@@ -163,7 +163,7 @@ const makeShelves = (projects: Projects["Service"], unheard: Unheard, context: C
 
   const library = Effect.fn("Media.library")(function*(id: string) {
     const here = yield* keysIn(yield* projects.folder(id))
-    const shared = libraryDir((yield* Settings).projectsDir)
+    const shared = yield* openLibrary
     const others = (yield* projects.list).filter((project) => project.id !== id)
     const inReels = yield* Effect.forEach(others, (project) =>
       Effect.flatMap(projects.folder(project.id), (dir) => heardIn(dir, { from: "reel", project: project.id, titles: [project.title] })).pipe(

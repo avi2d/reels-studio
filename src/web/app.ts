@@ -44,7 +44,7 @@ const videoCard = (project: Api.ProjectView, onAdded: () => void): HTMLElement =
     })
   const picker = libraryPicker(project.id, refresh)
   picker.reload()
-  return h("section", { class: "card" }, h("h2", {}, "Видео"), files, picker.hint, h("div", { class: "row" }, picker.open), picker.panel)
+  return h("section", { class: "card" }, h("h2", {}, "Видео"), files, picker.hint, h("div", { class: "row" }, picker.open), picker.panel, picker.loadError)
 }
 
 const countNote = (count: number): string => count === 0 ? "" : String(count)

@@ -24,6 +24,7 @@ export interface Picker {
   readonly open: WaButton
   readonly panel: HTMLElement
   readonly hint: HTMLElement
+  readonly loadError: HTMLElement
   readonly reload: () => void
 }
 
@@ -36,11 +37,12 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
   const add = button("primary", { disabled: true }, addLabel(0))
   const cancel = button("quiet", {}, "Отмена")
   const problem = h("p", { class: "error", role: "alert" })
+  const loadError = h("p", { class: "error", role: "alert" })
   const panel = h("fieldset", { class: "picker", hidden: true },
     h("legend", {}, "Загруженные видео"),
     h("p", { class: "muted" }, "Студия уже прослушала эти видео. Отмеченные появятся в ролике сразу, вместе с текстом."),
     list, listening, h("div", { class: "row" }, add, cancel), problem)
-  const state = { chosen: new Map<HTMLInputElement, LibraryVideo>(), shown: false, timer: 0, failed: false }
+  const state = { chosen: new Map<HTMLInputElement, LibraryVideo>(), shown: false, timer: 0 }
   const recount = (): void => {
     const count = [...state.chosen.keys()].filter((box) => box.checked).length
     add.textContent = addLabel(count)
@@ -60,14 +62,10 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
     list.replaceChildren(...made.map(({ node }) => node))
     list.hidden = videos.length === 0
     listening.textContent = listeningNote(waiting)
+    loadError.textContent = ""
     const offered = videos.length > 0 || waiting > 0
     open.hidden = !offered
     hint.hidden = offered
-    if (state.failed) {
-      state.failed = false
-      problem.textContent = ""
-      panel.hidden = !state.shown
-    }
     if (!offered) show(false)
     recount()
   }
@@ -80,10 +78,7 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
         if (offer.listening > 0 && open.isConnected) state.timer = Number(globalThis.setTimeout(reload, POLL_MS))
       }),
       Effect.catchTag("Failed", (error) => Effect.sync(() => {
-        state.failed = true
-        problem.textContent = error.message
-        panel.hidden = false
-        hint.hidden = false
+        loadError.textContent = error.message
         globalThis.clearTimeout(state.timer)
         if (open.isConnected) state.timer = Number(globalThis.setTimeout(reload, POLL_MS))
       }))
@@ -119,5 +114,5 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
         ))
     ))
   })
-  return { open, panel, hint, reload }
+  return { open, panel, hint, loadError, reload }
 }
