@@ -42,7 +42,7 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
     h("legend", {}, "Загруженные видео"),
     h("p", { class: "muted" }, "Студия уже прослушала эти видео. Отмеченные появятся в ролике сразу, вместе с текстом."),
     list, listening, h("div", { class: "row" }, add, cancel), problem)
-  const state = { chosen: new Map<HTMLInputElement, LibraryVideo>(), shown: false, timer: 0 }
+  const state = { chosen: new Map<HTMLInputElement, { video: LibraryVideo; node: HTMLElement }>(), shown: false, timer: 0 }
   const recount = (): void => {
     const count = [...state.chosen.keys()].filter((box) => box.checked).length
     add.textContent = addLabel(count)
@@ -55,14 +55,30 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
     problem.textContent = ""
   }
   const fill = ({ videos, listening: waiting }: Offer): void => {
-    const kept = new Set([...state.chosen].filter(([box]) => box.checked).map(([, video]) => JSON.stringify(pickOf(video))))
-    const made = videos.map((video) => ({ video, ...choice(video, recount) }))
-    for (const { box, video } of made) box.checked = kept.has(JSON.stringify(pickOf(video)))
-    state.chosen = new Map(made.map(({ box, video }) => [box, video]))
-    list.replaceChildren(...made.map(({ node }) => node))
+    const previous = new Map<string, { box: HTMLInputElement; video: LibraryVideo; node: HTMLElement }>()
+    for (const [box, entry] of state.chosen) previous.set(JSON.stringify(pickOf(entry.video)), { box, video: entry.video, node: entry.node })
+    const made: Array<{ box: HTMLInputElement; video: LibraryVideo; node: HTMLElement }> = []
+    for (const video of videos) {
+      const kept = previous.get(JSON.stringify(pickOf(video)))
+      previous.delete(JSON.stringify(pickOf(video)))
+      if (kept !== undefined && JSON.stringify(kept.video) === JSON.stringify(video)) made.push(kept)
+      else {
+        if (kept !== undefined) kept.node.remove()
+        made.push({ video, ...choice(video, recount) })
+      }
+    }
+    for (const entry of previous.values()) entry.node.remove()
+    let position = 0
+    for (const { node } of made) {
+      const current = list.children[position]
+      if (current !== node) list.insertBefore(node, current ?? null)
+      position += 1
+    }
+    while (list.children.length > made.length) list.lastChild?.remove()
+    state.chosen = new Map(made.map(({ box, video, node }): [HTMLInputElement, { video: LibraryVideo; node: HTMLElement }] => [box, { video, node }]))
     list.hidden = videos.length === 0
     listening.textContent = listeningNote(waiting)
-    loadError.textContent = ""
+    if (loadError.textContent !== "") loadError.textContent = ""
     const offered = videos.length > 0 || waiting > 0
     open.hidden = !offered
     hint.hidden = offered
@@ -78,7 +94,7 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
         if (offer.listening > 0 && open.isConnected) state.timer = Number(globalThis.setTimeout(reload, POLL_MS))
       }),
       Effect.catchTag("Failed", (error) => Effect.sync(() => {
-        loadError.textContent = error.message
+        if (loadError.textContent !== error.message) loadError.textContent = error.message
         globalThis.clearTimeout(state.timer)
         if (open.isConnected) state.timer = Number(globalThis.setTimeout(reload, POLL_MS))
       }))
@@ -92,7 +108,7 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
   open.addEventListener("click", () => { show(!state.shown) })
   cancel.addEventListener("click", () => { show(false) })
   add.addEventListener("click", () => {
-    const picks = [...state.chosen].filter(([box]) => box.checked).map(([, video]) => pickOf(video))
+    const picks = [...state.chosen].filter(([box]) => box.checked).map(([, entry]) => pickOf(entry.video))
     add.disabled = true
     add.textContent = "Добавляем…"
     problem.textContent = ""

@@ -115,9 +115,13 @@ export const uploadedPanel = (): UploadedPanel => {
   const node = h("section", { class: "uploaded", "aria-labelledby": "uploaded-title", hidden: rows.length === 0 },
     h("h2", { id: "uploaded-title" }, "Загруженные видео"), uploads, known,
     h("p", { class: "muted" }, "Видео загружаются по очереди. Не закрывайте страницу, пока идёт загрузка. Чтобы взять видео в ролик, откройте ролик и нажмите «Выбрать видео». Исходные видео студия не меняет."))
-  const state = { timer: 0 }
+  const state = { timer: 0, signature: "" }
   const show = (videos: ReadonlyArray<UploadedVideo>): void => {
-    known.replaceChildren(...videos.map((video) => uploadedItem(video, retry)))
+    const signature = JSON.stringify(videos)
+    if (signature !== state.signature) {
+      state.signature = signature
+      known.replaceChildren(...videos.map((video) => uploadedItem(video, retry)))
+    }
     node.hidden = videos.length === 0 && rows.length === 0
     globalThis.clearTimeout(state.timer)
     if (videos.some((video) => video.state === "waiting")) state.timer = Number(globalThis.setTimeout(refresh, POLL_MS))
