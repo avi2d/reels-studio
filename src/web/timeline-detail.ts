@@ -1,5 +1,6 @@
 import type { Transcript } from "../shared/plan.ts"
 import { lengthOf } from "../shared/plan.ts"
+import { playedPause } from "../shared/timeline.ts"
 import { MIN_PAUSE, PAUSE_REST, pausesOf, playedSpans, type Block, type Edits, type Pause, type Placed, type Take } from "../shared/timeline.ts"
 import { button, spoken } from "./controls.ts"
 import { h } from "./dom.ts"
@@ -102,9 +103,10 @@ const pauseItem = (one: Placed, number: number, pause: Pause, wordAt: (video: st
 export const pauseList = (placed: ReadonlyArray<Placed>, wordAt: (video: string, index: number) => string, actions: DetailActions): HTMLElement => {
   const all = placed.flatMap((one, index) => one.pauses.map((pause) => ({ one, number: index + 1, pause })))
   const kept = all.filter(({ pause }) => !pause.removed).map(({ pause }) => pause)
+  const shown = placed.flatMap((one) => one.pauses.filter((pause) => !pause.removed).flatMap((pause) => playedPause(one, pause)))
   const count = all.length === 0
     ? "В выбранных дублях пауз нет."
-    : `Убрано ${all.length - kept.length} из ${all.length}. Осталось пауз на ${formatLength(lengthOf(kept))}.`
+    : `Убрано ${all.length - kept.length} из ${all.length}. Осталось пауз на ${formatLength(lengthOf(shown))}.`
   return h("div", { class: "detail" },
     h("p", { class: "did" }, "Студия нашла паузы в выбранных дублях. Уберите лишние по одной или все сразу кнопкой выше."),
     h("div", { class: "rules" }, ...RULES.map((rule) => h("span", {}, rule))),

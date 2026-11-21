@@ -1,5 +1,6 @@
 import { lengthOf, type Transcript } from "../shared/plan.ts"
-import { arrange, assemble, chosenTake, withManualPauses, type Edits, type GazeFailure, type Placed, type Take, type TimelinePage, type TimelineView } from "../shared/timeline.ts"
+import { facesByVideo, openPlaces, placesOf, trimmed } from "../shared/joins.ts"
+import { arrange, assemble, chosenTake, clipsOf, playedPause, withManualPauses, type Edits, type GazeFailure, type Placed, type Take, type TimelinePage, type TimelineView } from "../shared/timeline.ts"
 import type WaButton from "@awesome.me/webawesome/dist/components/button/button.js"
 import { button, focusWhenReady, iconButton, tooltip } from "./controls.ts"
 import { h } from "./dom.ts"
@@ -7,6 +8,7 @@ import { formatLength } from "./format.ts"
 import { margins, type Margins } from "./margins.ts"
 import { blockDetail, deletedList, pauseList, type DetailActions } from "./timeline-detail.ts"
 import { cutMap } from "./timeline-map.ts"
+import { placeList, type PlaceActions, type PlaceCoverage } from "./timeline-places.ts"
 import { blockRow, type RowActions } from "./timeline-row.ts"
 
 export const STOP = "Остановить"
@@ -35,6 +37,8 @@ export interface Status {
   readonly heard: number
   readonly blocks: number | undefined
   readonly pauses: { readonly removed: number; readonly total: number }
+  readonly places: number
+  readonly placesComplete: boolean
 }
 
 export interface Hooks {
@@ -89,8 +93,9 @@ export const notesOf = ({ transcripts, view }: Loaded, ask: (text: string) => vo
 const summaryOf = (placed: ReadonlyArray<Placed>): string => {
   if (placed.length === 0) return "Все блоки удалены"
   const pauses = placed.flatMap((one) => one.pauses.filter((pause) => !pause.removed))
+  const shown = placed.flatMap((one) => one.pauses.filter((pause) => !pause.removed).flatMap((pause) => playedPause(one, pause)))
   const length = formatLength(lengthOf(placed.flatMap((one) => one.spans)))
-  const kept = pauses.length === 0 ? "пауз нет" : `пауз: ${pauses.length} на ${formatLength(lengthOf(pauses))}`
+  const kept = pauses.length === 0 ? "пауз нет" : `пауз: ${pauses.length} на ${formatLength(lengthOf(shown))}`
   return `Блоков: ${placed.length} · ролик ${length} · ${kept}`
 }
 
@@ -130,6 +135,7 @@ export interface Parts {
   readonly map: HTMLElement
   readonly detailHolder: HTMLElement
   readonly pauseHolder: HTMLElement
+  readonly placeHolder: HTMLElement
 }
 
 export const partsOf = (): Parts => {
@@ -160,7 +166,8 @@ export const partsOf = (): Parts => {
   rowHolder: h("div", { class: "blocks-holder" }),
   map: h("ol", { class: "map" }),
   detailHolder: h("div", { class: "details" }),
-  pauseHolder: h("div", { class: "details" })
+  pauseHolder: h("div", { class: "details" }),
+  placeHolder: h("div", { class: "details places" })
   }
 }
 
@@ -171,12 +178,10 @@ interface Drawn {
   readonly selected: string | undefined
 }
 
-export type Actions = RowActions & DetailActions & { readonly change: (edits: Edits) => void }
+export type Actions = RowActions & DetailActions & PlaceActions & { readonly change: (edits: Edits) => void }
 
 export const textOf = (transcripts: ReadonlyMap<string, Transcript>, take: Take): string =>
   (transcripts.get(take.video)?.words ?? []).slice(take.from, take.to + 1).map((word) => word.text).join(" ")
-
-export const startOf = (placed: ReadonlyArray<Placed>, index: number): number => lengthOf(placed.slice(0, index).flatMap((one) => one.spans))
 
 const replaceLists = (holder: HTMLElement, ...nodes: ReadonlyArray<HTMLElement>): void => {
   const lists = () => holder.querySelectorAll<HTMLElement>("[data-scroll-key]")
@@ -185,15 +190,35 @@ const replaceLists = (holder: HTMLElement, ...nodes: ReadonlyArray<HTMLElement>)
   for (const list of lists()) list.scrollTop = offsets.get(list.dataset.scrollKey) ?? 0
 }
 
-export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { readonly open: Placed | undefined; readonly status: Status["pauses"] } => {
-  const { edits, loaded, selected, timeline } = drawn
-  const placed = assemble(timeline.blocks, edits, loaded.transcripts)
-  const { deleted } = arrange(timeline.blocks, edits)
-  const pauses = placed.flatMap((one) => one.pauses.map((pause) => ({ video: one.take.video, after: pause.after, removed: pause.removed })))
-  const allRemoved = pauses.length > 0 && pauses.every((pause) => pause.removed)
-  const index = Math.max(0, placed.findIndex((one) => one.block.id === selected))
-  const open = placed[index]
-  parts.summary.textContent = summaryOf(placed)
+const placeCoverage = (view: TimelineView, placed: ReadonlyArray<Placed>): PlaceCoverage => {
+  const waiting = new Set(view.looks.flatMap((look) => look.state === "waiting" ? [look.video] : []))
+  const failed = new Set(view.looks.flatMap((look) => look.state === "failed" ? [look.video] : []))
+  return {
+    waiting: placed.some((one) => waiting.has(one.take.video)),
+    failed: [...new Set(placed.flatMap((one) => failed.has(one.take.video) ? [one.take.video] : []))]
+  }
+}
+
+export interface DrawnStatus {
+  readonly pauses: Status["pauses"]
+  readonly places: number
+  readonly placesComplete: boolean
+}
+
+type PauseMark = { readonly video: string; readonly after: number; readonly removed: boolean }
+
+const drawChrome = (
+  parts: Parts,
+  displayed: ReadonlyArray<Placed>,
+  placed: ReadonlyArray<Placed>,
+  open: Placed | undefined,
+  index: number,
+  pauses: ReadonlyArray<PauseMark>,
+  allRemoved: boolean,
+  edits: Edits,
+  actions: Actions
+): void => {
+  parts.summary.textContent = summaryOf(displayed)
   parts.strip.disabled = pauses.length === 0
   const strip = stripWords(allRemoved)
   parts.strip.textContent = strip.label
@@ -201,19 +226,59 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { reado
   parts.strip.onclick = () => { actions.change(withManualPauses(edits, pauses, !allRemoved)) }
   parts.prev.disabled = index === 0
   parts.next.disabled = index >= placed.length - 1
-  parts.prev.onclick = () => { actions.select(placed[index - 1]?.block.id ?? "") }
-  parts.next.onclick = () => { actions.select(placed[index + 1]?.block.id ?? "") }
+  parts.prev.onclick = () => { actions.select(displayed[index - 1]?.block.id ?? "") }
+  parts.next.onclick = () => { actions.select(displayed[index + 1]?.block.id ?? "") }
   parts.facts.textContent = open === undefined ? "" : `дубль ${open.block.takes.indexOf(open.take) + 1} из ${open.block.takes.length}`
+}
+
+const drawRows = (parts: Parts, displayed: ReadonlyArray<Placed>, open: Placed | undefined, actions: Actions): void => {
   const scrollLeft = parts.rowHolder.firstElementChild?.scrollLeft ?? 0
-  const row = blockRow(placed, open?.block.id, actions)
+  const row = blockRow(displayed, open?.block.id, actions)
   parts.rowHolder.replaceChildren(row)
   row.scrollLeft = scrollLeft
-  parts.map.replaceChildren(...cutMap(placed, open?.block.id, actions.select))
+  parts.map.replaceChildren(...cutMap(displayed, open?.block.id, actions.select))
+}
+
+const drawPanels = (
+  parts: Parts,
+  displayed: ReadonlyArray<Placed>,
+  placed: ReadonlyArray<Placed>,
+  open: Placed | undefined,
+  index: number,
+  loaded: Loaded,
+  edits: Edits,
+  deleted: ReturnType<typeof arrange>["deleted"],
+  faces: ReturnType<typeof facesByVideo>,
+  actions: Actions
+): { readonly places: ReturnType<typeof placesOf>; readonly coverage: PlaceCoverage } => {
   replaceLists(parts.detailHolder,
     ...(open === undefined ? [] : [blockDetail(open.block, index + 1, chosenTake(open.block, edits), loaded.transcripts, edits, actions)]),
     ...(deleted.length === 0 ? [] : [deletedList(deleted, actions)]))
-  replaceLists(parts.pauseHolder, pauseList(placed, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
-  return { open, status: { removed: pauses.filter((pause) => pause.removed).length, total: pauses.length } }
+  const places = placesOf(clipsOf(placed), faces, loaded.transcripts, edits)
+  const coverage = placeCoverage(loaded.view, placed)
+  replaceLists(parts.placeHolder, placeList(places, displayed, coverage, actions))
+  replaceLists(parts.pauseHolder, pauseList(displayed, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
+  return { places, coverage }
+}
+
+export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { readonly open: Placed | undefined; readonly status: DrawnStatus } => {
+  const { edits, loaded, selected, timeline } = drawn
+  const placed = assemble(timeline.blocks, edits, loaded.transcripts)
+  const faces = facesByVideo(loaded.view.faces)
+  const reel = trimmed(clipsOf(placed), faces, loaded.transcripts, edits)
+  const displayed = placed.map((one) => ({
+    ...one,
+    spans: reel.filter((clip) => clip.block === one.block.id).map((clip) => ({ start: clip.start, end: clip.end }))
+  }))
+  const { deleted } = arrange(timeline.blocks, edits)
+  const pauses = placed.flatMap((one) => one.pauses.map((pause) => ({ video: one.take.video, after: pause.after, removed: pause.removed })))
+  const allRemoved = pauses.length > 0 && pauses.every((pause) => pause.removed)
+  const index = Math.max(0, displayed.findIndex((one) => one.block.id === selected))
+  const open = displayed[index]
+  drawChrome(parts, displayed, placed, open, index, pauses, allRemoved, edits, actions)
+  drawRows(parts, displayed, open, actions)
+  const { places, coverage } = drawPanels(parts, displayed, placed, open, index, loaded, edits, deleted, faces, actions)
+  return { open, status: { pauses: { removed: pauses.filter((pause) => pause.removed).length, total: pauses.length }, places: openPlaces(places), placesComplete: !coverage.waiting && coverage.failed.length === 0 } }
 }
 
 export interface Panels {
@@ -252,7 +317,7 @@ export const frameOf = (parts: Parts): Frame => {
         overview,
         h("div", { class: "transport" }, parts.clock, parts.prev, parts.go, parts.next, parts.facts, parts.zones.gear, ...parts.transportTips), parts.zones.panel)),
     takes: h("div", { class: "pane" }, notes, parts.detailHolder),
-    pauses: h("div", { class: "pane" }, noPauses, parts.strip, parts.pauseHolder),
+    pauses: h("div", { class: "pane" }, noPauses, parts.placeHolder, parts.strip, parts.pauseHolder),
     history: h("div", { class: "history", role: "group", "aria-label": "Правки монтажа" }, parts.undo, parts.redo, ...parts.historyTips),
     summary: parts.summary
   }
