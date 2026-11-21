@@ -15,7 +15,7 @@ The round button under the player starts playback from the open block.
 Click the stop icon on that button to stop playback.
 The chat opens as a drawer over the page.
 On a phone the player sits above the tabs.
-The take and pause lists scroll without moving the player or the tabs.
+The take lists and the pause and place lists scroll without moving the player or the tabs.
 On a phone the tabs read «Видео», «Дубли» and «Паузы», so all three fit on one line.
 
 ## Terms
@@ -64,7 +64,7 @@ The gathering and the yes write `timeline.json` under the same lock on top of th
 A pause the person returns stays in the `kept` list of `timeline.json`, and the studio never shortens it by itself, neither after a gathering nor after the yes.
 Removing the pause by hand drops it from that list.
 A deleted block and a removed pause stay listed on the page, and one tap returns each.
-The player shows the chosen takes in order and skips the removed pauses.
+The player shows the chosen takes in order and skips the removed pauses and the cuts at answered places.
 Each preview holds a key frame every half second.
 The studio re-encodes a preview made with the old key frame distance by itself in the background.
 The old preview stays playable until the new one is complete.
