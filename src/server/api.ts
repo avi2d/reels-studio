@@ -50,9 +50,10 @@ const projects = Layer.mergeAll(
     const store = yield* Projects
     const talk = yield* Chat
     const media = yield* Media
+    const gather = yield* Gather
     const id = yield* param("id")
     const dir = yield* store.folder(id)
-    yield* talk.withoutTurn(id, media.withoutWork(dir, store.remove(id)))
+    yield* talk.withoutTurn(id, gather.withoutGather(id, media.withoutWork(dir, store.remove(id))))
     return json({ removed: id })
   })))
 )

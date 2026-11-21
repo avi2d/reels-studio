@@ -1,18 +1,17 @@
-import { Context, Effect, Exit, FileSystem, Layer, Option, Path, Ref, Schema } from "effect"
+import { Context, Deferred, Effect, Exit, FileSystem, Layer, Path, Ref, Schema } from "effect"
 import { shortenPlaced } from "../shared/brief.ts"
-import { Gathered, gatherStep } from "../shared/gather.ts"
+import { blocksHash, failedShows, Gathered, gatherStep } from "../shared/gather.ts"
 import { Chat } from "./chat.ts"
 import { Media } from "./media.ts"
 import { Projects } from "./projects.ts"
-import { readyTranscripts } from "./timeline-files.ts"
+import { readGathered, readyTranscripts } from "./timeline-files.ts"
 
-const GatheredFile = Schema.fromJsonString(Gathered)
-const decodeGathered = Schema.decodeUnknownOption(GatheredFile)
-const encodeGathered = Schema.encodeEffect(GatheredFile)
+const encodeGathered = Schema.encodeEffect(Schema.fromJsonString(Gathered))
 
 export class Gather extends Context.Service<Gather, {
   readonly running: (id: string) => Effect.Effect<boolean>
   readonly failed: (id: string) => Effect.Effect<boolean>
+  readonly withoutGather: <A, E, R>(id: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }>()("reels-studio/Gather") {
   static readonly layer = Layer.effect(
     Gather,
@@ -22,13 +21,8 @@ export class Gather extends Context.Service<Gather, {
       const projects = yield* Projects
       const media = yield* Media
       const chat = yield* Chat
-      const current = yield* Ref.make<string | undefined>(undefined)
-
-      const readGathered = Effect.fnUntraced(function*(dir: string) {
-        const file = path.join(dir, "gathered.json")
-        if (!(yield* fs.exists(file))) return undefined
-        return Option.getOrUndefined(decodeGathered(yield* fs.readFileString(file)))
-      })
+      const current = yield* Ref.make<{ readonly id: string; readonly stop: Deferred.Deferred<void>; readonly finished: Deferred.Deferred<void> } | undefined>(undefined)
+      const blocked = yield* Ref.make<ReadonlySet<string>>(new Set())
 
       const readBlocks = Effect.fnUntraced(function*(dir: string) {
         const file = path.join(dir, "blocks.json")
@@ -36,9 +30,9 @@ export class Gather extends Context.Service<Gather, {
         return yield* fs.readFileString(file)
       })
 
-      const remember = Effect.fnUntraced(function*(dir: string, videos: ReadonlyArray<string>, settled: ReadonlyArray<string>, failed: boolean) {
+      const remember = Effect.fnUntraced(function*(dir: string, videos: ReadonlyArray<string>, settled: ReadonlyArray<string>, failed: boolean, hash: string | undefined) {
         const file = path.join(dir, "gathered.json")
-        yield* fs.writeFileString(`${file}.new`, yield* encodeGathered({ videos, gazed: [...settled], failed }))
+        yield* fs.writeFileString(`${file}.new`, yield* encodeGathered({ videos, gazed: [...settled], failed, ...(hash === undefined ? {} : { hash }) }))
         yield* fs.rename(`${file}.new`, file)
       })
 
@@ -56,21 +50,26 @@ export class Gather extends Context.Service<Gather, {
       const visit = Effect.fnUntraced(function*(id: string) {
         const { dir, step } = yield* stepOf(id)
         if (step.kind === "wait") return
-        yield* Ref.set(current, id)
-        yield* Effect.gen(function*() {
-          const before = yield* readBlocks(dir)
-          const outcome = yield* chat.gather(id)
-          if (outcome !== "gathered") return
-          const after = yield* readBlocks(dir)
-          const fresh = yield* media.timeline(id)
-          if (before === after || fresh.timeline.state !== "ready") {
-            yield* remember(dir, step.videos, step.settled, true)
-            return
-          }
-          const heardVideos = yield* media.videos(id)
-          yield* media.saveEdits(id, shortenPlaced(fresh.timeline.blocks, fresh.timeline.edits, readyTranscripts(heardVideos)))
-          yield* remember(dir, step.videos, step.settled, false)
-        }).pipe(Effect.ensuring(Ref.set(current, undefined)))
+        if ((yield* Ref.get(blocked)).has(id)) return
+        const stop = yield* Deferred.make<void>()
+        const finished = yield* Deferred.make<void>()
+        yield* Ref.set(current, { id, stop, finished })
+        yield* Effect.raceFirst(
+          Effect.gen(function*() {
+            const before = yield* readBlocks(dir)
+            yield* chat.gather(id)
+            const after = yield* readBlocks(dir)
+            const fresh = yield* media.timeline(id)
+            if (before === after || fresh.timeline.state !== "ready") {
+              yield* remember(dir, step.videos, step.settled, true, blocksHash(after))
+              return
+            }
+            const heardVideos = yield* media.videos(id)
+            yield* media.saveEdits(id, shortenPlaced(fresh.timeline.blocks, fresh.timeline.edits, readyTranscripts(heardVideos)))
+            yield* remember(dir, step.videos, step.settled, false, undefined)
+          }),
+          Deferred.await(stop)
+        ).pipe(Effect.ensuring(Ref.set(current, undefined).pipe(Effect.andThen(Deferred.succeed(finished, undefined)))))
       })
 
       const round = Effect.gen(function*() {
@@ -87,15 +86,30 @@ export class Gather extends Context.Service<Gather, {
       yield* Effect.forkScoped(Effect.forever(guarded))
 
       const running = (id: string): Effect.Effect<boolean> => Effect.gen(function*() {
-        if ((yield* Ref.get(current)) === id) return true
+        if ((yield* Ref.get(current))?.id === id) return true
         const { step } = yield* stepOf(id).pipe(Effect.orElseSucceed(() => ({ step: { kind: "wait" } as const })))
         return step.kind !== "wait"
       })
       const failed = (id: string): Effect.Effect<boolean> => Effect.gen(function*() {
-        const gathered = yield* readGathered(yield* projects.folder(id)).pipe(Effect.orElseSucceed(() => undefined))
-        return gathered?.failed === true
+        const dir = yield* projects.folder(id).pipe(Effect.orElseSucceed(() => undefined))
+        if (dir === undefined) return false
+        const gathered = yield* readGathered(dir).pipe(Effect.orElseSucceed(() => undefined))
+        const blocks = yield* readBlocks(dir).pipe(Effect.orElseSucceed(() => undefined))
+        return failedShows(gathered, blocks)
       })
-      return Gather.of({ running, failed })
+      const withoutGather = <A, E, R>(id: string, use: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+        Effect.acquireUseRelease(
+          Effect.gen(function*() {
+            yield* Ref.update(blocked, (set) => new Set([...set, id]))
+            const running = yield* Ref.get(current)
+            if (running?.id !== id) return
+            yield* Deferred.succeed(running.stop, undefined)
+            yield* Deferred.await(running.finished)
+          }),
+          () => use,
+          () => Ref.update(blocked, (set) => new Set([...set].filter((other) => other !== id)))
+        )
+      return Gather.of({ running, failed, withoutGather })
     })
   )
 }

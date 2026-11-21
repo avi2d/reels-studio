@@ -19,13 +19,14 @@ The plan covers every stage the studio can do, the takes, the pauses, the player
 The person agrees by pressing «Согласна» under the plan, or by writing «Согласна» or «Согласен» as the whole message.
 After the chat model answers that message, the studio works without another question:
 
+- When a gathering runs or is due, the yes waits for it to finish, then pins the takes and writes the list.
 - It pins the shown take of every block in `timeline.json`, while that take still exists, so later gatherings keep it.
 The take is the take ranked first unless the person chose another, as [docs/timeline.md](timeline.md) says.
 Before the yes the studio pins nothing.
-- It shortens every pause of half a second or more in the shown takes to 0.2 s, except the pauses the person returned.
+- It shortens the pauses of half a second or more left in the shown takes to 0.2 s, except the pauses the person returned.
 - It saves the yes with the plan text and a list of what it did to `approval.json`.
 
-The card then lists every chosen take with its reason and the seconds the pauses took off.
+The card then lists every chosen take with its reason and every shortened pause in them, whenever it was shortened, with the seconds the pauses took off.
 Every change stays undoable on the stages «Дубли и блоки» and «Паузы и склейки».
 A plan the chat model changes after the yes shows as waiting for a new yes.
 

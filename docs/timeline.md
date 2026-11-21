@@ -36,8 +36,9 @@ Once the blocks are written, the page shows the take ranked first in every block
 After the yes the pinned takes stay while they still exist.
 A new heard video gathers the blocks again, and a gaze that settles after the last gathering gathers them once more.
 The studio keeps the heard videos and the settled gaze it last asked about in `gathered.json`.
-When a gathering ends without a ready row of blocks, or leaves `blocks.json` unchanged, the studio keeps the attempt with a failed mark in `gathered.json`.
-The stage «Дубли и блоки» then says that the studio could not gather the blocks and keeps the «Собрать блоки» button.
+When a gathering ends without a ready row of blocks, or leaves `blocks.json` unchanged, the studio keeps the attempt with a failed mark and the hash of the `blocks.json` it saw in `gathered.json`.
+The stage «Дубли и блоки» shows that the studio could not gather the blocks and keeps the «Собрать блоки» button while the mark is set and `blocks.json` still matches that hash, also over ready blocks.
+Different blocks clear the note without new state.
 The next heard video or the next settled gaze tries again.
 The request and the answer do not show in the chat.
 The gathering runs in its own session next to the chat.
@@ -105,4 +106,4 @@ Each video folder holds these next to `plan.json`:
 | `gaze/<video>.txt` | The share of looks into the camera for each stretch of speech, which the chat model reads |
 | `blocks.json` | The blocks and their takes, written by the chat model |
 | `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses and the returned pauses |
-| `gathered.json` | The heard videos and the settled gaze the studio last asked the chat model to gather blocks from, with a failed mark when the last gathering left no ready row |
+| `gathered.json` | The heard videos and the settled gaze the studio last asked the chat model to gather blocks from, with a failed mark and the hash of the `blocks.json` the failed attempt saw |

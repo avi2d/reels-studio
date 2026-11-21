@@ -1,9 +1,18 @@
 import { Effect, FileSystem, Option, Result, Schema } from "effect"
 import type { Transcript, VideoView } from "../shared/plan.ts"
+import { Gathered } from "../shared/gather.ts"
 import { Blocks, Edits, NO_EDITS, soundBlocks, type Gaze, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
 import { places, readGaze, readTranscript } from "./media-jobs.ts"
 
 const decodeBlocks = Schema.decodeUnknownOption(Schema.fromJsonString(Blocks))
+const decodeGathered = Schema.decodeUnknownOption(Schema.fromJsonString(Gathered))
+
+export const readGathered = Effect.fnUntraced(function*(dir: string) {
+  const fs = yield* FileSystem.FileSystem
+  const file = `${dir}/gathered.json`
+  if (!(yield* fs.exists(file))) return undefined
+  return Option.getOrUndefined(decodeGathered(yield* fs.readFileString(file)))
+})
 const EditsFile = Schema.fromJsonString(Edits)
 const decodeEdits = Schema.decodeUnknownOption(EditsFile)
 const encodeEdits = Schema.encodeEffect(EditsFile)

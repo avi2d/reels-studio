@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { gatherStep } from "../../src/shared/gather.ts"
+import { blocksHash, failedShows, gatherStep } from "../../src/shared/gather.ts"
 
 test("a folder whose every video is heard is gathered at once, not left waiting for the plan or the yes", () => {
   expect(gatherStep(["a.mov", "b.mov"], [], false, undefined)).toEqual({ kind: "gather", videos: ["a.mov", "b.mov"], settled: [] })
@@ -39,4 +39,18 @@ test("a failed gathering without a new video or a new gaze asks the model nothin
 
 test("a failed gathering after a new video tries again instead of leaving the reel empty", () => {
   expect(gatherStep(["a.mov", "b.mov"], ["a.mov"], false, { videos: ["a.mov"], gazed: ["a.mov"], failed: true })).toEqual({ kind: "gather", videos: ["a.mov", "b.mov"], settled: ["a.mov"] })
+})
+
+test("a failed mark still shows over ready blocks until different blocks replace them", () => {
+  const marked = { videos: ["a.mov"], gazed: ["a.mov"], failed: true, hash: blocksHash("blocks-one") }
+  expect(failedShows(marked, "blocks-one")).toBe(true)
+  expect(failedShows(marked, "blocks-two")).toBe(false)
+  expect(failedShows({ videos: ["a.mov"], failed: false }, "blocks-one")).toBe(false)
+  expect(failedShows(undefined, "blocks-one")).toBe(false)
+})
+
+test("a failure that saw no blocks shows until blocks appear instead of hiding at once", () => {
+  const marked = { videos: ["a.mov"], failed: true }
+  expect(failedShows(marked, undefined)).toBe(true)
+  expect(failedShows(marked, "blocks-one")).toBe(false)
 })

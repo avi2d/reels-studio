@@ -80,16 +80,13 @@ const brokenStream = <A, E, R>(stream: Stream.Stream<A, E, R>): Stream.Stream<A,
     Stream.mapError(() => new ApiError({ status: 500, message: UNAVAILABLE }))
   )
 
-type Asker = "person" | "studio" | "removal"
-
 interface Turn {
-  readonly asker: Asker
   readonly stop: Deferred.Deferred<void>
   readonly finished: Deferred.Deferred<void>
 }
 
-const makeTurn = (asker: Asker): Effect.Effect<Turn> =>
-  Effect.all({ stop: Deferred.make<void>(), finished: Deferred.make<void>() }).pipe(Effect.map((deferreds) => ({ asker, ...deferreds })))
+const makeTurn = (): Effect.Effect<Turn> =>
+  Effect.all({ stop: Deferred.make<void>(), finished: Deferred.make<void>() })
 
 const makeTurns = Effect.gen(function*() {
   const turns = yield* Ref.make<ReadonlyMap<string, Turn>>(new Map())
@@ -112,14 +109,14 @@ const makeTurns = Effect.gen(function*() {
     })
   const withoutTurn = <A, E, R>(id: string, use: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     Effect.acquireUseRelease(
-      Effect.tap(makeTurn("removal"), (turn) => takeOver(id, turn)),
+      Effect.tap(makeTurn(), (turn) => takeOver(id, turn)),
       () => use,
       (turn) => release(id, turn)
     )
-  return { claim, release, takeOver, withoutTurn }
+  return { claim, release, withoutTurn }
 })
 
-export type Gathering = "gathered" | "busy" | "stopped"
+type Session = "person" | "studio"
 
 interface RunState {
   readonly text: string
@@ -252,7 +249,7 @@ const piStream = <E>(
     Stream.concat(stopped)
   )
 
-type Run = (id: string, dir: string, text: string, names: ReadonlyArray<string>, model: string, effort: Effort, approving: boolean, asker: Asker) => Stream.Stream<ChatEvent, ApiError>
+type Run = (id: string, dir: string, text: string, names: ReadonlyArray<string>, model: string, effort: Effort, approving: boolean, asker: Session) => Stream.Stream<ChatEvent, ApiError>
 
 interface GatherNeeds {
   readonly projects: Projects["Service"]
@@ -269,8 +266,6 @@ const gatherWith = ({ projects, settings, makeDirectory, run }: GatherNeeds) =>
     if (model === undefined) return yield* new ApiError({ status: 500, message: "В студии не задана ни одна модель" })
     yield* makeDirectory(dir)
     yield* run(id, dir, GATHER_PROMPT, [], model, project.effort ?? "medium", false, "studio").pipe(Stream.runDrain)
-    const gathering: Gathering = "gathered"
-    return gathering
   })
 
 export class Chat extends Context.Service<Chat, {
@@ -282,7 +277,7 @@ export class Chat extends Context.Service<Chat, {
     model: string,
     effort: Effort
   ) => Effect.Effect<Stream.Stream<ChatEvent, ApiError>, ApiError>
-  readonly gather: (id: string) => Effect.Effect<Gathering, ApiError>
+  readonly gather: (id: string) => Effect.Effect<void, ApiError>
   readonly withoutTurn: <A, E, R>(id: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }>()("reels-studio/Chat") {
   static readonly layer = Layer.effect(
@@ -313,7 +308,7 @@ export class Chat extends Context.Service<Chat, {
         return videoLines(yield* media.videos(id), yield* media.timeline(id))
       }, orBroken)
       const attachedNote = (listed: string): string => listed === "" ? "" : `\nThe files the person attached in the chat:\n${listed}\n`
-      const command = (dir: string, text: string, files: ReadonlyArray<Shown>, model: string, effort: Effort, known: string, asker: Asker) => {
+      const command = (dir: string, text: string, files: ReadonlyArray<Shown>, model: string, effort: Effort, known: string, asker: Session) => {
         const images = files.flatMap((file) => file.images)
         const prompt = JSON.stringify({ id: "prompt", type: "prompt", message: promptText(text, files), ...(images.length === 0 ? {} : { images }) })
         return ChildProcess.make(settings.pi, [
@@ -367,7 +362,7 @@ export class Chat extends Context.Service<Chat, {
         const names = Arr.dedupe(yield* Effect.forEach(uploads, (upload) => completedName(dir, upload, "attached").pipe(Effect.provideService(FileSystem.FileSystem, fs), Effect.provideService(Path.Path, path))))
         const plan = approves(trimmed) && names.length === 0 ? yield* brief.plan(id) : undefined
         const approved = plan === undefined || plan.state === "none" ? undefined : plan.text
-        const turn = yield* makeTurn("person")
+        const turn = yield* makeTurn()
         if ((yield* claim(id, turn)) !== undefined) return yield* new ApiError({ status: 409, message: "Дождитесь ответа на прошлое сообщение" })
         yield* Effect.gen(function*() {
           yield* fs.makeDirectory(path.join(dir, "chat"), { recursive: true }).pipe(orBroken)

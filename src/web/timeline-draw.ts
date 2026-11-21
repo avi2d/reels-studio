@@ -75,7 +75,10 @@ export const notesOf = ({ transcripts, view }: Loaded, ask: (text: string) => vo
   }
   const dropped = timeline.dropped === 0 ? [] : [h("p", { class: "muted" },
     `Студия пропустила дубли, которые не нашла в видео: ${timeline.dropped}. Попросите в чате собрать блоки заново.`)]
-  return [...regathering, ...dropped, ...looksNote(view.looks)]
+  const failed = view.gatherFailed
+    ? [h("p", { class: "error" }, "Студия не смогла собрать блоки. Новое видео или измеренный взгляд попробуют ещё раз."), gather("Собрать блоки")]
+    : []
+  return [...regathering, ...failed, ...dropped, ...looksNote(view.looks)]
 }
 
 const summaryOf = (placed: ReadonlyArray<Placed>): string => {

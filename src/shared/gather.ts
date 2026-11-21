@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 
-export const Gathered = Schema.Struct({ videos: Schema.Array(Schema.String), gazed: Schema.optionalKey(Schema.Array(Schema.String)), failed: Schema.optionalKey(Schema.Boolean) })
+export const Gathered = Schema.Struct({ videos: Schema.Array(Schema.String), gazed: Schema.optionalKey(Schema.Array(Schema.String)), failed: Schema.optionalKey(Schema.Boolean), hash: Schema.optionalKey(Schema.String) })
 export type Gathered = typeof Gathered.Type
 
 export type GatherStep =
@@ -25,3 +25,16 @@ export const gatherStep = (
   if (now.length !== heard.length) return { kind: "wait" }
   return { kind: "gather", videos: heard, settled: now }
 }
+
+export const blocksHash = (content: string | undefined): string | undefined => {
+  if (content === undefined) return undefined
+  let hash = 0x811c9dc5
+  for (let index = 0; index < content.length; index++) {
+    hash ^= content.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16)
+}
+
+export const failedShows = (gathered: Gathered | undefined, blocks: string | undefined): boolean =>
+  gathered?.failed === true && blocksHash(blocks) === gathered.hash

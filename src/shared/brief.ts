@@ -57,14 +57,15 @@ export const afterYes = (
   if (placed.length === 0) return { edits, done: [{ kind: "no-blocks" }] }
   const pinned = placed.reduce((next, one) => withChoice(next, one.block.id, one.take), edits)
   const next = shortenPlaced(blocks, pinned, transcripts)
-  const pauses = next.pauses.filter((pause) => !edits.pauses.some((old) => samePause(old, pause)))
-  const takes = placed.map((one): Done => ({
+  const cut = assemble(blocks, next, transcripts)
+  const removed = cut.flatMap((one) => one.pauses.filter((pause) => pause.removed))
+  const takes = cut.map((one): Done => ({
     kind: "take",
     block: one.block.title,
     take: one.block.takes.indexOf(one.take) + 1,
     of: one.block.takes.length,
     reason: one.take.reason
   }))
-  const seconds = playedLength(blocks, edits, transcripts) - playedLength(blocks, next, transcripts)
-  return { edits: next, done: [...takes, { kind: "pauses", count: pauses.length, seconds }] }
+  const seconds = playedLength(blocks, { ...next, pauses: [] }, transcripts) - playedLength(blocks, next, transcripts)
+  return { edits: next, done: [...takes, { kind: "pauses", count: removed.length, seconds }] }
 }
