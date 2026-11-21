@@ -14,7 +14,7 @@ const RecordFile = Schema.fromJsonString(Record)
 const decodeRecord = Schema.decodeUnknownOption(RecordFile)
 const encodeRecord = Schema.encodeEffect(RecordFile)
 
-export const reelPlaces = (dir: string): { readonly record: string; readonly work: string; readonly video: (name: string) => string } => ({
+const reelPlaces = (dir: string): { readonly record: string; readonly work: string; readonly video: (name: string) => string } => ({
   record: `${dir}/reel/reel.json`,
   work: `${dir}/reel/work`,
   video: (name: string) => `${dir}/reel/${name}`
@@ -22,7 +22,7 @@ export const reelPlaces = (dir: string): { readonly record: string; readonly wor
 
 export const videoOf = (made: string): string => `reel-${made.replace(/:/g, "-")}.mp4`
 
-export const publishedReel = Effect.fnUntraced(function*(dir: string) {
+const publishedReel = Effect.fnUntraced(function*(dir: string) {
   const fs = yield* FileSystem.FileSystem
   const place = reelPlaces(dir)
   if (!(yield* fs.exists(place.record))) return undefined

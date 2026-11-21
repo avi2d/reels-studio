@@ -7,16 +7,8 @@ const NOT_SAVED = "Изменение не сохранилось. Провер�
 
 export const saver = (projectId: string, problem: HTMLElement, edits: () => Edits, settled?: (ok: boolean) => void): { readonly save: () => void; readonly busy: () => boolean; readonly flush: () => Promise<boolean> } => {
   const state = { saving: false, unsaved: false }
-  const idle = (): Promise<void> => {
-    if (!state.saving) return Promise.resolve()
-    return new Promise<void>((resolve) => {
-      const check = (): void => {
-        if (!state.saving) resolve()
-        else globalThis.setTimeout(check, 25)
-      }
-      check()
-    })
-  }
+  const idle: Effect.Effect<void> = Effect.suspend(() =>
+    state.saving ? Effect.flatMap(Effect.sleep("25 millis"), () => idle) : Effect.void)
   const save = (): void => {
     if (state.saving) {
       state.unsaved = true
@@ -43,15 +35,16 @@ export const saver = (projectId: string, problem: HTMLElement, edits: () => Edit
       })
     ))
   }
-  const flush = async (): Promise<boolean> => {
-    if (state.unsaved && !state.saving) save()
-    if (state.saving) await idle()
-    if (state.unsaved) {
-      if (!problem.isConnected) return false
-      save()
-      if (state.saving) await idle()
-    }
-    return !state.saving && !state.unsaved
-  }
+  const settleUnsaved: Effect.Effect<boolean> = Effect.suspend(() => {
+    if (!state.unsaved) return Effect.succeed(!state.saving && !state.unsaved)
+    if (!problem.isConnected) return Effect.succeed(false)
+    save()
+    return Effect.map(idle, () => !state.saving && !state.unsaved)
+  })
+  const flush = (): Promise<boolean> =>
+    Effect.runPromise(Effect.suspend(() => {
+      if (state.unsaved && !state.saving) save()
+      return Effect.flatMap(idle, () => settleUnsaved)
+    }))
   return { save, busy: () => state.saving || state.unsaved, flush }
 }
