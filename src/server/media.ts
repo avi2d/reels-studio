@@ -239,8 +239,6 @@ const asUploaded = Effect.fnUntraced(function*(dir: string, video: VideoView) {
   return uploaded
 })
 
-type Shield = <A, E, R>(dir: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
-
 type JobShield = <A, E, R>(job: Job, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 
 const forgetFailures = (failures: Failures, job: Job): Effect.Effect<void> => {
