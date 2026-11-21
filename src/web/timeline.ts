@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { AROUND_JOIN_SECONDS, aroundJoin, withAnswer } from "../shared/joins.ts"
+import { AROUND_JOIN_SECONDS, aroundJoin, framed, headsByVideo, withAnswer } from "../shared/joins.ts"
 import { lengthOf } from "../shared/plan.ts"
 import {
   assemble, clipsOf, mergeEdits, NO_EDITS, playedSpans, withChoice, withDeleted, withManualPauses, within,
@@ -58,8 +58,10 @@ export interface Ticket { readonly changes: number; readonly busy: boolean }
 export const takeServer = (local: Edits, acked: Edits, server: Edits, ticket: Ticket, changes: number, busy: boolean): boolean =>
   !busy && !ticket.busy && ticket.changes === changes && adoptServer(local, acked, server)
 
-export const playedKey = (loaded: Loaded, edits: Edits): string =>
-  JSON.stringify(clipsOf(placedOf(loaded, edits)))
+const reelOf = (loaded: Loaded, edits: Edits): ReadonlyArray<Clip> =>
+  framed(clipsOf(placedOf(loaded, edits)), headsByVideo(loaded.view.heads), edits)
+
+export const playedKey = (loaded: Loaded, edits: Edits): string => JSON.stringify(reelOf(loaded, edits))
 
 interface State {
   loaded: Loaded | undefined
@@ -89,6 +91,7 @@ const revealWithinStrip = (root: HTMLElement, selector: string): void => {
 
 const display = (parts: Parts, state: State) => {
   const placedNow = (): ReadonlyArray<Placed> => placedOf(state.loaded, state.edits)
+  const reelNow = (): ReadonlyArray<Clip> => state.loaded === undefined ? [] : reelOf(state.loaded, state.edits)
 
   const showTag = (block: string | undefined): void => {
     const placed = placedNow()
@@ -133,7 +136,7 @@ const display = (parts: Parts, state: State) => {
     revealWithinStrip(parts.rowHolder, ".slot.playing")
   }
 
-  return { placedNow, showTag, showClock, markPlaying, paintPlaying }
+  return { placedNow, reelNow, showTag, showClock, markPlaying, paintPlaying }
 }
 
 interface Desk {
@@ -238,7 +241,7 @@ const actionsOf = (
       const window = { start: pause.start - PAUSE_AROUND_SECONDS, end: pause.end + PAUSE_AROUND_SECONDS }
       hear(within(takeClips(state.loaded, state.edits, one.block.id, one.take), window))
     },
-    hearJoin: (join) => { hear(aroundJoin(clipsOf(view.placedNow()), join, AROUND_JOIN_SECONDS)) },
+    hearJoin: (join) => { hear(aroundJoin(view.reelNow(), join, AROUND_JOIN_SECONDS)) },
     answer: (join, answer) => { change(withAnswer(state.edits, join, answer)) },
     setDeleted: (block, deleted) => {
       state.selected = deleted && block === state.open?.block.id ? neighbourOf(view.placedNow(), block) : state.selected
@@ -299,7 +302,7 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
   }
 
   const watch = (from: string): void => {
-    const clips = clipsOf(view.placedNow())
+    const clips = view.reelNow()
     const cut = clipsFrom(clips, from)
     state.base = lengthOf(clips) - lengthOf(cut)
     player.play(cut)

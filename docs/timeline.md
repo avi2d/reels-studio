@@ -104,16 +104,25 @@ A frame with no face counts as no look into the camera.
 
 ## Places to check
 
-A join is a place where the cut jumps from one moment of a video to another, at a removed pause or between two blocks.
+A join is a place where the cut jumps from one moment of a video to another.
+It comes at a removed pause or between two blocks.
 Two blocks that follow each other in one video with no gap make no join.
-The gaze measure also writes, for each sample, where the eyes are and how tall the face is, from brow to chin.
-For each join, the studio takes the last face at or before the join and the first face at or after it, each within 0.4 s.
+For each sample, the gaze measure also writes where the eyes are.
+It also writes how tall the face is, from brow to chin.
+For each join, the studio takes two faces within 0.4 s of the join.
+One is the last face at or before the join, and the other is the first face at or after it.
 It sums the shift of the eyes and the change of the face height, and divides that by the mean face height.
 A join whose sum is above 0.08 becomes a place to check in the «Паузы и склейки» stage.
 A join with no face on one side is not a place.
 The tab of that stage shows how many places are left unanswered.
-«Посмотреть» plays 1.5 s of the cut before the join and 1.5 s after it in the player.
-«Оставить» and «Простая склейка» answer the place, and either answer takes it off the count.
+«Посмотреть» plays 1.5 s before the join and 1.5 s after it, framed as the reel plays it.
+Either answer takes the place off the count:
+
+- «Оставить скачок» keeps the join as it is, so the head jumps on it.
+- «Сменить план» changes the frame at the join, like a cut to a second camera.
+
+After a change of shot, the player shows the frame 1.3 times closer, centred on the eyes, up to the next change of shot.
+If the frame before the join is already close, the change of shot goes back to the wide frame.
 The answer is kept in `timeline.json` with the two ends of the join, so a change of the cut that moves the join opens it again.
 The studio re-measures by itself, in the background, a video whose gaze file holds no head positions.
 This runs on the home computer and does not ask the chat model.

@@ -1,5 +1,5 @@
 import { Data, Effect } from "effect"
-import { fadeGain, type Clip } from "../shared/timeline.ts"
+import { fadeGain, type Clip, type Head } from "../shared/timeline.ts"
 import * as Api from "./api.ts"
 import { h } from "./dom.ts"
 
@@ -18,6 +18,16 @@ export interface Montage {
 class Refused extends Data.TaggedError("Refused")<{ readonly byBrowser: boolean }> {}
 
 const SEEK_SLACK = 0.05
+const CLOSE_SCALE = 1.3
+
+const originOf = (node: HTMLVideoElement, eyes: Head | undefined): string => {
+  const { clientWidth: width, clientHeight: height, videoWidth, videoHeight } = node
+  if (eyes === undefined || videoWidth === 0 || videoHeight === 0 || width === 0 || height === 0) return "50% 40%"
+  const fit = Math.min(width / videoWidth, height / videoHeight)
+  const left = (width - videoWidth * fit) / 2
+  const top = (height - videoHeight * fit) / 2
+  return `${(left + eyes.x * videoHeight * fit) / width * 100}% ${(top + eyes.y * videoHeight * fit) / height * 100}%`
+}
 
 export const montage = (projectId: string, onChange: (playing: Playing | undefined) => void): Montage => {
   const node = h("video", { class: "player", playsinline: true, preload: "metadata" })
@@ -35,6 +45,15 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
       catch: (cause) => new Refused({ byBrowser: cause instanceof DOMException && cause.name === "NotAllowedError" })
     }).pipe(Effect.catchTag("Refused", (refused) => Effect.sync(() => { if (refused.byBrowser) stop() }))))
   }
+  const frameAs = (clip: Clip | undefined): void => {
+    if (clip?.close === undefined) {
+      node.style.removeProperty("transform")
+      node.style.removeProperty("transform-origin")
+      return
+    }
+    node.style.transformOrigin = originOf(node, clip.close.eyes)
+    node.style.transform = `scale(${CLOSE_SCALE})`
+  }
   const cue = (index: number): void => {
     const clip = state.clips[index]
     const last = state.clips[state.index]
@@ -44,6 +63,7 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
     }
     if (index > state.index && last !== undefined) state.before += last.end - last.start
     state.index = index
+    frameAs(clip)
     if (node.dataset.video !== clip.video) {
       state.loading = true
       node.dataset.video = clip.video
@@ -90,6 +110,7 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
   }
   const show = (clip: Clip): void => {
     if (state.clips.length > 0) return
+    frameAs(clip)
     if (node.dataset.video === clip.video) {
       if (Math.abs(node.currentTime - clip.start) > SEEK_SLACK) node.currentTime = clip.start
       return

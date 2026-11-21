@@ -46,7 +46,7 @@ export type PauseRef = typeof PauseRef.Type
 
 const ClipEdge = Schema.Struct({ video: Schema.String, at: Schema.Finite })
 
-export const JoinAnswer = Schema.Literals(["leave", "plain"])
+export const JoinAnswer = Schema.Literals(["leave", "shot"])
 export type JoinAnswer = typeof JoinAnswer.Type
 
 const AnsweredJoin = Schema.Struct({ end: ClipEdge, start: ClipEdge, answer: JoinAnswer })
@@ -209,9 +209,14 @@ export const within = <S extends Span>(spans: ReadonlyArray<S>, window: Span): R
     return end > start ? [{ ...span, start, end }] : []
   })
 
+export interface Close {
+  readonly eyes: Head | undefined
+}
+
 export interface Clip extends Span {
   readonly video: string
   readonly block: string
+  readonly close?: Close
 }
 
 export const clipsOf = (placed: ReadonlyArray<Placed>): ReadonlyArray<Clip> =>

@@ -1,5 +1,5 @@
 import { lengthOf, type Transcript } from "../shared/plan.ts"
-import { openPlaces, placesOf } from "../shared/joins.ts"
+import { headsByVideo, openPlaces, placesOf } from "../shared/joins.ts"
 import { arrange, assemble, chosenTake, clipsOf, withManualPauses, type Edits, type GazeFailure, type Placed, type Take, type TimelinePage, type TimelineView } from "../shared/timeline.ts"
 import type WaButton from "@awesome.me/webawesome/dist/components/button/button.js"
 import { button, focusWhenReady, iconButton, tooltip } from "./controls.ts"
@@ -225,7 +225,7 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { reado
   replaceLists(parts.detailHolder,
     ...(open === undefined ? [] : [blockDetail(open.block, index + 1, chosenTake(open.block, edits), loaded.transcripts, edits, actions)]),
     ...(deleted.length === 0 ? [] : [deletedList(deleted, actions)]))
-  const places = placesOf(clipsOf(placed), new Map(loaded.view.heads.map((one) => [one.video, one])), edits)
+  const places = placesOf(clipsOf(placed), headsByVideo(loaded.view.heads), edits)
   parts.placeHolder.replaceChildren(placeList(places, placed, measuringHeads(loaded.view, placed), actions))
   replaceLists(parts.pauseHolder, pauseList(placed, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
   return { open, status: { pauses: { removed: pauses.filter((pause) => pause.removed).length, total: pauses.length }, places: openPlaces(places) } }

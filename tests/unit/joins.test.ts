@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
-import { aroundJoin, headAt, headShift, joinsOf, JUMP_STEP, openPlaces, placesOf, withAnswer } from "../../src/shared/joins.ts"
+import { aroundJoin, framed, headAt, headShift, joinsOf, JUMP_STEP, openPlaces, placesOf, withAnswer } from "../../src/shared/joins.ts"
 import { Edits, NO_EDITS, type Clip, type Head, type VideoHeads } from "../../src/shared/timeline.ts"
 
 const clip = (video: string, block: string, start: number, end: number): Clip => ({ video, block, start, end })
@@ -54,9 +54,32 @@ test("an answer closes its place, and a second answer replaces the first instead
   if (place === undefined) throw new Error("no place")
   const left = withAnswer(NO_EDITS, place.join, "leave")
   expect(openPlaces(placesOf(jumpy(), heads, left))).toBe(0)
-  const plain = withAnswer(left, place.join, "plain")
-  expect(plain.joins).toEqual([{ end: { video: "a", at: 2 }, start: { video: "b", at: 1 }, answer: "plain" }])
-  expect(placesOf(jumpy(), heads, plain).map((one) => one.answer)).toEqual(["plain"])
+  const shot = withAnswer(left, place.join, "shot")
+  expect(shot.joins).toEqual([{ end: { video: "a", at: 2 }, start: { video: "b", at: 1 }, answer: "shot" }])
+  expect(placesOf(jumpy(), heads, shot).map((one) => one.answer)).toEqual(["shot"])
+})
+
+const answered = (row: ReadonlyArray<Clip>, answers: ReadonlyArray<"leave" | "shot">) =>
+  joinsOf(row).reduce((edits, join, index) => withAnswer(edits, join, answers[index] ?? "leave"), NO_EDITS)
+
+test("a change of shot frames the reel closer from its join up to the next one, instead of leaving the reel as it was", () => {
+  const row = [clip("a", "one", 0, 2), clip("b", "two", 1, 3), clip("b", "three", 3, 4), clip("c", "four", 1, 3)]
+  const eyes = head(0.3, 0.43, 0.25)
+  expect(framed(row, heads, answered(row, ["leave", "leave"]))).toEqual(row)
+  expect(framed(row, heads, answered(row, ["shot", "leave"])).map((one) => one.close)).toEqual([undefined, { eyes }, { eyes }, { eyes }])
+})
+
+test("a second change of shot goes back to the wide frame instead of staying close, so the second jump is hidden too", () => {
+  const row = jumpy()
+  expect(framed(row, heads, answered(row, ["shot", "shot"])).map((one) => one.close === undefined)).toEqual([true, false, true])
+})
+
+test("the seconds around a join keep the frame of the reel, so a change of shot is seen when the join is played", () => {
+  const row = jumpy()
+  const [join] = joinsOf(row)
+  if (join === undefined) throw new Error("no join")
+  const reel = framed(row, heads, answered(row, ["shot"]))
+  expect(aroundJoin(reel, join, 1).map((one) => one.close === undefined)).toEqual([true, false])
 })
 
 test("the seconds around a join reach back across an earlier cut instead of stopping at it", () => {

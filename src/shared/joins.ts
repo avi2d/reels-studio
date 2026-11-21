@@ -1,4 +1,4 @@
-import type { AnsweredJoin, Clip, Edits, Head, JoinAnswer, VideoHeads } from "./timeline.ts"
+import type { AnsweredJoin, Clip, Close, Edits, Head, JoinAnswer, VideoHeads } from "./timeline.ts"
 
 export const JUMP_STEP = 0.08
 export const AROUND_JOIN_SECONDS = 1.5
@@ -55,8 +55,26 @@ export const placesOf = (clips: ReadonlyArray<Clip>, heads: ReadonlyMap<string, 
     if (left === undefined || right === undefined) return []
     const shift = headShift(left, right)
     if (shift <= JUMP_STEP) return []
-    return [{ join, shift, answer: edits.joins.find((answered) => isJoin(answered, join))?.answer }]
+    return [{ join, shift, answer: answerAt(edits, join) }]
   })
+
+export const headsByVideo = (heads: ReadonlyArray<VideoHeads>): ReadonlyMap<string, VideoHeads> =>
+  new Map(heads.map((one) => [one.video, one]))
+
+const answerAt = (edits: Edits, join: Join): JoinAnswer | undefined => edits.joins.find((answered) => isJoin(answered, join))?.answer
+
+const closeAt = (heads: ReadonlyMap<string, VideoHeads>, clip: Clip): Close => {
+  const measured = heads.get(clip.video)
+  return { eyes: measured === undefined ? undefined : headAt(measured, clip.start, "after") }
+}
+
+export const framed = (clips: ReadonlyArray<Clip>, heads: ReadonlyMap<string, VideoHeads>, edits: Edits): ReadonlyArray<Clip> => {
+  const shotChanges = new Set(joinsOf(clips).flatMap((join) => answerAt(edits, join) === "shot" ? [join.after] : []))
+  return clips.reduce<{ readonly close: Close | undefined; readonly out: ReadonlyArray<Clip> }>((walk, clip, index) => {
+    const close = !shotChanges.has(index) ? walk.close : walk.close === undefined ? closeAt(heads, clip) : undefined
+    return { close, out: [...walk.out, close === undefined ? clip : { ...clip, close }] }
+  }, { close: undefined, out: [] }).out
+}
 
 export const openPlaces = (places: ReadonlyArray<Place>): number => places.filter((place) => place.answer === undefined).length
 

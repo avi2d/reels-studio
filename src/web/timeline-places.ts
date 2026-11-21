@@ -8,7 +8,23 @@ export interface PlaceActions {
   readonly answer: (join: Join, answer: JoinAnswer) => void
 }
 
-const ANSWERS: ReadonlyArray<readonly [JoinAnswer, string]> = [["leave", "Оставить"], ["plain", "Простая склейка"]]
+interface AnswerText {
+  readonly label: string
+  readonly does: string
+  readonly done: string
+}
+
+const ANSWERS: ReadonlyArray<readonly [JoinAnswer, AnswerText]> = [
+  ["leave", { label: "Оставить скачок", does: "Склейка остаётся как есть, и голова на ней прыгает.", done: "скачок остаётся" }],
+  ["shot", {
+    label: "Сменить план",
+    does: "После склейки кадр становится крупнее, а если он уже крупный, снова общим, и скачок выглядит как переход на другую камеру.",
+    done: "план меняется"
+  }]
+]
+
+const doneOf = (answer: JoinAnswer | undefined): ReadonlyArray<string> =>
+  ANSWERS.flatMap(([one, text]) => one === answer ? [text.done] : [])
 
 const blockNumber = (placed: ReadonlyArray<Placed>, block: string): number => placed.findIndex((one) => one.block.id === block) + 1
 
@@ -26,14 +42,15 @@ const placeItem = (place: Place, number: number, placed: ReadonlyArray<Placed>, 
   return h("li", { class: place.answer === undefined ? "pause-row place" : "pause-row place answered" },
     h("span", { class: "where" },
       h("b", {}, `Склейка ${number}`),
-      h("span", {}, where)),
+      h("span", {}, [where, ...doneOf(place.answer)].join(" · "))),
     h("div", { class: "take-acts" },
       button("normal", {
-        title: "Полторы секунды до склейки и полторы после",
+        title: "Полторы секунды до склейки и полторы после, как в ролике",
         "data-key": `hear-join:${key}`,
         click: () => { actions.hearJoin(place.join) }
       }, ...spoken("Посмотреть", `Посмотреть склейку ${number}, ${where}`)),
-      ...ANSWERS.map(([answer, label]) => button(place.answer === answer ? "primary" : "quiet", {
+      ...ANSWERS.map(([answer, { label, does }]) => button(place.answer === answer ? "primary" : "quiet", {
+        title: does,
         "data-key": `answer-join:${answer}:${key}`,
         "aria-pressed": String(place.answer === answer),
         click: () => { actions.answer(place.join, answer) }
@@ -49,7 +66,8 @@ const countOf = (places: ReadonlyArray<Place>): string => {
 export const placeList = (places: ReadonlyArray<Place>, placed: ReadonlyArray<Placed>, measuring: boolean, actions: PlaceActions): HTMLElement =>
   h("div", { class: "detail" },
     h("h3", {}, "Места для проверки"),
-    h("p", { class: "did" }, `На этих склейках голова заметно сдвигается. Посмотрите каждую: студия покажет ${String(AROUND_JOIN_SECONDS).replace(".", ",")} с до склейки и столько же после.`),
+    h("p", { class: "did" }, `На этих склейках голова заметно сдвигается. Посмотрите каждую: студия покажет ${String(AROUND_JOIN_SECONDS).replace(".", ",")} с до склейки и столько же после, так, как склейка будет в ролике.`),
+    h("ul", { class: "answers-said" }, ...ANSWERS.map(([, { label, does }]) => h("li", {}, h("b", {}, `«${label}».`), ` ${does}`))),
     ...(measuring ? [h("p", { class: "muted", role: "status" }, "Студия ещё измеряет, где голова в кадре. Места появятся, когда она закончит.")] : []),
     h("p", { class: "muted", role: "status" }, countOf(places)),
     h("ol", { class: "place-list" }, ...places.map((place, index) => placeItem(place, index + 1, placed, actions))))

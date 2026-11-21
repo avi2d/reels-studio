@@ -64,6 +64,7 @@ del.gap { color: var(--wa-color-text-quiet); }
 .pause-row .take-acts { flex: none; flex-wrap: nowrap; }
 .places { flex: none; }
 .place-list { display: flex; flex-direction: column; gap: 8px; }
+.answers-said { display: flex; flex-direction: column; gap: 4px; margin: 0; padding-left: 1.2em; font-size: 14px; }
 .place.answered .where b { color: var(--wa-color-text-quiet); }
 
 @media (hover: hover) and (pointer: fine) {
