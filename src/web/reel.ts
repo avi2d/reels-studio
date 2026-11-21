@@ -126,7 +126,10 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
       const ticket = state.seen
       Effect.runFork(Api.buildReel(projectId).pipe(
         Effect.map((view) => {
-          if (ticket !== state.seen) return
+          if (ticket !== state.seen) {
+            refresh()
+            return
+          }
           show(view)
         }),
         Effect.catchTag("Failed", (error) => Effect.sync(() => {
@@ -144,7 +147,10 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
     const ticket = state.seen
     Effect.runFork(Api.cancelReel(projectId).pipe(
       Effect.map((view) => {
-        if (ticket !== state.seen) return
+        if (ticket !== state.seen) {
+          refresh()
+          return
+        }
         show(view)
       }),
       Effect.catchTag("Failed", (error) => Effect.sync(() => {
