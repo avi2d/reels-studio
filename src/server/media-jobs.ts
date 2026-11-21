@@ -5,7 +5,7 @@ import { Gaze, type GazeFailure } from "../shared/timeline.ts"
 import { gazeText, isHdr, KEY_FRAME_EVERY, prepareArgs, probeArgs, recognizerArgs, refreshArgs, transcriptText } from "./media-commands.ts"
 import { Settings } from "./settings.ts"
 
-export class ToolFailed extends Data.TaggedError("ToolFailed")<{ readonly command: string; readonly code: number; readonly output: string }> {}
+export class ToolFailed extends Data.TaggedError("ToolFailed")<{ readonly command: string; readonly code: number; readonly output: string; readonly message: string }> {}
 
 export class GazeFailed extends Data.TaggedError("GazeFailed")<{ readonly reason: GazeFailure; readonly detail: string }> {}
 
@@ -64,7 +64,10 @@ export const tool = Effect.fnUntraced(function*(command: string, args: ReadonlyA
     handle.stderr.pipe(Stream.decodeText(), Stream.mkString),
     handle.exitCode
   ], { concurrency: 3 })
-  if (code !== 0) return yield* new ToolFailed({ command, code, output: complaints.slice(-2000) })
+  if (code !== 0) {
+    const tail = complaints.slice(-2000)
+    return yield* new ToolFailed({ command, code, output: tail, message: `${command} exited with code ${code}: ${tail}` })
+  }
   return output
 }, Effect.scoped)
 
