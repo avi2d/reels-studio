@@ -4,8 +4,9 @@ kind: reference
 # Upload, play, reuse and delete a video
 
 The «Загрузить видео» link next to «Новый ролик» on the main page opens the «Загруженные видео» page at `#/videos`.
-That page shows each uploaded video as a card with its first frame, name, length and size, and its «Загрузить видео» button is the only place that uploads a video.
-The play button on a card plays the video in place in the browser's player.
+That page shows each uploaded video as a card with its name and size, and its «Загрузить видео» button is the only place that uploads a video.
+A video the studio has heard also shows its first frame and length, and its play button plays the video in place in the browser's player.
+A video the studio is still hearing, or could not hear, shows that state instead.
 The uploaded videos go into one shared list in `projects/.library`, and the studio hears each of them there.
 Inside a reel, the «Выбрать видео» button of the «Видео» card offers the heard videos from that list and from other video folders.
 A picked video joins the folder at once with its text and preview, without a second upload or transcription.
