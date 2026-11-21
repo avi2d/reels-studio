@@ -63,8 +63,12 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
       previous.delete(JSON.stringify(pickOf(video)))
       if (kept !== undefined && JSON.stringify(kept.video) === JSON.stringify(video)) made.push(kept)
       else {
-        if (kept !== undefined) kept.node.remove()
-        made.push({ video, ...choice(video, recount) })
+        const fresh = choice(video, recount)
+        if (kept !== undefined) {
+          kept.node.remove()
+          fresh.box.checked = kept.box.checked
+        }
+        made.push({ video, ...fresh })
       }
     }
     for (const entry of previous.values()) entry.node.remove()
@@ -74,7 +78,6 @@ export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<vo
       if (current !== node) list.insertBefore(node, current ?? null)
       position += 1
     }
-    while (list.children.length > made.length) list.lastChild?.remove()
     state.chosen = new Map(made.map(({ box, video, node }): [HTMLInputElement, { video: LibraryVideo; node: HTMLElement }] => [box, { video, node }]))
     list.hidden = videos.length === 0
     listening.textContent = listeningNote(waiting)
