@@ -31,16 +31,18 @@ interface Failures {
 
 interface Running {
   readonly dir: string
+  readonly name: string
   readonly stop: Deferred.Deferred<void>
   readonly finished: Deferred.Deferred<void>
 }
 
 interface Work {
   readonly closed: ReadonlySet<string>
+  readonly closedJobs: ReadonlySet<string>
   readonly running: Running | undefined
 }
 
-const openJobs = Effect.fnUntraced(function*(closed: ReadonlySet<string>) {
+const openJobs = Effect.fnUntraced(function*(closed: ReadonlySet<string>, closedJobs: ReadonlySet<string>) {
   const fs = yield* FileSystem.FileSystem
   const settings = yield* Settings
   const ids = yield* fs.readDirectory(settings.projectsDir).pipe(Effect.orElseSucceed((): Array<string> => []))
@@ -50,7 +52,7 @@ const openJobs = Effect.fnUntraced(function*(closed: ReadonlySet<string>) {
       Effect.map((names) => names.map((name): Job => ({ dir, name }))),
       Effect.orElseSucceed((): Array<Job> => [])
     ))
-  return jobs.flat()
+  return jobs.flat().filter((job) => !closedJobs.has(keyOf(job)))
 })
 
 const nextUnheard = Effect.fnUntraced(function*(unheard: Unheard, jobs: ReadonlyArray<Job>) {
@@ -88,9 +90,9 @@ const nextUnseen = Effect.fnUntraced(function*(unseen: Unseen, jobs: ReadonlyArr
 })
 
 const attempt = Effect.fnUntraced(function*<E, R>(work: Ref.Ref<Work>, job: Job, task: Effect.Effect<void, E, R>, record: (cause: Cause.Cause<E>) => Effect.Effect<void>) {
-  const running: Running = { dir: job.dir, stop: yield* Deferred.make<void>(), finished: yield* Deferred.make<void>() }
+  const running: Running = { dir: job.dir, name: job.name, stop: yield* Deferred.make<void>(), finished: yield* Deferred.make<void>() }
   const claimed = yield* Ref.modify(work, (state) =>
-    state.closed.has(job.dir) ? [false, state] : [true, { ...state, running }])
+    state.closed.has(job.dir) || state.closedJobs.has(keyOf(job)) ? [false, state] : [true, { ...state, running }])
   if (!claimed) return
   const outcome = yield* Effect.exit(Effect.raceFirst(task, Deferred.await(running.stop))).pipe(
     Effect.ensuring(Ref.update(work, (state) => ({ ...state, running: undefined })).pipe(
@@ -146,8 +148,8 @@ const reelTask = (reels: Reels, dir: string) =>
   }).pipe(Effect.onExit((exit) => Exit.isFailure(exit) && !Exit.hasInterrupts(exit) ? setReel(reels, dir, { state: "failed" }) : forgetReel(reels, dir)))
 
 const step = Effect.fnUntraced(function*(failures: Failures, work: Ref.Ref<Work>) {
-  const { closed } = yield* Ref.get(work)
-  const jobs = yield* openJobs(closed)
+  const { closed, closedJobs } = yield* Ref.get(work)
+  const jobs = yield* openJobs(closed, closedJobs)
   const unheard = yield* nextUnheard(failures.unheard, jobs)
   if (unheard !== undefined) return yield* attempt(work, unheard, listen(unheard), () => markFailed(failures.unheard, unheard))
   const reel = yield* nextReel(failures.reels, closed)
@@ -239,6 +241,8 @@ const asUploaded = Effect.fnUntraced(function*(dir: string, video: VideoView) {
 
 type Shield = <A, E, R>(dir: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 
+type JobShield = <A, E, R>(job: Job, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+
 const forgetFailures = (failures: Failures, job: Job): Effect.Effect<void> => {
   const key = keyOf(job)
   const without = (set: ReadonlySet<string>): ReadonlySet<string> => new Set([...set].filter((other) => other !== key))
@@ -249,7 +253,7 @@ const forgetFailures = (failures: Failures, job: Job): Effect.Effect<void> => {
   ], { discard: true })
 }
 
-const makeShelves = (projects: Projects["Service"], failures: Failures, withoutWork: Shield, context: Context.Context<Needs>) => {
+const makeShelves = (projects: Projects["Service"], failures: Failures, withoutJob: JobShield, context: Context.Context<Needs>) => {
   const { unheard } = failures
   const uploaded = Effect.gen(function*() {
     const dir = yield* openLibrary
@@ -270,7 +274,7 @@ const makeShelves = (projects: Projects["Service"], failures: Failures, withoutW
 
   const removeUploaded = Effect.fn("Media.removeUploaded")(function*(name: string) {
     const job = yield* uploadedJob(name)
-    yield* withoutWork(job.dir, removeFiles(job))
+    yield* withoutJob(job, removeFiles(job))
     yield* forgetFailures(failures, job)
   }, orUnavailable("the uploaded video was not removed", "Не получилось удалить видео. Попробуйте ещё раз."), Effect.provideContext(context))
 
@@ -333,7 +337,7 @@ export class Media extends Context.Service<Media, {
       const unseen: Unseen = yield* Ref.make<ReadonlyMap<string, GazeFailure>>(new Map())
       const stale: Unheard = yield* Ref.make<ReadonlySet<string>>(new Set())
       const reels: Reels = yield* Ref.make<ReadonlyMap<string, ReelJob>>(new Map())
-      const work = yield* Ref.make<Work>({ closed: new Set(), running: undefined })
+      const work = yield* Ref.make<Work>({ closed: new Set(), closedJobs: new Set(), running: undefined })
 
       const guarded = Effect.gen(function*() {
         const outcome = yield* Effect.exit(step({ unheard, unseen, stale, reels }, work))
@@ -375,7 +379,24 @@ export class Media extends Context.Service<Media, {
           () => Ref.update(work, (state) => ({ ...state, closed: new Set([...state.closed].filter((other) => other !== dir)) }))
         )
 
-      const { uploaded, retryUploaded, uploadedPreview, removeUploaded, library, reuse } = makeShelves(projects, { unheard, unseen, stale, reels }, withoutWork, context)
+      const withoutJob: JobShield = <A, E, R>(job: Job, use: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => {
+        const key = keyOf(job)
+        return Effect.acquireUseRelease(
+          Effect.gen(function*() {
+            const running = yield* Ref.modify(work, (state) => [
+              state.running?.dir === job.dir && state.running.name === job.name ? state.running : undefined,
+              { ...state, closedJobs: new Set([...state.closedJobs, key]) }
+            ])
+            if (running === undefined) return
+            yield* Deferred.succeed(running.stop, undefined)
+            yield* Deferred.await(running.finished)
+          }),
+          () => use,
+          () => Ref.update(work, (state) => ({ ...state, closedJobs: new Set([...state.closedJobs].filter((other) => other !== key)) }))
+        )
+      }
+
+      const { uploaded, retryUploaded, uploadedPreview, removeUploaded, library, reuse } = makeShelves(projects, { unheard, unseen, stale, reels }, withoutJob, context)
 
       const timeline = Effect.fn("Media.timeline")(function*(id: string) {
         const dir = yield* projects.folder(id)

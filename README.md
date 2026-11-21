@@ -74,7 +74,7 @@ To serve a newer `main`:
 
 How the studio hears a video lives in [How the studio hears a video](docs/how-the-studio-hears-a-video.md).
 
-Uploading and reusing a video lives in [Upload a video, reuse it and delete a video folder](docs/upload-and-reuse-video.md).
+Upload, play, reuse and delete a video lives in [Upload, play, reuse and delete a video](docs/upload-and-reuse-video.md).
 
 ## Run the checks
 
