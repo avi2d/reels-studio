@@ -3,7 +3,7 @@ import { orUnavailable } from "./api-error.ts"
 import { Settings } from "./settings.ts"
 
 // Inside the projects folder so a hard link into a reel never crosses file systems. The dot keeps it out of the reel ids.
-export const libraryDir = (projectsDir: string): string => `${projectsDir}/.library`
+const libraryDir = (projectsDir: string): string => `${projectsDir}/.library`
 
 export const openLibrary = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem
