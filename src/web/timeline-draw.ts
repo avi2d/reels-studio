@@ -1,5 +1,5 @@
 import { lengthOf, type Transcript } from "../shared/plan.ts"
-import { facesByVideo, openPlaces, placesOf } from "../shared/joins.ts"
+import { facesByVideo, openPlaces, placesOf, trimmed } from "../shared/joins.ts"
 import { arrange, assemble, chosenTake, clipsOf, withManualPauses, type Edits, type GazeFailure, type Placed, type Take, type TimelinePage, type TimelineView } from "../shared/timeline.ts"
 import type WaButton from "@awesome.me/webawesome/dist/components/button/button.js"
 import { button, focusWhenReady, iconButton, tooltip } from "./controls.ts"
@@ -201,12 +201,18 @@ export interface DrawnStatus {
 export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { readonly open: Placed | undefined; readonly status: DrawnStatus } => {
   const { edits, loaded, selected, timeline } = drawn
   const placed = assemble(timeline.blocks, edits, loaded.transcripts)
+  const faces = facesByVideo(loaded.view.faces)
+  const reel = trimmed(clipsOf(placed), faces, loaded.transcripts, edits)
+  const displayed = placed.map((one) => ({
+    ...one,
+    spans: reel.filter((clip) => clip.block === one.block.id).map((clip) => ({ start: clip.start, end: clip.end }))
+  }))
   const { deleted } = arrange(timeline.blocks, edits)
   const pauses = placed.flatMap((one) => one.pauses.map((pause) => ({ video: one.take.video, after: pause.after, removed: pause.removed })))
   const allRemoved = pauses.length > 0 && pauses.every((pause) => pause.removed)
-  const index = Math.max(0, placed.findIndex((one) => one.block.id === selected))
-  const open = placed[index]
-  parts.summary.textContent = summaryOf(placed)
+  const index = Math.max(0, displayed.findIndex((one) => one.block.id === selected))
+  const open = displayed[index]
+  parts.summary.textContent = summaryOf(displayed)
   parts.strip.disabled = pauses.length === 0
   const strip = stripWords(allRemoved)
   parts.strip.textContent = strip.label
@@ -214,20 +220,20 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { reado
   parts.strip.onclick = () => { actions.change(withManualPauses(edits, pauses, !allRemoved)) }
   parts.prev.disabled = index === 0
   parts.next.disabled = index >= placed.length - 1
-  parts.prev.onclick = () => { actions.select(placed[index - 1]?.block.id ?? "") }
-  parts.next.onclick = () => { actions.select(placed[index + 1]?.block.id ?? "") }
+  parts.prev.onclick = () => { actions.select(displayed[index - 1]?.block.id ?? "") }
+  parts.next.onclick = () => { actions.select(displayed[index + 1]?.block.id ?? "") }
   parts.facts.textContent = open === undefined ? "" : `дубль ${open.block.takes.indexOf(open.take) + 1} из ${open.block.takes.length}`
   const scrollLeft = parts.rowHolder.firstElementChild?.scrollLeft ?? 0
-  const row = blockRow(placed, open?.block.id, actions)
+  const row = blockRow(displayed, open?.block.id, actions)
   parts.rowHolder.replaceChildren(row)
   row.scrollLeft = scrollLeft
-  parts.map.replaceChildren(...cutMap(placed, open?.block.id, actions.select))
+  parts.map.replaceChildren(...cutMap(displayed, open?.block.id, actions.select))
   replaceLists(parts.detailHolder,
     ...(open === undefined ? [] : [blockDetail(open.block, index + 1, chosenTake(open.block, edits), loaded.transcripts, edits, actions)]),
     ...(deleted.length === 0 ? [] : [deletedList(deleted, actions)]))
-  const places = placesOf(clipsOf(placed), facesByVideo(loaded.view.faces), loaded.transcripts, edits)
-  parts.placeHolder.replaceChildren(placeList(places, placed, measuringHeads(loaded.view, placed), actions))
-  replaceLists(parts.pauseHolder, pauseList(placed, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
+  const places = placesOf(clipsOf(placed), faces, loaded.transcripts, edits)
+  parts.placeHolder.replaceChildren(placeList(places, displayed, measuringHeads(loaded.view, placed), actions))
+  replaceLists(parts.pauseHolder, pauseList(displayed, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
   return { open, status: { pauses: { removed: pauses.filter((pause) => pause.removed).length, total: pauses.length }, places: openPlaces(places) } }
 }
 

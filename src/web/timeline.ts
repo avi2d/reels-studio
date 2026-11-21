@@ -11,7 +11,7 @@ import { h } from "./dom.ts"
 import { formatLength } from "./format.ts"
 import { montage, type Playing } from "./montage.ts"
 import {
-  drawReady, frameOf, GO, notesOf, partsOf, refocus, startOf, STOP, textOf,
+  drawReady, frameOf, GO, notesOf, partsOf, refocus, STOP, textOf,
   type Actions, type Frame, type Hooks, type Loaded, type Panels, type Parts
 } from "./timeline-draw.ts"
 import { onKeys } from "./timeline-keys.ts"
@@ -102,12 +102,13 @@ const display = (parts: Parts, state: State) => {
   }
 
   const showClock = (): void => {
-    const placed = placedNow()
-    const total = formatLength(lengthOf(placed.flatMap((one) => one.spans)))
+    const reel = reelNow()
+    const total = formatLength(lengthOf(reel))
     const playing = state.playing
     if (playing === undefined) {
-      const index = placed.findIndex((one) => one.block.id === state.open?.block.id)
-      parts.clock.textContent = placed.length === 0 ? "" : `${formatLength(startOf(placed, Math.max(0, index)))} / ${total}`
+      const at = state.open === undefined ? 0 : reel.findIndex((clip) => clip.block === state.open?.block.id)
+      const start = at === -1 ? 0 : lengthOf(reel.slice(0, at))
+      parts.clock.textContent = reel.length === 0 ? "" : `${formatLength(start)} / ${total}`
     } else {
       parts.clock.textContent = state.base === undefined ? formatLength(playing.elapsed) : `${formatLength(state.base + playing.elapsed)} / ${total}`
     }

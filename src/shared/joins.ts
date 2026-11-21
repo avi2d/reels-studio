@@ -1,5 +1,5 @@
 import type { Transcript } from "./plan.ts"
-import type { AnsweredJoin, Clip, Edits, Head, JoinAnswer, VideoFaces } from "./timeline.ts"
+import { FADE, type AnsweredJoin, type Clip, type Edits, type Head, type JoinAnswer, type VideoFaces } from "./timeline.ts"
 
 export const JUMP_STEP = 0.08
 export const AROUND_JOIN_SECONDS = 1.5
@@ -25,6 +25,8 @@ export const headAt = (measured: VideoFaces, time: number, side: "before" | "aft
   const reach = Math.floor(HEAD_REACH / measured.step + SAME_MOMENT)
   const nearest = side === "before" ? Math.floor(time / measured.step + SAME_MOMENT) : Math.ceil(time / measured.step - SAME_MOMENT)
   for (let offset = 0; offset <= reach; offset += 1) {
+    const at = (side === "before" ? nearest - offset : nearest + offset) * measured.step
+    if (side === "before" ? time - at > HEAD_REACH + SAME_MOMENT : at - time > HEAD_REACH + SAME_MOMENT) break
     const head = measured.heads[side === "before" ? nearest - offset : nearest + offset]
     if (head !== undefined && head !== null) return head
   }
@@ -74,12 +76,14 @@ const isOff = (faces: VideoFaces, index: number): boolean => {
 
 const offFrom = (faces: VideoFaces, from: number, to: number): number => {
   let index = Math.floor(to / faces.step + SAME_MOMENT)
+  if (!isOff(faces, index)) return to
   while (index * faces.step >= from && isOff(faces, index)) index -= 1
   return Math.max(from, Math.min(to, (index + 0.5) * faces.step))
 }
 
 const offUntil = (faces: VideoFaces, from: number, to: number): number => {
   let index = Math.ceil(from / faces.step - SAME_MOMENT)
+  if (!isOff(faces, index)) return from
   while (index * faces.step <= to && isOff(faces, index)) index += 1
   return Math.min(to, Math.max(from, (index - 0.5) * faces.step))
 }
@@ -114,8 +118,8 @@ export const trimOf = (join: Join, faces: ReadonlyMap<string, VideoFaces>, trans
   const next = firstWordAfter(wordsAfter, after.start)
   const nextStart = next === undefined ? after.end : Math.max(next.start, after.start)
   const offAfter = offUntil(facesAfter, after.start, after.end)
-  const end = Math.max(saidEnd, offBefore)
-  const start = Math.min(nextStart, offAfter)
+  const end = said === undefined ? offBefore : Math.min(before.end, Math.max(saidEnd + FADE, offBefore))
+  const start = next === undefined ? offAfter : Math.max(after.start, Math.min(nextStart - FADE, offAfter))
   const cut = before.end - end + start - after.start
   const downInSaid = offBefore + facesBefore.step / 2 <= saidEnd + SAME_MOMENT
   const downInNext = offAfter - facesAfter.step / 2 >= nextStart - SAME_MOMENT

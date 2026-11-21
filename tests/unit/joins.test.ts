@@ -82,30 +82,30 @@ const trimOfPair = (awayA: ReadonlyArray<number>, awayB: ReadonlyArray<number>) 
 
 test("eyes down over the silence on both sides of a join are cut back to the last and first frame on the camera, not to the words", () => {
   const trim = trimOfPair(range(19, 29), range(2, 4))
-  expect(trim.end).toBeCloseTo(1.85)
+  expect(trim.end).toBeCloseTo(1.86)
   expect(trim.start).toBeCloseTo(0.45)
-  expect(trim.cut).toBeCloseTo(0.4)
+  expect(trim.cut).toBeCloseTo(0.39)
   expect(trim.spoken).toBe(undefined)
 })
 
 test("eyes that drop while a word is said are cut only after the word ends, and the word is named instead of cut into", () => {
   const trim = trimOfPair(range(15, 29), range(2, 4))
-  expect(trim.end).toBeCloseTo(1.8)
+  expect(trim.end).toBeCloseTo(1.86)
   expect(trim.start).toBeCloseTo(0.45)
-  expect(trim.cut).toBeCloseTo(0.45)
+  expect(trim.cut).toBeCloseTo(0.39)
   expect(trim.spoken).toBe("two")
 })
 
 test("eyes down until after the next word starts keep the picture from that word on, so the word is not cut", () => {
   const trim = trimOfPair([], range(2, 9))
-  expect(trim.start).toBeCloseTo(0.6)
+  expect(trim.start).toBeCloseTo(0.54)
   expect(trim.spoken).toBe("three")
 })
 
 test("eyes first seen down after the word has ended do not name the word, though the edge between two samples falls inside it", () => {
   const early: ReadonlyMap<string, Transcript> = new Map([...said, ["a", { duration: 3, words: [{ start: 1.2, end: 1.77, text: "two" }] }]])
   const trim = trimOf(pairJoin, new Map([["a", looking("a", range(18, 29))], ["b", looking("b", [])]]), early)
-  expect(trim.end).toBeCloseTo(1.77)
+  expect(trim.end).toBeCloseTo(1.83)
   expect(trim.spoken).toBe(undefined)
 })
 
@@ -117,7 +117,7 @@ test("the reel is trimmed only at a join answered with a cut, and left whole at 
   const faces = new Map([["a", looking("a", range(19, 29))], ["b", looking("b", range(2, 4))]])
   expect(trimmed(pair, faces, said, withAnswer(NO_EDITS, pairJoin, "leave"))).toEqual(pair)
   const [before, after] = trimmed(pair, faces, said, withAnswer(NO_EDITS, pairJoin, "trim"))
-  expect(before?.end).toBeCloseTo(1.85)
+  expect(before?.end).toBeCloseTo(1.86)
   expect(after?.start).toBeCloseTo(0.45)
 })
 

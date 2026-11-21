@@ -125,7 +125,10 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
       state.awaited = node
     }
     const next = state.clips[index + 1]
-    if (next !== undefined && next.video !== clip.video) seek(nodeOf(next.video), next.start)
+    if (next !== undefined && next.video !== clip.video) {
+      const upcoming = nodeOf(next.video)
+      if (upcoming !== screen.shown) seek(upcoming, next.start)
+    }
   }
   const watch = (): void => {
     const clip = state.clips[state.index]

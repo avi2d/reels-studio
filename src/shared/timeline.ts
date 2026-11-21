@@ -195,7 +195,7 @@ export const assemble = (blocks: ReadonlyArray<Block>, edits: Edits, transcripts
     return [{ block, take, pauses: pausesOf(transcript, take, edits), spans: playedSpans(transcript, take, edits) }]
   })
 
-const FADE = 0.06
+export const FADE = 0.06
 
 export const fadeGain = (span: Span, time: number): number =>
   Math.max(0, Math.min(1, (time - span.start) / FADE, (span.end - time) / FADE))
@@ -257,9 +257,18 @@ export const mergeEdits = (base: Edits, local: Edits, current: Edits): Edits => 
   const mergePauses = mergeRefs(samePause)
   const sameEnds = (left: AnsweredJoin, right: AnsweredJoin): boolean =>
     sameClipEdge(left.end, right.end) && sameClipEdge(left.start, right.start)
-  const sameJoin = (left: AnsweredJoin, right: AnsweredJoin): boolean => sameEnds(left, right) && left.answer === right.answer
-  const joins = mergeRefs(sameJoin)(local.joins, base.joins, current.joins)
-  const mine = (answered: AnsweredJoin): boolean => local.joins.some((own) => sameJoin(own, answered))
+  const ends: Array<AnsweredJoin> = []
+  for (const one of [...current.joins, ...local.joins, ...base.joins]) {
+    if (!ends.some((have) => sameEnds(have, one))) ends.push(one)
+  }
+  const answerOf = (list: ReadonlyArray<AnsweredJoin>, one: AnsweredJoin): JoinAnswer | undefined =>
+    list.find((have) => sameEnds(have, one))?.answer
+  const joins = ends.flatMap((one): ReadonlyArray<AnsweredJoin> => {
+    const picked = answerOf(base.joins, one) === answerOf(local.joins, one)
+      ? current.joins.find((have) => sameEnds(have, one))
+      : local.joins.find((have) => sameEnds(have, one))
+    return picked === undefined ? [] : [picked]
+  })
   const choiceOf = (list: ReadonlyArray<Choice>, block: string): Choice | undefined => list.find((one) => one.block === block)
   const blocks = [...new Set([...base.chosen, ...local.chosen, ...current.chosen].map((one) => one.block))]
   const reordered = base.order.length !== local.order.length || base.order.some((id, index) => local.order[index] !== id)
@@ -274,6 +283,6 @@ export const mergeEdits = (base: Edits, local: Edits, current: Edits): Edits => 
     }),
     pauses: mergePauses(local.pauses, base.pauses, current.pauses),
     kept: mergePauses(local.kept ?? [], base.kept ?? [], current.kept ?? []),
-    joins: joins.filter((answered) => mine(answered) || !local.joins.some((own) => sameEnds(own, answered)))
+    joins
   }
 }
