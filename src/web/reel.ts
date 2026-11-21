@@ -41,7 +41,9 @@ interface ReelState {
   made: string | undefined
   dirty: boolean
   busy: boolean
-  gen: number
+  counter: number
+  floor: number
+  applied: number
 }
 
 interface ReelUi {
@@ -66,7 +68,7 @@ interface Pane {
 }
 
 const invalidate = (pane: Pane): void => {
-  pane.state.gen += 1
+  pane.state.floor = (pane.state.counter += 1)
 }
 
 const show = (pane: Pane, view: ReelView): void => {
@@ -100,10 +102,11 @@ const refresh = (pane: Pane): void => {
   globalThis.clearTimeout(state.timer)
   if (!ui.node.isConnected) return
   state.timer = Number(globalThis.setTimeout(() => refresh(pane), state.busy ? POLL_MS : IDLE_MS))
-  const g = state.gen
+  const seq = (state.counter += 1)
   Effect.runFork(Api.getReel(pane.projectId).pipe(
     Effect.map((view) => {
-      if (g !== state.gen) return
+      if (seq <= state.applied || seq <= state.floor) return
+      state.applied = seq
       show(pane, view)
     }),
     Effect.catchTag("Failed", () => Effect.void)
@@ -112,14 +115,14 @@ const refresh = (pane: Pane): void => {
 
 const mutate = (pane: Pane, run: () => Effect.Effect<ReelView, Api.Failed>, fail: () => void): void => {
   invalidate(pane)
-  const g = pane.state.gen
+  const seq = (pane.state.counter += 1)
   Effect.runFork(run().pipe(
     Effect.map(() => {
       invalidate(pane)
       refresh(pane)
     }),
     Effect.catchTag("Failed", (error) => Effect.sync(() => {
-      const current = g === pane.state.gen
+      const current = seq > pane.state.applied && seq > pane.state.floor
       invalidate(pane)
       if (current) {
         pane.ui.problem.textContent = error.message
@@ -137,7 +140,7 @@ export const reelPane = (projectId: string, hooks: ReelHooks): {
   readonly edited: () => void
   readonly settled: (ok: boolean) => void
 } => {
-  const state: ReelState = { timer: 0, made: undefined, dirty: false, busy: false, gen: 0 }
+  const state: ReelState = { timer: 0, made: undefined, dirty: false, busy: false, counter: 0, floor: 0, applied: 0 }
   const status = h("p", { class: "muted", role: "status" })
   const bar = h("progress", { max: "1", value: "0", hidden: true })
   const problem = h("p", { class: "error", role: "alert" })
