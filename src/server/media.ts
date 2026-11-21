@@ -1,14 +1,14 @@
-import { type Crypto, Cause, Context, Deferred, Effect, Exit, FileSystem, Layer, Option, Ref } from "effect"
+import { type Crypto, Cause, Context, Deferred, Effect, Exit, FileSystem, Layer, Option, Ref, Semaphore } from "effect"
 import type { ChildProcessSpawner } from "effect/process"
 import type { LibraryVideo, Pick } from "../shared/library.ts"
 import type { VideoView } from "../shared/plan.ts"
-import type { Edits, GazeFailure, TimelineView } from "../shared/timeline.ts"
+import { mergeEdits as joinEdits, type Edits, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
 import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
 import { GazeFailed, listen, look, places, previewIsFresh, readPlan, readTranscript, refreshPreview, type Job } from "./media-jobs.ts"
 import { Projects } from "./projects.ts"
 import { gatherLibrary, heardIn, keysIn, reuse as reuseOne, sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
-import { readTimeline, writeEdits } from "./timeline-files.ts"
+import { readEdits, readTimeline, writeEdits } from "./timeline-files.ts"
 
 const UNAVAILABLE = "Видео недоступно. Попробуйте открыть страницу ещё раз."
 const orBroken = orUnavailable("the media failed", UNAVAILABLE)
@@ -127,6 +127,48 @@ const view = Effect.fnUntraced(function*(unheard: Unheard, job: Job) {
   return ready
 })
 
+type MediaContext = FileSystem.FileSystem | Crypto.Crypto | Settings | ChildProcessSpawner.ChildProcessSpawner
+
+const makeExchange = (
+  projects: Projects["Service"],
+  context: Context.Context<MediaContext>
+) => Effect.gen(function*() {
+  const creation = yield* Semaphore.make(1)
+  const guards = yield* Ref.make<ReadonlyMap<string, Semaphore.Semaphore>>(new Map())
+  const guardFor = (dir: string): Effect.Effect<Semaphore.Semaphore> =>
+    Effect.flatMap(Ref.get(guards), (known) => {
+      const found = known.get(dir)
+      if (found !== undefined) return Effect.succeed(found)
+      return creation.withPermits(1)(Effect.gen(function*() {
+        const latest = yield* Ref.get(guards)
+        const again = latest.get(dir)
+        if (again !== undefined) return again
+        const fresh = yield* Semaphore.make(1)
+        const next = new Map(latest)
+        next.set(dir, fresh)
+        yield* Ref.set(guards, next)
+        return fresh
+      }))
+    })
+  const exclusive = <A, E, R>(dir: string, use: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.flatMap(guardFor(dir), (guard) => guard.withPermits(1)(use))
+  const exchangeEdits = <A>(id: string, compute: (current: Edits) => { readonly edits: Edits; readonly value: A }): Effect.Effect<A, ApiError> =>
+    Effect.gen(function*() {
+      const dir = yield* projects.folder(id)
+      return yield* exclusive(dir, Effect.gen(function*() {
+        const parsed = compute(yield* readEdits(dir))
+        yield* writeEdits(dir, parsed.edits)
+        return parsed.value
+      }))
+    }).pipe(orUnavailable("the timeline was not saved", "Не получилось сохранить монтаж. Попробуйте ещё раз."), Effect.provideContext(context))
+  const mergeEdits = (id: string, base: Edits, local: Edits): Effect.Effect<Edits, ApiError> =>
+    exchangeEdits(id, (current) => {
+      const edits = joinEdits(base, local, current)
+      return { edits, value: edits }
+    })
+  return { exchangeEdits, mergeEdits }
+})
+
 export class Media extends Context.Service<Media, {
   readonly videos: (id: string) => Effect.Effect<ReadonlyArray<VideoView>, ApiError>
   readonly preview: (id: string, name: string) => Effect.Effect<string, ApiError>
@@ -134,7 +176,8 @@ export class Media extends Context.Service<Media, {
   readonly library: (id: string) => Effect.Effect<ReadonlyArray<LibraryVideo>, ApiError>
   readonly reuse: (id: string, picks: ReadonlyArray<Pick>) => Effect.Effect<void, ApiError>
   readonly timeline: (id: string) => Effect.Effect<TimelineView, ApiError>
-  readonly saveEdits: (id: string, edits: Edits) => Effect.Effect<void, ApiError>
+  readonly exchangeEdits: <A>(id: string, compute: (current: Edits) => { readonly edits: Edits; readonly value: A }) => Effect.Effect<A, ApiError>
+  readonly mergeEdits: (id: string, base: Edits, local: Edits) => Effect.Effect<Edits, ApiError>
   readonly withoutWork: <A, E, R>(dir: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }>()("reels-studio/Media") {
   static readonly layer = Layer.effect(
@@ -205,9 +248,7 @@ export class Media extends Context.Service<Media, {
         return yield* readTimeline(dir, yield* sourceNames(dir), yield* Ref.get(unseen))
       }, orBroken, Effect.provideContext(context))
 
-      const saveEdits = Effect.fn("Media.saveEdits")(function*(id: string, edits: Edits) {
-        yield* writeEdits(yield* projects.folder(id), edits)
-      }, orUnavailable("the timeline was not saved", "Не получилось сохранить монтаж. Попробуйте ещё раз."), Effect.provideContext(context))
+      const { exchangeEdits, mergeEdits } = yield* makeExchange(projects, context)
 
       const withoutWork = <A, E, R>(dir: string, use: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
         Effect.acquireUseRelease(
@@ -224,7 +265,7 @@ export class Media extends Context.Service<Media, {
           () => Ref.update(work, (state) => ({ ...state, closed: new Set([...state.closed].filter((other) => other !== dir)) }))
         )
 
-      return Media.of({ videos, preview, retry, library, reuse, timeline, saveEdits, withoutWork })
+      return Media.of({ videos, preview, retry, library, reuse, timeline, exchangeEdits, mergeEdits, withoutWork })
     })
   )
 }

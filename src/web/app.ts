@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import * as Api from "./api.ts"
+import { briefCards } from "./brief.ts"
 import { chatDrawer } from "./chat.ts"
 import { button, iconButton, tooltip } from "./controls.ts"
 import { h } from "./dom.ts"
@@ -158,13 +159,15 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
         stages.note("takes", notes.takes)
         stages.note("pauses", notes.pauses)
         reel.classList.toggle("blank", status.blocks === undefined)
-        if (seen.first && status.heard > 0) stages.open("takes")
+        if (seen.first && status.blocks !== undefined) stages.open("takes")
         seen.first = false
       }
     })
+    const brief = briefCards(project.id, (message) => { chat.ask(message) }, () => { timeline.refresh() })
     const refresh = (): void => {
       videos.refresh()
       timeline.refresh()
+      brief.refresh()
     }
     const chat = chatDrawer(project, messages, models, refresh)
     const remove = button("quiet", {
@@ -174,7 +177,7 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
     const back = iconButton("plain", "back", "Все ролики", { class: "back", href: "#/" })
     const { panels } = timeline
     const stages = stageRail(
-      { brief: h("div", { class: "pane" }, videoCard(project, refresh), videos.node, remove), takes: panels.takes, pauses: panels.pauses },
+      { brief: h("div", { class: "pane" }, videoCard(project, refresh), ...brief.nodes, videos.node, remove), takes: panels.takes, pauses: panels.pauses },
       panels.tracks,
       (stage) => { reel.dataset.stage = stage })
     reel.append(
