@@ -3,7 +3,7 @@ import type { ChildProcessSpawner } from "effect/process"
 import { kindOfName, type FileKind } from "../shared/chat.ts"
 import { ApiError, notFound, orUnavailable } from "./api-error.ts"
 import { about, attachedLines, deliveryNote, fileProbeArgs, frameArgs, frameTimes, pagesText, pictureArgs, type Seen, SHOWN_PAGES, soundArgs, type Speech, speechText } from "./attachment-notes.ts"
-import { isHdr } from "./media-commands.ts"
+import { isHdr, recognizerArgs } from "./media-commands.ts"
 import { decodeTranscript, tool } from "./media-jobs.ts"
 import { Projects } from "./projects.ts"
 import { Settings } from "./settings.ts"
@@ -73,8 +73,7 @@ const hear = Effect.fnUntraced(function*(place: Place) {
   const wav = `${place.view}/sound.wav`
   const words = `${place.view}/words.json`
   yield* tool("ffmpeg", soundArgs(place.file, wav), settings.heavy)
-  const transcriber = `${settings.root}/tools/transcribe`
-  yield* tool("uv", ["run", "--project", transcriber, "python", `${transcriber}/transcribe.py`, wav, words], settings.heavy).pipe(
+  yield* tool("uv", recognizerArgs(`${settings.root}/tools/transcribe`, { wav, words }, process.platform), settings.heavy).pipe(
     Effect.ensuring(fs.remove(wav).pipe(Effect.orElseSucceed(() => undefined)))
   )
   const transcript = yield* decodeTranscript(yield* fs.readFileString(words))

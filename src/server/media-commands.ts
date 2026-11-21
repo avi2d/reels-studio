@@ -93,6 +93,19 @@ export const progressSeconds = (line: string): number | undefined => {
   return match?.[1] === undefined ? undefined : Number(match[1]) / 1_000_000
 }
 
+export interface RecognizerFiles {
+  readonly wav: string
+  readonly words: string
+}
+
+// onnxruntime offers CoreML first on macOS, and the GigaAM encoder fails there with error code -1 while the CPU provider hears it.
+const recognizerProviders = (platform: NodeJS.Platform): ReadonlyArray<string> =>
+  platform === "darwin" ? ["--providers", "CPUExecutionProvider"] : []
+
+export const recognizerArgs = (transcriber: string, files: RecognizerFiles, platform: NodeJS.Platform): ReadonlyArray<string> => [
+  "run", "--project", transcriber, "python", `${transcriber}/transcribe.py`, ...recognizerProviders(platform), files.wav, files.words
+]
+
 const LINE_PAUSE = 0.1
 const NAMED_PAUSE = 1
 

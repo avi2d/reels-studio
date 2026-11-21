@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test"
-import { isHdr, prepareArgs, refreshArgs, transcriptText } from "../../src/server/media-commands.ts"
+import { isHdr, prepareArgs, recognizerArgs, refreshArgs, transcriptText } from "../../src/server/media-commands.ts"
+
+test("the recognizer on a Mac runs on the CPU provider and not on CoreML, and on Linux keeps the default", () => {
+  const files = { wav: "a.wav", words: "a.json" }
+  expect(recognizerArgs("t", files, "darwin")).toEqual(["run", "--project", "t", "python", "t/transcribe.py", "--providers", "CPUExecutionProvider", "a.wav", "a.json"])
+  expect(recognizerArgs("t", files, "linux")).toEqual(["run", "--project", "t", "python", "t/transcribe.py", "a.wav", "a.json"])
+})
 
 test("an iPhone HLG video and a PQ video count as HDR, and a plain or unknown one does not", () => {
   expect(isHdr("arib-std-b67")).toBe(true)
