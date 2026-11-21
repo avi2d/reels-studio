@@ -1,7 +1,7 @@
 import { defineConfig } from "@avi2dg/checks/config"
 
 export default defineConfig({
-  localTests: "blocked",
+  agentTests: { allowLocal: false },
   browser: {
     site: "node_modules/.cache/reels-browser",
     routes: [{ path: "/", locale: "ru" }],
