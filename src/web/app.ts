@@ -163,7 +163,7 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
         seen.first = false
       }
     })
-    const brief = briefCards(project.id, (message) => { chat.ask(message) })
+    const brief = briefCards(project.id, (message) => { chat.ask(message) }, () => { timeline.refresh() })
     const refresh = (): void => {
       videos.refresh()
       timeline.refresh()

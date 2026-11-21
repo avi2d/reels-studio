@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { blocksHash, failedShows, gatherStep, gazePending } from "../../src/shared/gather.ts"
+import { blocksHash, failedShows, gatherStep, gazePending, shortenDue } from "../../src/shared/gather.ts"
 
 test("a folder whose every video is heard is gathered at once, not left waiting for the plan or the yes", () => {
   expect(gatherStep(["a.mov", "b.mov"], [], false, undefined)).toEqual({ kind: "gather", videos: ["a.mov", "b.mov"], settled: [] })
@@ -58,4 +58,11 @@ test("a failure that saw no blocks shows until blocks appear instead of hiding a
   const marked = { videos: ["a.mov"], failed: true }
   expect(failedShows(marked, undefined)).toBe(true)
   expect(failedShows(marked, "blocks-one")).toBe(false)
+})
+
+test("only different blocks earn one more shortening without a new model run, instead of shortening the same blocks again", () => {
+  expect(shortenDue("blocks-two", blocksHash("blocks-one"))).toBe(true)
+  expect(shortenDue("blocks-one", undefined)).toBe(true)
+  expect(shortenDue("blocks-one", blocksHash("blocks-one"))).toBe(false)
+  expect(shortenDue(undefined, blocksHash("blocks-one"))).toBe(false)
 })

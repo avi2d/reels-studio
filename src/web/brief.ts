@@ -45,7 +45,7 @@ const planBody = (plan: Exclude<PlanView, { readonly state: "none" }>, working: 
   ]
 }
 
-export const briefCards = (projectId: string, ask: (text: string) => void): {
+export const briefCards = (projectId: string, ask: (text: string) => void, onWorked: () => void): {
   readonly nodes: ReadonlyArray<HTMLElement>
   readonly refresh: () => void
 } => {
@@ -81,7 +81,9 @@ export const briefCards = (projectId: string, ask: (text: string) => void): {
     refresh()
   }
   const show = (view: BriefView): void => {
+    const was = state.working
     state.working = view.working
+    if (was && !view.working) onWorked()
     if (!state.filled) {
       field.value = view.brief.trim()
       state.filled = true

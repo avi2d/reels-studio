@@ -1,4 +1,4 @@
-import { Context, DateTime, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
+import { Context, DateTime, Effect, FileSystem, Layer, Option, Path, Ref, Schema } from "effect"
 import { afterYes, Approval, MAX_BRIEF, planView, type BriefView, type PlanView } from "../shared/brief.ts"
 import { gazePending, gatherStep } from "../shared/gather.ts"
 import { NO_EDITS } from "../shared/timeline.ts"
@@ -21,6 +21,7 @@ export class Brief extends Context.Service<Brief, {
   readonly plan: (id: string) => Effect.Effect<PlanView, ApiError>
   readonly workAlone: (id: string, plan: string, replied: Effect.Effect<void>) => Effect.Effect<void, ApiError>
   readonly working: (id: string) => Effect.Effect<boolean>
+  readonly agree: (id: string, plan: string) => Effect.Effect<void>
 }>()("reels-studio/Brief") {
   static readonly layer = Layer.effect(
     Brief,
@@ -79,6 +80,14 @@ export class Brief extends Context.Service<Brief, {
 
       const working = (id: string): Effect.Effect<boolean> => state.working(id)
 
+      const agreed = yield* Ref.make<ReadonlyMap<string, string>>(new Map())
+      const agree = (id: string, plan: string): Effect.Effect<void> =>
+        Ref.update(agreed, (map) => {
+          const next = new Map(map)
+          next.set(id, plan)
+          return next
+        })
+
       const workAlone = Effect.fn("Brief.workAlone")(function*(id: string, approved: string, replied: Effect.Effect<void>) {
         return yield* state.trackAlone(id, Effect.gen(function*() {
           yield* replied
@@ -92,13 +101,18 @@ export class Brief extends Context.Service<Brief, {
               return { edits: outcome.edits, value: outcome.done }
             })
             : afterYes([], NO_EDITS, transcripts).done
+          const latest = (yield* Ref.get(agreed)).get(id) ?? approved
           const at = DateTime.formatIso(yield* DateTime.now)
-          const text = yield* encodeApproval({ plan: approved, at, done }).pipe(orBroken)
+          const text = yield* encodeApproval({ plan: latest, at, done }).pipe(orBroken)
           yield* replace(path.join(dir, "approval.json"), text).pipe(orBroken)
-        }))
+        }).pipe(Effect.ensuring(Ref.update(agreed, (map) => {
+          const next = new Map(map)
+          next.delete(id)
+          return next
+        }))))
       })
 
-      return Brief.of({ view, write, plan, workAlone, working })
+      return Brief.of({ view, write, plan, workAlone, working, agree })
     })
   )
 }

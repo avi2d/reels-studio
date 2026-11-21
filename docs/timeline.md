@@ -33,10 +33,12 @@ The first gathering ranks the takes by speech alone.
 When the gaze of every heard video is settled, the studio gathers once more, so the takes stand by speech and gaze.
 The stages «Дубли и блоки» and «Паузы и склейки» say that the studio is gathering the blocks meanwhile.
 Once the blocks are written, the page shows the take ranked first in every block the person has not chosen, and the studio shortens every pause of the shown takes to 0.2 s, except the pauses the person returned.
+After any change to `blocks.json`, whoever wrote it, the studio shortens the pauses of the shown takes once more without a new model run.
 After the yes the pinned takes stay while they still exist.
 A new heard video gathers the blocks again, and a gaze that settles after the last gathering gathers them once more.
 The studio keeps the heard videos and the settled gaze it last asked about in `gathered.json`.
 When a gathering ends without a ready row of blocks, or the model run reports an error, the studio keeps the attempt with a failed mark and the hash of the `blocks.json` it saw in `gathered.json`.
+`gathered.json` also keeps the hash of the `blocks.json` the studio last shortened pauses for, so only different blocks trigger one more shortening.
 A clean run that leaves `blocks.json` unchanged is a success.
 The stage «Дубли и блоки» shows that the studio could not gather the blocks and keeps the «Собрать блоки» button while the mark is set and `blocks.json` still matches that hash, also over ready blocks.
 Different blocks clear the note without new state.
@@ -110,4 +112,4 @@ Each video folder holds these next to `plan.json`:
 | `gaze/<video>.txt` | The share of looks into the camera for each stretch of speech, which the chat model reads |
 | `blocks.json` | The blocks and their takes, written by the chat model |
 | `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses and the returned pauses |
-| `gathered.json` | The heard videos and the settled gaze the studio last asked the chat model to gather blocks from, with a failed mark and the hash of the `blocks.json` the failed attempt saw |
+| `gathered.json` | The heard videos and the settled gaze the studio last asked the chat model to gather blocks from, with a failed mark, the hash of the `blocks.json` the failed attempt saw, and the hash of the `blocks.json` it last shortened pauses for |

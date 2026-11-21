@@ -30,9 +30,9 @@ export class Gather extends Context.Service<Gather, {
         return yield* fs.readFileString(file)
       })
 
-      const remember = Effect.fnUntraced(function*(dir: string, videos: ReadonlyArray<string>, settled: ReadonlyArray<string>, failed: boolean, hash: string | undefined) {
+      const remember = Effect.fnUntraced(function*(dir: string, videos: ReadonlyArray<string>, settled: ReadonlyArray<string>, failed: boolean, hash: string | undefined, shortened: string | undefined) {
         const file = path.join(dir, "gathered.json")
-        yield* fs.writeFileString(`${file}.new`, yield* encodeGathered({ videos, gazed: [...settled], failed, ...(hash === undefined ? {} : { hash }) }))
+        yield* fs.writeFileString(`${file}.new`, yield* encodeGathered({ videos, gazed: [...settled], failed, ...(hash === undefined ? {} : { hash }), ...(shortened === undefined ? {} : { shortened }) }))
         yield* fs.rename(`${file}.new`, file)
       })
 
@@ -44,19 +44,36 @@ export class Gather extends Context.Service<Gather, {
         const listening = videos.some((video) => video.state === "waiting")
         const view = yield* media.timeline(id)
         const settled = view.looks.flatMap((look) => look.state === "waiting" ? [] : [look.video])
-        return { dir, step: gatherStep(heard, settled, listening, gathered) }
+        return { dir, step: gatherStep(heard, settled, listening, gathered), heard, listening, gathered }
+      })
+
+      const shortenChanged = Effect.fnUntraced(function*(id: string, dir: string, heard: ReadonlyArray<string>, listening: boolean, gathered: Gathered | undefined) {
+        if (listening || heard.length === 0) return
+        const after = yield* readBlocks(dir)
+        if (!shortenDue(after, gathered?.shortened)) return
+        const fresh = yield* media.timeline(id)
+        if (fresh.timeline.state !== "ready") return
+        const videos = yield* media.videos(id)
+        yield* media.exchangeEdits(id, (current) => ({
+          edits: shortenPlaced(fresh.timeline.blocks, current, readyTranscripts(videos)),
+          value: undefined
+        }))
+        yield* remember(dir, gathered?.videos ?? heard, [...(gathered?.gazed ?? [])], gathered?.failed ?? false, gathered?.hash, blocksHash(after))
       })
 
       const visit = Effect.fnUntraced(function*(id: string) {
-        const { dir, step } = yield* stepOf(id)
-        if (step.kind === "wait") return
+        const { dir, step, heard, listening, gathered } = yield* stepOf(id)
         if (yield* state.blocked(id)) return
+        if (step.kind === "wait") {
+          yield* shortenChanged(id, dir, heard, listening, gathered)
+          return
+        }
         yield* state.track(id, Effect.gen(function*() {
           const exit = yield* Effect.exit(chat.gather(id))
           const after = yield* readBlocks(dir)
           const fresh = yield* media.timeline(id)
           if (Exit.isFailure(exit) || fresh.timeline.state !== "ready") {
-            yield* remember(dir, step.videos, step.settled, true, blocksHash(after))
+            yield* remember(dir, step.videos, step.settled, true, blocksHash(after), gathered?.shortened)
             return
           }
           const heardVideos = yield* media.videos(id)
@@ -64,7 +81,7 @@ export class Gather extends Context.Service<Gather, {
             edits: shortenPlaced(fresh.timeline.blocks, current, readyTranscripts(heardVideos)),
             value: undefined
           }))
-          yield* remember(dir, step.videos, step.settled, false, undefined)
+          yield* remember(dir, step.videos, step.settled, false, undefined, blocksHash(after))
         }))
       })
 
