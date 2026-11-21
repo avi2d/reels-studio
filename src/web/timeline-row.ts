@@ -150,7 +150,7 @@ const slotOf = (row: HTMLElement, one: Placed, at: At, selected: string | undefi
     h("span", { class: "at" }, formatLength(at.start)),
     h("span", { class: "said", title: actions.textOf(take) }, actions.textOf(take)),
     h("div", { class: block.id === selected ? "clip selected" : "clip" }, dragHandle(row, slot, block.title, block.id, selected, actions), pick),
-    h("div", { class: "gaps" }, ...one.pauses.flatMap((pause) => pauseMark(one, pause, length, actions) ?? []))))
+    h("div", { class: "gaps" }, ...one.pauses.flatMap((pause) => pauseMark(one, pause, length, actions) ?? [])))
   return slot
 }
 
