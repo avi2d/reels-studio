@@ -5,23 +5,33 @@ import { join } from "node:path"
 import config from "../../../checks.config.ts"
 import { CHAT_PICTURE, SOURCE_VIDEO } from "./scenario.ts"
 
-const PORT = "18765"
-const studioUrl = `http://127.0.0.1:${PORT}`
 const BROWSER_DEADLINE_MS = 8 * 60_000
 const FFMPEG_DEADLINE_MS = 2 * 60_000
+const KILL_GRACE_MS = 5_000
 const site = config.browser?.site
 
-const studioReady = async (server: Bun.Subprocess): Promise<void> => {
+const pickPort = async (): Promise<string> => {
+  const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("probe") })
+  const port = probe.port
+  await probe.stop(true)
+  return String(port)
+}
+
+const studioReady = async (server: Bun.Subprocess, studioUrl: string): Promise<void> => {
   const deadline = Date.now() + 30_000
-  while (Date.now() < deadline && server.exitCode === null) {
+  while (Date.now() < deadline) {
     const response = await fetch(`${studioUrl}/api/projects`, { signal: AbortSignal.timeout(1000) }).catch(() => undefined)
+    const code = server.exitCode
+    if (code !== null) throw new Error(`Studio did not start (exit code: ${code})`)
     if (response?.ok === true) return
     await Bun.sleep(100)
   }
-  throw new Error(`Studio did not start (exit code: ${server.exitCode ?? "still running"})`)
+  const code = server.exitCode
+  if (code !== null) throw new Error(`Studio did not start (exit code: ${code})`)
+  throw new Error("Studio did not start (still running)")
 }
 
-const snapshotHome = async (directory: string): Promise<void> => {
+const snapshotHome = async (directory: string, studioUrl: string): Promise<void> => {
   const paths = ["/", "/app.css", "/app.js", "/api/projects",
     "/fonts/onest-cyrillic.woff2", "/fonts/onest-latin.woff2",
     "/fonts/unbounded-cyrillic.woff2", "/fonts/unbounded-latin.woff2"]
@@ -30,6 +40,14 @@ const snapshotHome = async (directory: string): Promise<void> => {
     assert(response.ok, `Cannot copy ${path} from the studio: ${response.status}`)
     await Bun.write(join(directory, path === "/" ? "index.html" : path.slice(1)), response)
   }))
+}
+
+const killAndWait = async (child: Bun.Subprocess): Promise<void> => {
+  if (child.exitCode !== null) return
+  child.kill()
+  const exited = await Promise.race([child.exited.then(() => true), Bun.sleep(KILL_GRACE_MS).then(() => false)])
+  if (!exited) child.kill("SIGKILL")
+  await child.exited
 }
 
 const awaitExit = async (command: Bun.Subprocess, label: string, deadlineMs: number): Promise<void> => {
@@ -60,14 +78,15 @@ const makeMedia = (directory: string) => Promise.all([
   ffmpeg(["-f", "lavfi", "-i", "color=blue:s=64x48", "-frames:v", "1", "-threads", "1", join(directory, CHAT_PICTURE)])
 ])
 
-const runBrowserChecks = async (directory: string, staticSite: string): Promise<number> => {
+const runBrowserChecks = async (directory: string, staticSite: string, port: string): Promise<number> => {
+  const studioUrl = `http://127.0.0.1:${port}`
   await makeMedia(directory)
   const standIn = join(import.meta.dir, "tool.ts")
   const server = Bun.spawn([process.execPath, "src/index.ts"], {
     env: {
       ...process.env,
       REELS_HOST: "127.0.0.1",
-      REELS_PORT: PORT,
+      REELS_PORT: port,
       REELS_PROJECTS_DIR: join(directory, "projects"),
       REELS_HEAVY: standIn,
       REELS_PI: standIn
@@ -76,9 +95,9 @@ const runBrowserChecks = async (directory: string, staticSite: string): Promise<
     stderr: "inherit"
   })
   try {
-    await studioReady(server)
+    await studioReady(server, studioUrl)
     // The kit serves only static files; its hooks visit the live studio.
-    await snapshotHome(staticSite)
+    await snapshotHome(staticSite, studioUrl)
     const browser = Bun.spawn([process.execPath, "x", "--no-install", "checks-browser", "--pr"], {
       env: { ...process.env, REELS_BROWSER_URL: studioUrl, REELS_BROWSER_DIR: directory },
       stdout: "pipe",
@@ -115,25 +134,24 @@ const runBrowserChecks = async (directory: string, staticSite: string): Promise<
         await forwarding
         return browser.exitCode ?? 1
       }
-      browser.kill()
-      await browser.exited
-      await forwarding
       throw new Error(`The browser checks stalled. Last output:\n${recent === "" ? "(no output)" : recent}`)
     } finally {
       clearTimeout(timer)
+      await killAndWait(browser)
+      await forwarding
     }
   } finally {
-    server.kill()
-    await server.exited
+    await killAndWait(server)
   }
 }
 
 assert(process.env.GITHUB_ACTIONS === "true" && process.env.CI === "true", "Run the browser checks in GitHub Actions.")
 assert(site !== undefined, "checks.config.ts must declare a browser site")
 
+const port = await pickPort()
 const directory = await mkdtemp(join(tmpdir(), "reels-browser-"))
 try {
-  process.exitCode = await runBrowserChecks(directory, site)
+  process.exitCode = await runBrowserChecks(directory, site, port)
 } finally {
   await Promise.all([rm(directory, { recursive: true, force: true }), rm(site, { recursive: true, force: true })])
 }
