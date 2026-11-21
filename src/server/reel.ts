@@ -85,14 +85,19 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray
   yield* fs.writeFileString(`${place.work}/reel.json`, yield* encodeRecord({ made, video, parts }))
   yield* fs.rename(`${place.work}/reel.mp4`, place.video(video))
   yield* Effect.uninterruptible(fs.rename(`${place.work}/reel.json`, place.record))
-  yield* sweepReel(dir)
 })
 
 export const buildReel = Effect.fn("Reel.build")(function*(dir: string, clips: ReadonlyArray<Clip>, onDone: (share: number) => Effect.Effect<void>) {
   const fs = yield* FileSystem.FileSystem
-  yield* encodeReel(dir, clips, onDone).pipe(Effect.ensuring(fs.remove(reelPlaces(dir).work, { recursive: true, force: true }).pipe(
-    Effect.catch((error) => Effect.logError("the half-built reel parts were not removed", error))
-  )))
+  const cleanup = Effect.andThen(
+    fs.remove(reelPlaces(dir).work, { recursive: true, force: true }).pipe(
+      Effect.catch((error) => Effect.logError("the half-built reel parts were not removed", error))
+    ),
+    sweepReel(dir).pipe(
+      Effect.catch((error) => Effect.logError("the unpublished reel video was not removed", error))
+    )
+  )
+  yield* encodeReel(dir, clips, onDone).pipe(Effect.ensuring(cleanup))
 })
 
 export const readReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, job: ReelView["job"]) {

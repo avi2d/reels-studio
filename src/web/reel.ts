@@ -164,6 +164,8 @@ export const reelPane = (projectId: string, hooks: ReelHooks): {
   player.addEventListener("play", hooks.playing)
 
   const edited = (): void => {
+    state.next += 1
+    state.applied = state.next
     state.dirty = true
     make.disabled = true
     hooks.note({ note: "", done: false })
