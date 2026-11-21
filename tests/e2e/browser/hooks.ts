@@ -115,7 +115,7 @@ const attachment: ProductCheck = {
     await createProject(page, "Ролик с картинкой")
     await page.getByRole("button", { name: "Чат", exact: true }).click()
     const [chooser] = await Promise.all([
-      page.waitForEvent("filechooser"),
+      page.waitForEvent("filechooser", { timeout }),
       page.getByRole("button", { name: "Приложить файлы", exact: true }).click()
     ])
     await chooser.setFiles(join(setting("REELS_BROWSER_DIR"), CHAT_PICTURE))
@@ -126,7 +126,8 @@ const attachment: ProductCheck = {
     ])
     assert(sent.ok(), `Chat refused the picture: ${sent.status()}`)
     await page.getByText(CHAT_REPLY, { exact: true }).waitFor()
-    await sent.finished()
+    await page.getByRole("status").waitFor({ state: "detached", timeout })
+    assert.equal(await page.getByText("Ответ не дошёл").count(), 0, "The chat reply did not finish")
     await assertOriginal(projectFolder(page), "attached", CHAT_PICTURE)
     await page.reload()
     await page.getByRole("button", { name: "Чат", exact: true }).click()
