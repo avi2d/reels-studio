@@ -9,12 +9,10 @@ import { homeView } from "./home.ts"
 import { startKit } from "./kit.ts"
 import { libraryPicker } from "./library.ts"
 import { shrinkWhenScrolledPast } from "./mini.ts"
-import { oneAfterAnother } from "./queue.ts"
 import { askToRemove } from "./remove.ts"
 import { run } from "./run.ts"
 import { stageRail, type StageId, type StageNote } from "./stages.ts"
 import { timelineCard, type Status } from "./timeline.ts"
-import { upload, videoShelf, type Progress } from "./upload.ts"
 import { videosCard } from "./videos.ts"
 
 const app = document.querySelector("#app") ?? document.body
@@ -33,103 +31,20 @@ const showFailure = (message: string): void => {
 
 const fileList = (project: Api.ProjectView): HTMLElement =>
   project.files.length === 0
-    ? h("p", { class: "muted" }, "Видео ещё не загружено.")
+    ? h("p", { class: "muted" }, "Видео ещё не добавлено.")
     : h("ul", { class: "files" }, ...project.files.map((file) => h("li", {}, h("span", {}, file.name), h("span", {}, formatSize(file.size)))))
 
-const PICK_FIRST = "Загрузить видео"
-const PICK_MORE = "Добавить ещё видео"
 
-const enqueue = oneAfterAnother((work: Effect.Effect<void>) => work)
-const uploadsByProject = new Map<string, Array<HTMLElement>>()
-const refreshByProject = new Map<string, () => Effect.Effect<void, Api.Failed>>()
-
-const uploadKey = (file: File): string => `${file.name}:${file.size}:${file.lastModified}`
-
-const uploadRow = (projectId: string, file: File) => {
-  const bar = h("progress", { max: "1", value: "0" })
-  const status = h("p", { class: "muted", role: "status" }, "Ждёт своей очереди.")
-  const node = h("li", { class: "upload" },
-    h("div", { class: "name" }, h("span", {}, file.name), h("span", {}, formatSize(file.size))), bar, status)
-  node.dataset.key = uploadKey(file)
-  const onProgress = (progress: Progress): void => {
-    if (progress.waiting) {
-      status.textContent = "Связь пропала. Загрузка продолжится сама, когда связь вернётся."
-      return
-    }
-    bar.value = progress.sent / progress.total
-    const percent = Math.floor((progress.sent / progress.total) * 100)
-    status.textContent = `Загружено ${formatSize(progress.sent)} из ${formatSize(progress.total)}, ${percent}%`
-  }
-  const failUpload = (message: string): void => {
-    node.dataset.failed = "true"
-    status.className = "error"
-    bar.hidden = file.size === 0
-    status.textContent = file.size === 0
-      ? message
-      : `${message} Выберите тот же файл ещё раз, и загрузка продолжится с того же места.`
-  }
-  const work = upload(videoShelf(projectId), file, onProgress).pipe(
-    Effect.flatMap(() => (refreshByProject.get(projectId)?.() ?? Effect.void).pipe(
-      Effect.map(() => {
-        for (const kept of uploadsByProject.get(projectId) ?? []) {
-          if (kept === node || kept.dataset.uploaded === "true") kept.remove()
-        }
-        uploadsByProject.set(projectId, (uploadsByProject.get(projectId) ?? []).filter((kept) => kept !== node && kept.dataset.uploaded !== "true"))
-      }),
-      Effect.catchTag("Failed", () => Effect.sync(() => {
-        node.dataset.uploaded = "true"
-        status.textContent = "Видео загружено. Список обновится при следующей загрузке."
-      }))
-    )),
-    Effect.catch((error) => Effect.sync(() => {
-      failUpload(error.message)
-    })),
-    Effect.catchDefect(() => Effect.sync(() => {
-      failUpload("Не получилось загрузить.")
-    }))
-  )
-  return { node, work }
-}
-
-const videoCard = (project: Api.ProjectView, onUploaded: () => void): HTMLElement => {
+const videoCard = (project: Api.ProjectView, onAdded: () => void): HTMLElement => {
   const files = h("div", {}, fileList(project))
-  const rows = h("ul", { class: "uploads" })
-  if (!uploadsByProject.has(project.id)) uploadsByProject.set(project.id, [])
-  rows.append(...(uploadsByProject.get(project.id) ?? []))
-  const input = h("input", { class: "file-input", name: "videos", type: "file", accept: "video/*", multiple: true })
-  const label = h("span", {}, project.files.length === 0 ? PICK_FIRST : PICK_MORE)
   const refresh = (): Effect.Effect<void, Api.Failed> =>
     Effect.map(Api.getProject(project.id), (fresh) => {
       files.replaceChildren(fileList(fresh.project))
-      label.textContent = PICK_MORE
-      onUploaded()
+      onAdded()
     })
-  refreshByProject.set(project.id, refresh)
   const picker = libraryPicker(project.id, refresh)
   picker.reload()
-  const add = (chosen: ReadonlyArray<File>): void => {
-    const made: Array<{ node: HTMLElement; work: Effect.Effect<void> }> = []
-    for (const file of chosen) {
-      const key = uploadKey(file)
-      const live = uploadsByProject.get(project.id) ?? []
-      if (live.some((candidate) => candidate.dataset.key === key && candidate.dataset.failed !== "true")) continue
-      const row = uploadRow(project.id, file)
-      const stale = live.filter((candidate) => candidate.dataset.key === key && candidate.dataset.failed === "true")
-      for (const old of stale) old.remove()
-      uploadsByProject.set(project.id, [...(uploadsByProject.get(project.id) ?? []).filter((candidate) => !stale.includes(candidate)), row.node])
-      made.push(row)
-    }
-    if (made.length === 0) return
-    rows.append(...made.map((row) => row.node))
-    enqueue(made.map((row) => row.work))
-  }
-  input.addEventListener("change", () => {
-    add([...(input.files ?? [])])
-    input.value = ""
-  })
-  return h("section", { class: "card" }, h("h2", {}, "Видео"), files, rows,
-    h("div", { class: "row" }, h("label", { class: "button" }, label, input), picker.open), picker.panel,
-    h("p", { class: "muted" }, "Можно выбрать сразу несколько видео: они загрузятся по очереди. Не закрывайте страницу, пока идёт загрузка. Исходные видео студия не меняет."))
+  return h("section", { class: "card" }, h("h2", {}, "Видео"), files, picker.hint, h("div", { class: "row" }, picker.open), picker.panel)
 }
 
 const countNote = (count: number): string => count === 0 ? "" : String(count)

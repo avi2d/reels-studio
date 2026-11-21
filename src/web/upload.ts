@@ -64,7 +64,7 @@ export interface Shelf {
   readonly key: string
 }
 
-export const videoShelf = (projectId: string): Shelf => ({ endpoint: `/api/projects/${projectId}/uploads`, key: projectId })
+export const libraryShelf: Shelf = { endpoint: "/api/library/uploads", key: "library" }
 
 export const attachmentShelf = (projectId: string): Shelf => ({ endpoint: `/api/projects/${projectId}/attachments`, key: `${projectId}:attached` })
 

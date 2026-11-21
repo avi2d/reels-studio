@@ -1,33 +1,45 @@
 import { Effect } from "effect"
-import type { LibraryVideo } from "../shared/library.ts"
+import { type LibraryVideo, type Offer, pickOf } from "../shared/library.ts"
 import * as Api from "./api.ts"
 import type WaButton from "@awesome.me/webawesome/dist/components/button/button.js"
 import { button, setExpanded } from "./controls.ts"
 import { h } from "./dom.ts"
-import { addLabel, formatLength, formatSize, fromProjects } from "./format.ts"
+import { addLabel, formatLength, formatSize, fromProjects, listeningNote } from "./format.ts"
+
+const POLL_MS = 4000
+
+const detailsOf = (video: LibraryVideo): string => {
+  const facts = `${formatLength(video.duration)} · ${formatSize(video.size)}`
+  return video.from === "library" ? facts : `${facts} · ${fromProjects(video.titles)}`
+}
 
 const choice = (video: LibraryVideo, onChange: () => void): { readonly node: HTMLElement; readonly box: HTMLInputElement } => {
   const box = h("input", { type: "checkbox", change: onChange })
-  const details = `${formatLength(video.duration)} · ${formatSize(video.size)} · ${fromProjects(video.titles)}`
-  const node = h("li", {}, h("label", { class: "choice" }, box, h("span", {}, h("span", { class: "name" }, video.name), h("span", { class: "muted" }, details))))
+  const node = h("li", {}, h("label", { class: "choice" }, box, h("span", {}, h("span", { class: "name" }, video.name), h("span", { class: "muted" }, detailsOf(video)))))
   return { node, box }
 }
 
-export const libraryPicker = (
-  projectId: string,
-  onAdded: () => Effect.Effect<void, Api.Failed>
-): { readonly open: WaButton; readonly panel: HTMLElement; readonly reload: () => void } => {
-  const open = button("quiet", { hidden: true }, "Взять из других роликов")
+export interface Picker {
+  readonly open: WaButton
+  readonly panel: HTMLElement
+  readonly hint: HTMLElement
+  readonly reload: () => void
+}
+
+export const libraryPicker = (projectId: string, onAdded: () => Effect.Effect<void, Api.Failed>): Picker => {
+  const open = button("primary", { hidden: true }, "Выбрать видео")
   setExpanded(open, false)
+  const hint = h("p", { class: "muted hint", hidden: true }, "Загрузите видео на ", h("a", { href: "#/" }, "главной странице"), ", и его можно будет добавить в ролик.")
   const list = h("ul", { class: "choices" })
-  const add = button("normal", { disabled: true }, addLabel(0))
+  const listening = h("p", { class: "muted", role: "status" })
+  const add = button("primary", { disabled: true }, addLabel(0))
   const cancel = button("quiet", {}, "Отмена")
   const problem = h("p", { class: "error", role: "alert" })
   const panel = h("fieldset", { class: "picker", hidden: true },
-    h("legend", {}, "Видео из других роликов"),
-    h("p", { class: "muted" }, "Студия уже прослушала эти видео. Они появятся в этом ролике сразу, вместе с текстом, без новой загрузки."),
-    list, h("div", { class: "row" }, add, cancel), problem)
-  const state = { chosen: new Map<HTMLInputElement, LibraryVideo>(), shown: false }
+    h("legend", {}, "Загруженные видео"),
+    h("p", { class: "muted" }, "Студия уже прослушала эти видео. Отмеченные появятся в ролике сразу, вместе с текстом."),
+    list, listening, h("div", { class: "row" }, add, cancel), problem)
+  const state = { chosen: new Map<HTMLInputElement, LibraryVideo>(), shown: false, timer: 0 }
   const recount = (): void => {
     const count = [...state.chosen.keys()].filter((box) => box.checked).length
     add.textContent = addLabel(count)
@@ -39,30 +51,41 @@ export const libraryPicker = (
     setExpanded(open, shown)
     problem.textContent = ""
   }
-  const fill = (videos: ReadonlyArray<LibraryVideo>): void => {
+  const fill = ({ videos, listening: waiting }: Offer): void => {
+    const kept = new Set([...state.chosen].filter(([box]) => box.checked).map(([, video]) => JSON.stringify(pickOf(video))))
     const made = videos.map((video) => ({ video, ...choice(video, recount) }))
+    for (const { box, video } of made) box.checked = kept.has(JSON.stringify(pickOf(video)))
     state.chosen = new Map(made.map(({ box, video }) => [box, video]))
     list.replaceChildren(...made.map(({ node }) => node))
-    open.hidden = videos.length === 0
-    if (videos.length === 0 && problem.textContent === "") show(false)
+    list.hidden = videos.length === 0
+    listening.textContent = listeningNote(waiting)
+    const offered = videos.length > 0 || waiting > 0
+    open.hidden = !offered
+    hint.hidden = offered
+    if (!offered && problem.textContent === "") show(false)
     recount()
   }
   const reload = (): void => {
+    globalThis.clearTimeout(state.timer)
     Effect.runFork(Api.getLibrary(projectId).pipe(
-      Effect.map(({ videos }) => { fill(videos) }),
+      Effect.map((offer) => {
+        fill(offer)
+        if (offer.listening > 0 && open.isConnected) state.timer = Number(globalThis.setTimeout(reload, POLL_MS))
+      }),
       Effect.catchTag("Failed", () => Effect.void)
     ))
   }
   open.addEventListener("click", () => { show(!state.shown) })
   cancel.addEventListener("click", () => { show(false) })
   add.addEventListener("click", () => {
-    const picks = [...state.chosen].filter(([box]) => box.checked).map(([, video]) => ({ project: video.project, name: video.name }))
+    const picks = [...state.chosen].filter(([box]) => box.checked).map(([, video]) => pickOf(video))
     add.disabled = true
     add.textContent = "Добавляем…"
     problem.textContent = ""
     Effect.runFork(Api.addVideos(projectId, picks).pipe(
       Effect.andThen(onAdded()),
       Effect.map(() => {
+        for (const box of state.chosen.keys()) box.checked = false
         show(false)
         reload()
       }),
@@ -77,5 +100,5 @@ export const libraryPicker = (
         ))
     ))
   })
-  return { open, panel, reload }
+  return { open, panel, hint, reload }
 }

@@ -73,9 +73,11 @@ To serve a newer `main`:
 
 How the studio hears a video lives in [How the studio hears a video](docs/how-the-studio-hears-a-video.md).
 
-## Reuse a video and delete a video folder
+## Upload a video, reuse it and delete a video folder
 
-The «Видео» card offers the videos the studio has already heard in other video folders.
+The person uploads videos only on the main page, with the «Загрузить видео» button next to «Новый ролик».
+The uploaded videos go into one shared list in `projects/.library`, and the studio hears each of them there.
+Inside a reel, the «Выбрать видео» button of the «Видео» card offers the heard videos from that list and from other video folders.
 A picked video joins the folder at once with its text and preview, without a second upload or transcription.
 The studio adds a hard link to the original and to the preview, so the bytes of a video stay on disk once.
 It copies the two transcript files, which are small.

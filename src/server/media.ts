@@ -1,9 +1,10 @@
 import { type Crypto, Cause, Context, Deferred, Effect, Exit, FileSystem, Layer, Option, Ref, Semaphore } from "effect"
 import type { ChildProcessSpawner } from "effect/process"
-import type { LibraryVideo, Pick } from "../shared/library.ts"
+import type { Offer, Pick, UploadedVideo } from "../shared/library.ts"
 import type { VideoView } from "../shared/plan.ts"
 import { mergeEdits as joinEdits, type Edits, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
 import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
+import { libraryDir, openLibrary } from "./library.ts"
 import { GazeFailed, listen, look, places, previewIsFresh, readPlan, readTranscript, refreshPreview, type Job } from "./media-jobs.ts"
 import { Projects } from "./projects.ts"
 import { gatherLibrary, heardIn, keysIn, reuse as reuseOne, sourceNames } from "./reuse.ts"
@@ -129,6 +130,67 @@ const view = Effect.fnUntraced(function*(unheard: Unheard, job: Job) {
 
 type MediaContext = FileSystem.FileSystem | Crypto.Crypto | Settings | ChildProcessSpawner.ChildProcessSpawner
 
+const videosIn = (unheard: Unheard, dir: string) =>
+  Effect.flatMap(sourceNames(dir), (names) => Effect.forEach(names, (name) => view(unheard, { dir, name })))
+
+const listenAgain = Effect.fnUntraced(function*(unheard: Unheard, dir: string, name: string, missing: string) {
+  const names = yield* sourceNames(dir)
+  if (!names.includes(name)) return yield* notFound(missing)
+  const job: Job = { dir, name }
+  yield* Ref.update(unheard, (set) => new Set([...set].filter((key) => key !== keyOf(job))))
+  return yield* view(unheard, job)
+})
+
+const asUploaded = Effect.fnUntraced(function*(dir: string, video: VideoView) {
+  const fs = yield* FileSystem.FileSystem
+  const size = Number((yield* fs.stat(places({ dir, name: video.name }).source)).size)
+  const uploaded: UploadedVideo = video.state === "ready"
+    ? { name: video.name, size, state: "ready", duration: video.transcript.duration }
+    : { name: video.name, size, state: video.state }
+  return uploaded
+})
+
+const makeShelves = (projects: Projects["Service"], unheard: Unheard, context: Context.Context<MediaContext>) => {
+  const uploaded = Effect.gen(function*() {
+    const dir = yield* openLibrary
+    return yield* Effect.forEach(yield* videosIn(unheard, dir), (video) => asUploaded(dir, video))
+  }).pipe(orBroken, Effect.provideContext(context))
+
+  const retryUploaded = Effect.fn("Media.retryUploaded")(function*(name: string) {
+    const dir = yield* openLibrary
+    return yield* asUploaded(dir, yield* listenAgain(unheard, dir, name, "Такого загруженного видео нет"))
+  }, orBroken, Effect.provideContext(context))
+
+  const library = Effect.fn("Media.library")(function*(id: string) {
+    const here = yield* keysIn(yield* projects.folder(id))
+    const shared = libraryDir((yield* Settings).projectsDir)
+    const others = (yield* projects.list).filter((project) => project.id !== id)
+    const inReels = yield* Effect.forEach(others, (project) =>
+      Effect.flatMap(projects.folder(project.id), (dir) => heardIn(dir, { from: "reel", project: project.id, titles: [project.title] })).pipe(
+        Effect.tapError((error) => error instanceof ApiError && error.status === 404 ? Effect.void : Effect.logError("the library skipped a folder", error)),
+        Effect.orElseSucceed(() => [])))
+    const inLibrary = yield* heardIn(shared, { from: "library" }).pipe(Effect.orElseSucceed(() => []))
+    const waiting = yield* videosIn(unheard, shared).pipe(Effect.orElseSucceed((): ReadonlyArray<VideoView> => []))
+    const offer: Offer = {
+      videos: gatherLibrary(here, [...inLibrary, ...inReels.flat()]),
+      listening: waiting.filter((video) => video.state === "waiting").length
+    }
+    return offer
+  }, orBroken, Effect.provideContext(context))
+
+  const reuse = Effect.fn("Media.reuse")(function*(id: string, picks: ReadonlyArray<Pick>) {
+    const dir = yield* projects.folder(id)
+    yield* Effect.forEach(picks, (pick) => Effect.gen(function*() {
+      if (pick.from === "reel" && pick.project === id) return yield* badRequest("Это видео уже есть в ролике")
+      const from = pick.from === "library" ? yield* openLibrary : yield* projects.folder(pick.project)
+      if (!(yield* sourceNames(from)).includes(pick.name)) return yield* notFound("Такого видео уже нет")
+      yield* reuseOne({ dir: from, name: pick.name }, dir)
+    }), { discard: true })
+  }, orUnavailable("the reuse failed", "Не получилось добавить видео. Попробуйте ещё раз."), Effect.provideContext(context))
+
+  return { uploaded, retryUploaded, library, reuse }
+}
+
 const makeExchange = (
   projects: Projects["Service"],
   context: Context.Context<MediaContext>
@@ -173,8 +235,10 @@ export class Media extends Context.Service<Media, {
   readonly videos: (id: string) => Effect.Effect<ReadonlyArray<VideoView>, ApiError>
   readonly preview: (id: string, name: string) => Effect.Effect<string, ApiError>
   readonly retry: (id: string, name: string) => Effect.Effect<VideoView, ApiError>
-  readonly library: (id: string) => Effect.Effect<ReadonlyArray<LibraryVideo>, ApiError>
+  readonly library: (id: string) => Effect.Effect<Offer, ApiError>
   readonly reuse: (id: string, picks: ReadonlyArray<Pick>) => Effect.Effect<void, ApiError>
+  readonly uploaded: Effect.Effect<ReadonlyArray<UploadedVideo>, ApiError>
+  readonly retryUploaded: (name: string) => Effect.Effect<UploadedVideo, ApiError>
   readonly timeline: (id: string) => Effect.Effect<TimelineView, ApiError>
   readonly exchangeEdits: <A>(id: string, compute: (current: Edits) => { readonly edits: Edits; readonly value: A }) => Effect.Effect<A, ApiError>
   readonly mergeEdits: (id: string, base: Edits, local: Edits) => Effect.Effect<Edits, ApiError>
@@ -200,9 +264,7 @@ export class Media extends Context.Service<Media, {
       yield* Effect.forkScoped(Effect.forever(guarded).pipe(Effect.provideContext(context)))
 
       const videos = Effect.fn("Media.videos")(function*(id: string) {
-        const dir = yield* projects.folder(id)
-        const names = yield* sourceNames(dir)
-        return yield* Effect.forEach(names, (name) => view(unheard, { dir, name }))
+        return yield* videosIn(unheard, yield* projects.folder(id))
       }, orBroken, Effect.provideContext(context))
 
       const preview = Effect.fn("Media.preview")(function*(id: string, name: string) {
@@ -215,33 +277,10 @@ export class Media extends Context.Service<Media, {
       }, orBroken, Effect.provideContext(context))
 
       const retry = Effect.fn("Media.retry")(function*(id: string, name: string) {
-        const dir = yield* projects.folder(id)
-        const names = yield* sourceNames(dir)
-        if (!names.includes(name)) return yield* notFound("Такого видео в ролике нет")
-        const job: Job = { dir, name }
-        yield* Ref.update(unheard, (set) => new Set([...set].filter((key) => key !== keyOf(job))))
-        return yield* view(unheard, job)
+        return yield* listenAgain(unheard, yield* projects.folder(id), name, "Такого видео в ролике нет")
       }, orBroken, Effect.provideContext(context))
 
-      const library = Effect.fn("Media.library")(function*(id: string) {
-        const here = yield* keysIn(yield* projects.folder(id))
-        const others = (yield* projects.list).filter((project) => project.id !== id)
-        const found = yield* Effect.forEach(others, (project) =>
-          Effect.flatMap(projects.folder(project.id), (dir) => heardIn(project, dir)).pipe(
-            Effect.tapError((error) => error instanceof ApiError && error.status === 404 ? Effect.void : Effect.logError("the library skipped a folder", error)),
-            Effect.orElseSucceed(() => [])))
-        return gatherLibrary(here, found.flat())
-      }, orBroken, Effect.provideContext(context))
-
-      const reuse = Effect.fn("Media.reuse")(function*(id: string, picks: ReadonlyArray<Pick>) {
-        const dir = yield* projects.folder(id)
-        yield* Effect.forEach(picks, (pick) => Effect.gen(function*() {
-          if (pick.project === id) return yield* badRequest("Это видео уже есть в ролике")
-          const from = yield* projects.folder(pick.project)
-          if (!(yield* sourceNames(from)).includes(pick.name)) return yield* notFound("Такого видео в том ролике уже нет")
-          yield* reuseOne({ dir: from, name: pick.name }, dir)
-        }), { discard: true })
-      }, orUnavailable("the reuse failed", "Не получилось добавить видео. Попробуйте ещё раз."), Effect.provideContext(context))
+      const { uploaded, retryUploaded, library, reuse } = makeShelves(projects, unheard, context)
 
       const timeline = Effect.fn("Media.timeline")(function*(id: string) {
         const dir = yield* projects.folder(id)
@@ -265,7 +304,7 @@ export class Media extends Context.Service<Media, {
           () => Ref.update(work, (state) => ({ ...state, closed: new Set([...state.closed].filter((other) => other !== dir)) }))
         )
 
-      return Media.of({ videos, preview, retry, library, reuse, timeline, exchangeEdits, mergeEdits, withoutWork })
+      return Media.of({ videos, preview, retry, library, reuse, uploaded, retryUploaded, timeline, exchangeEdits, mergeEdits, withoutWork })
     })
   )
 }

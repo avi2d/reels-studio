@@ -1,7 +1,7 @@
 import { Data, Effect, Option, Schema } from "effect"
 import { BriefView } from "../shared/brief.ts"
 import { Message } from "../shared/chat.ts"
-import { LibraryVideo, type Pick } from "../shared/library.ts"
+import { Offer, type Pick, UploadedVideo } from "../shared/library.ts"
 import { VideoView } from "../shared/plan.ts"
 import { Edits, TimelinePage } from "../shared/timeline.ts"
 
@@ -103,10 +103,15 @@ export const getTimeline = (id: string): Effect.Effect<TimelinePage, Failed> =>
 export const saveEdits = (id: string, base: Edits, edits: Edits): Effect.Effect<Edits, Failed> =>
   call(Edits, `/api/projects/${id}/timeline`, { ...post({ base, edits }), method: "PUT" })
 
-const Library = Schema.Struct({ videos: Schema.Array(LibraryVideo) })
+export const getLibrary = (id: string): Effect.Effect<Offer, Failed> =>
+  call(Offer, `/api/projects/${id}/library`)
 
-export const getLibrary = (id: string): Effect.Effect<typeof Library.Type, Failed> =>
-  call(Library, `/api/projects/${id}/library`)
+const Uploaded = Schema.Struct({ videos: Schema.Array(UploadedVideo) })
+
+export const getUploaded: Effect.Effect<typeof Uploaded.Type, Failed> = call(Uploaded, "/api/library")
+
+export const retryUploaded = (name: string): Effect.Effect<void, Failed> =>
+  call(Schema.Struct({ video: UploadedVideo }), `/api/library/${encodeURIComponent(name)}/retry`, { method: "POST" }).pipe(Effect.asVoid)
 
 export const addVideos = (id: string, videos: ReadonlyArray<Pick>): Effect.Effect<typeof OneProject.Type, Failed> =>
   call(OneProject, `/api/projects/${id}/videos`, post({ videos }))

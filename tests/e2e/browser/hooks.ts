@@ -27,26 +27,53 @@ const projectFolder = (page: Page): string => {
   return join(setting("REELS_BROWSER_DIR"), "projects", id)
 }
 
-const assertOriginal = async (project: string, shelf: "source" | "attached", name: string): Promise<void> => {
-  const uploaded = await Bun.file(join(project, shelf, name)).bytes()
+const assertOriginal = async (folder: string, shelf: "source" | "attached", name: string): Promise<void> => {
+  const uploaded = await Bun.file(join(folder, shelf, name)).bytes()
   const fixture = await Bun.file(join(setting("REELS_BROWSER_DIR"), name)).bytes()
   assert.deepEqual(uploaded, fixture, `The studio did not keep the original ${name}`)
 }
 
+const listedNames = (body: unknown): ReadonlyArray<unknown> =>
+  typeof body === "object" && body !== null && "videos" in body && Array.isArray(body.videos)
+    ? body.videos.map((video: unknown) => typeof video === "object" && video !== null && "name" in video ? video.name : undefined)
+    : []
+
+const uploadOnHome = async (page: Page): Promise<void> => {
+  page.setDefaultTimeout(timeout)
+  const [listed] = await Promise.all([
+    page.waitForResponse((response) => new URL(response.url()).pathname === "/api/library", { timeout }),
+    page.goto(setting("REELS_BROWSER_URL"))
+  ])
+  if (!listedNames(await listed.json()).includes(SOURCE_VIDEO)) {
+    await page.locator('input[type="file"][accept="video/*"]').setInputFiles(join(setting("REELS_BROWSER_DIR"), SOURCE_VIDEO))
+  }
+  await page.getByRole("region", { name: "Загруженные видео" }).getByRole("listitem")
+    .filter({ hasText: SOURCE_VIDEO }).filter({ hasText: "Видео можно добавить в ролик." }).waitFor()
+}
+
+const addFromList = async (page: Page): Promise<void> => {
+  await page.getByRole("button", { name: "Выбрать видео", exact: true }).click()
+  await page.getByRole("checkbox", { name: new RegExp(`^${SOURCE_VIDEO}`, "u") }).check()
+  await page.getByRole("button", { name: "Добавить 1 видео", exact: true }).click()
+  await page.locator(".files").getByText(SOURCE_VIDEO, { exact: true }).waitFor()
+}
+
 const projectAndUpload: ProductCheck = {
-  name: "creation and upload keep the reel and its original bytes after leaving the page",
+  name: "a video uploaded on the main page reaches a reel only by picking it, with its original bytes",
   run: async (page) => {
     const title = "Ролик для монтажа"
+    await uploadOnHome(page)
+    await assertOriginal(join(setting("REELS_BROWSER_DIR"), "projects", ".library"), "source", SOURCE_VIDEO)
     await createProject(page, title)
-    await page.locator('input[type="file"][accept="video/*"]').setInputFiles(join(setting("REELS_BROWSER_DIR"), SOURCE_VIDEO))
-    await page.locator(".files").getByText(SOURCE_VIDEO, { exact: true }).waitFor()
+    assert.equal(await page.locator('input[type="file"][accept="video/*"]').count(), 0, "A reel must not offer its own video upload")
+    await addFromList(page)
     await page.getByRole("link", { name: "Все ролики" }).click()
     const tile = page.getByRole("link", { name: new RegExp(title, "u") })
     await tile.getByText("Видео: 1", { exact: true }).waitFor()
     await tile.click()
     await page.getByRole("heading", { name: title, exact: true }).waitFor()
     await assertOriginal(projectFolder(page), "source", SOURCE_VIDEO)
-    return { targets: ["created reel in the list", "uploaded original after reopening"], found: [] }
+    return { targets: ["uploaded original in the shared list", "reel without its own upload", "picked original after reopening"], found: [] }
   }
 }
 
@@ -59,8 +86,9 @@ const saveEdit = async (page: Page, edit: () => Promise<void>): Promise<void> =>
 }
 
 const buildBlocks = async (page: Page): Promise<void> => {
+  await uploadOnHome(page)
   await createProject(page, "Сборка ролика")
-  await page.locator('input[type="file"][accept="video/*"]').setInputFiles(join(setting("REELS_BROWSER_DIR"), SOURCE_VIDEO))
+  await addFromList(page)
   await page.locator('wa-tab[panel="takes"]').click()
   await page.getByRole("button", { name: "Собрать блоки", exact: true }).click()
   await page.getByText("Блоки готовы.", { exact: true }).waitFor()
