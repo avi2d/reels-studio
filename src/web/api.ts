@@ -3,6 +3,7 @@ import { BriefView } from "../shared/brief.ts"
 import { Message } from "../shared/chat.ts"
 import { Offer, type Pick, UploadedVideo } from "../shared/library.ts"
 import { VideoView } from "../shared/plan.ts"
+import { ReelView } from "../shared/reel.ts"
 import { Edits, TimelinePage } from "../shared/timeline.ts"
 
 export class Failed extends Data.TaggedError("Failed")<{ readonly message: string }> {}
@@ -115,6 +116,21 @@ export const retryUploaded = (name: string): Effect.Effect<void, Failed> =>
 
 export const addVideos = (id: string, videos: ReadonlyArray<Pick>): Effect.Effect<typeof OneProject.Type, Failed> =>
   call(OneProject, `/api/projects/${id}/videos`, post({ videos }))
+
+export const getReel = (id: string): Effect.Effect<ReelView, Failed> =>
+  call(ReelView, `/api/projects/${id}/reel`)
+
+export const buildReel = (id: string): Effect.Effect<ReelView, Failed> =>
+  call(ReelView, `/api/projects/${id}/reel`, { method: "POST" })
+
+export const cancelReel = (id: string): Effect.Effect<ReelView, Failed> =>
+  call(ReelView, `/api/projects/${id}/reel/build`, { method: "DELETE" })
+
+export const reelUrl = (id: string, made: string): string =>
+  `/api/projects/${id}/reel/file?made=${encodeURIComponent(made)}`
+
+export const reelDownloadUrl = (id: string, made: string): string =>
+  `/api/projects/${id}/reel/download?made=${encodeURIComponent(made)}`
 
 export const removeProject = (id: string): Effect.Effect<{ readonly removed: string }, Failed> =>
   call(Schema.Struct({ removed: Schema.String }), `/api/projects/${id}`, { method: "DELETE" })
