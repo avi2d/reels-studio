@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import type { UploadedVideo } from "../shared/library.ts"
+import { HOME_PATH } from "../shared/page.ts"
 import * as Api from "./api.ts"
 import { button, focusWhenReady, iconButton, retryPair, tooltip, type Retry } from "./controls.ts"
 import { h } from "./dom.ts"
@@ -212,7 +213,7 @@ export const uploadedView = (): HTMLElement => {
     input.value = ""
   })
   queueMicrotask(refresh)
-  const back = iconButton("plain", "back", "Все ролики", { class: "back", href: "#/" })
+  const back = iconButton("plain", "back", "Все ролики", { class: "back", href: HOME_PATH })
   return h("div", { class: "home" },
     h("header", { class: "top" },
       back, tooltip(back, "videos-back", "Все ролики"), h("h1", { class: "brand fits" }, "Загруженные видео"),

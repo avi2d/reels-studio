@@ -1,4 +1,5 @@
 import { Effect } from "effect"
+import { VIDEOS_PATH, projectPath } from "../shared/page.ts"
 import * as Api from "./api.ts"
 import { button, iconButton } from "./controls.ts"
 import { h } from "./dom.ts"
@@ -6,7 +7,7 @@ import { formatDay } from "./format.ts"
 import { askToRemove } from "./remove.ts"
 import { run } from "./run.ts"
 
-const askForTitle = (): void => {
+const askForTitle = (onCreated: (id: string) => void): void => {
   const title = h("input", { type: "text", name: "title", maxlength: "120", required: true, autocomplete: "off", placeholder: "Например: нотариальный осмотр сайта" })
   const problem = h("p", { class: "error", role: "alert" })
   const create = button("primary", { type: "submit" }, "Создать ролик")
@@ -19,7 +20,7 @@ const askForTitle = (): void => {
       run(
         Effect.map(Api.createProject(title.value), ({ project }) => {
           dialog.close()
-          location.hash = `#/p/${project.id}`
+          onCreated(project.id)
         }),
         (message) => {
           problem.textContent = message
@@ -51,7 +52,7 @@ const cover = (project: Api.ProjectView): HTMLElement => {
 
 const tile = (project: Api.ProjectView, onRemoved: () => void): HTMLElement =>
   h("li", { class: project.stage === "created" ? "tile waits" : "tile" },
-    h("a", { href: `#/p/${project.id}` }, cover(project), h("b", {}, project.title), h("small", {}, formatDay(project.createdAt))),
+    h("a", { href: projectPath(project.id) }, cover(project), h("b", {}, project.title), h("small", {}, formatDay(project.createdAt))),
     iconButton("normal", "close", `Удалить ролик «${project.title}»`, {
       class: "del",
       size: "s",
@@ -67,12 +68,15 @@ const countsOf = (projects: ReadonlyArray<Api.ProjectView>): HTMLElement => {
     : h("span", { class: "sum waits" }, `Ждут видео: ${waiting} из ${projects.length}`)
 }
 
-export const homeView = (projects: ReadonlyArray<Api.ProjectView>, onRemoved: () => void): HTMLElement =>
+export const homeView = (projects: ReadonlyArray<Api.ProjectView>, on: {
+  readonly created: (id: string) => void
+  readonly removed: () => void
+}): HTMLElement =>
   h("div", { class: "home" },
     h("header", { class: "top" },
       h("h1", { class: "brand" }, "Студия Reels"),
       countsOf(projects),
-      h("div", { class: "actions" }, button("normal", { href: "#/videos" }, "Загрузить видео"), button("primary", { click: askForTitle }, "Новый ролик"))),
+      h("div", { class: "actions" }, button("normal", { href: VIDEOS_PATH }, "Загрузить видео"), button("primary", { click: () => { askForTitle(on.created) } }, "Новый ролик"))),
     projects.length === 0
       ? h("p", { class: "none" }, "Роликов пока нет. Загрузите видео, затем нажмите «Новый ролик» и назовите первый.")
-      : h("ul", { class: "grid" }, ...projects.map((project) => tile(project, onRemoved))))
+      : h("ul", { class: "grid" }, ...projects.map((project) => tile(project, on.removed))))

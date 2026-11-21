@@ -22,7 +22,7 @@ const createProject = async (page: Page, title: string): Promise<void> => {
 }
 
 const projectFolder = (page: Page): string => {
-  const id = /^#\/p\/([a-z0-9-]+)$/.exec(new URL(page.url()).hash)?.[1]
+  const id = /^\/p\/([a-z0-9-]+)$/.exec(new URL(page.url()).pathname)?.[1]
   assert(id !== undefined, "Creating a reel must open its project")
   return join(setting("REELS_BROWSER_DIR"), "projects", id)
 }
@@ -60,6 +60,31 @@ const addFromList = async (page: Page): Promise<void> => {
   await page.getByRole("checkbox", { name: new RegExp(`^${SOURCE_VIDEO}`, "u") }).check()
   await page.getByRole("button", { name: "Добавить 1 видео", exact: true }).click()
   await page.locator(".files").getByText(SOURCE_VIDEO, { exact: true }).waitFor()
+}
+
+const directVideos: ProductCheck = {
+  name: "opening /videos directly renders the uploaded videos page instead of returning 404",
+  run: async (page) => {
+    const address = new URL("/videos", setting("REELS_BROWSER_URL")).href
+    const response = await page.goto(address)
+    assert.equal(response?.status(), 200)
+    await page.getByRole("heading", { name: "Загруженные видео", exact: true }).waitFor()
+    assert.equal(page.url(), address)
+    return { targets: ["the uploaded videos page at /videos"], found: [] }
+  }
+}
+
+const savedVideosLink: ProductCheck = {
+  name: "opening a saved videos link does not leave #/videos in the address bar",
+  run: async (page) => {
+    const base = setting("REELS_BROWSER_URL")
+    await page.goto(base)
+    await page.getByRole("heading", { name: "Студия Reels", exact: true }).waitFor()
+    await page.goto(new URL("/#/videos", base).href)
+    await page.getByRole("heading", { name: "Загруженные видео", exact: true }).waitFor()
+    assert.equal(page.url(), new URL("/videos", base).href)
+    return { targets: ["the saved videos address opens /videos"], found: [] }
+  }
 }
 
 const projectAndUpload: ProductCheck = {
@@ -171,7 +196,7 @@ const attachment: ProductCheck = {
 
 const removeUploaded = async (page: Page): Promise<void> => {
   page.setDefaultTimeout(timeout)
-  await page.goto(new URL("#/videos", setting("REELS_BROWSER_URL")).href)
+  await page.goto(new URL("/videos", setting("REELS_BROWSER_URL")).href)
   const item = page.getByRole("region", { name: "Загруженные видео" }).getByRole("listitem").filter({ hasText: SOURCE_VIDEO })
   await item.getByRole("button", { name: `Удалить видео «${SOURCE_VIDEO}»`, exact: true }).click()
   const [removed] = await Promise.all([
@@ -196,4 +221,4 @@ const removal: ProductCheck = {
   }
 }
 
-export const checks = [projectAndUpload, preview, attachment, removal] satisfies readonly ProductCheck[]
+export const checks = [directVideos, savedVideosLink, projectAndUpload, preview, attachment, removal] satisfies readonly ProductCheck[]

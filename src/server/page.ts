@@ -1,5 +1,6 @@
 import { Data, Effect, FileSystem, Layer, Path } from "effect"
 import { HttpRouter, HttpServerResponse } from "effect/http"
+import { HOME_PATH, PROJECT_PREFIX, VIDEOS_PATH } from "../shared/page.ts"
 import { Settings } from "./settings.ts"
 
 class BundleFailed extends Data.TaggedError("BundleFailed")<{ readonly message: string }> {}
@@ -28,8 +29,11 @@ export const pageRoutes = Layer.unwrap(Effect.gen(function*() {
   const fonts = yield* Effect.forEach(FONTS, (name) =>
     Effect.map(fs.readFile(path.join(web, "fonts", name)), (bytes) =>
       HttpRouter.add("GET", `/fonts/${name}`, HttpServerResponse.uint8Array(bytes, { contentType: "font/woff2", headers: KEEP_A_DAY }))))
+  const page = HttpServerResponse.text(html, { contentType: "text/html; charset=utf-8", headers: NO_STORE })
   return Layer.mergeAll(
-    HttpRouter.add("GET", "/", HttpServerResponse.text(html, { contentType: "text/html; charset=utf-8", headers: NO_STORE })),
+    HttpRouter.add("GET", HOME_PATH, page),
+    HttpRouter.add("GET", VIDEOS_PATH, page),
+    HttpRouter.add("GET", `${PROJECT_PREFIX}:id`, page),
     HttpRouter.add("GET", "/app.css", HttpServerResponse.text(css, { contentType: "text/css; charset=utf-8", headers: NO_STORE })),
     HttpRouter.add("GET", "/app.js", HttpServerResponse.text(script, { contentType: "text/javascript; charset=utf-8", headers: NO_STORE })),
     ...fonts
