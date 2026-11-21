@@ -29,7 +29,7 @@ const blocks = {
 } satisfies Blocks
 
 const runUv = async (args: readonly string[]): Promise<void> => {
-  const script = args.at(-3)
+  const script = args.find((arg) => arg.endsWith(".py"))
   const output = args.at(-1)
   assert(output !== undefined, "uv must pass an output file")
   if (script?.endsWith("/transcribe.py") === true) {

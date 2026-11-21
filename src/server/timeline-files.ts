@@ -1,19 +1,31 @@
 import { Effect, FileSystem, Option, Result, Schema } from "effect"
-import type { Transcript } from "../shared/plan.ts"
+import type { Transcript, VideoView } from "../shared/plan.ts"
+import { Gathered } from "../shared/gather.ts"
 import { Blocks, Edits, NO_EDITS, soundBlocks, type Gaze, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
 import { places, readGaze, readTranscript } from "./media-jobs.ts"
 
 const decodeBlocks = Schema.decodeUnknownOption(Schema.fromJsonString(Blocks))
+const decodeGathered = Schema.decodeUnknownOption(Schema.fromJsonString(Gathered))
+
+export const readGathered = Effect.fnUntraced(function*(dir: string) {
+  const fs = yield* FileSystem.FileSystem
+  const file = `${dir}/gathered.json`
+  if (!(yield* fs.exists(file))) return undefined
+  return Option.getOrUndefined(decodeGathered(yield* fs.readFileString(file)))
+})
 const EditsFile = Schema.fromJsonString(Edits)
 const decodeEdits = Schema.decodeUnknownOption(EditsFile)
 const encodeEdits = Schema.encodeEffect(EditsFile)
 
-const readEdits = Effect.fnUntraced(function*(dir: string) {
+export const readEdits = Effect.fnUntraced(function*(dir: string) {
   const fs = yield* FileSystem.FileSystem
   const file = `${dir}/timeline.json`
   if (!(yield* fs.exists(file))) return NO_EDITS
   return Option.getOrElse(decodeEdits(yield* fs.readFileString(file)), () => NO_EDITS)
 })
+
+export const readyTranscripts = (videos: ReadonlyArray<VideoView>): ReadonlyMap<string, Transcript> =>
+  new Map(videos.flatMap((video): ReadonlyArray<readonly [string, Transcript]> => video.state === "ready" ? [[video.name, video.transcript]] : []))
 
 export const writeEdits = Effect.fnUntraced(function*(dir: string, edits: Edits) {
   const fs = yield* FileSystem.FileSystem

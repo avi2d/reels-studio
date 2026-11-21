@@ -1,8 +1,9 @@
 import { Data, Effect, Option, Schema } from "effect"
+import { BriefView } from "../shared/brief.ts"
 import { Message } from "../shared/chat.ts"
 import { LibraryVideo, type Pick } from "../shared/library.ts"
 import { VideoView } from "../shared/plan.ts"
-import { TimelineView, type Edits } from "../shared/timeline.ts"
+import { Edits, TimelinePage } from "../shared/timeline.ts"
 
 export class Failed extends Data.TaggedError("Failed")<{ readonly message: string }> {}
 export class Offline extends Data.TaggedError("Offline")<{}> {}
@@ -96,11 +97,11 @@ export const retryVideo = (id: string, name: string): Effect.Effect<void, Failed
 export const previewUrl = (id: string, name: string): string =>
   `/api/projects/${id}/videos/${encodeURIComponent(name)}/preview`
 
-export const getTimeline = (id: string): Effect.Effect<TimelineView, Failed> =>
-  call(TimelineView, `/api/projects/${id}/timeline`)
+export const getTimeline = (id: string): Effect.Effect<TimelinePage, Failed> =>
+  call(TimelinePage, `/api/projects/${id}/timeline`)
 
-export const saveEdits = (id: string, edits: Edits): Effect.Effect<{ readonly saved: string }, Failed> =>
-  call(Schema.Struct({ saved: Schema.String }), `/api/projects/${id}/timeline`, { ...post(edits), method: "PUT" })
+export const saveEdits = (id: string, base: Edits, edits: Edits): Effect.Effect<Edits, Failed> =>
+  call(Edits, `/api/projects/${id}/timeline`, { ...post({ base, edits }), method: "PUT" })
 
 const Library = Schema.Struct({ videos: Schema.Array(LibraryVideo) })
 
@@ -115,6 +116,12 @@ export const removeProject = (id: string): Effect.Effect<{ readonly removed: str
 
 export const postChat = (id: string, text: string, files: ReadonlyArray<string>, model: string, effort: Effort): Effect.Effect<Response, Offline> =>
   send(`/api/projects/${id}/chat`, post({ text, files, model, effort }))
+
+export const getBrief = (id: string): Effect.Effect<BriefView, Failed> =>
+  call(BriefView, `/api/projects/${id}/brief`)
+
+export const saveBrief = (id: string, text: string): Effect.Effect<BriefView, Failed> =>
+  call(BriefView, `/api/projects/${id}/brief`, { ...post({ text }), method: "PUT" })
 
 export const coverUrl = (id: string, name: string): string =>
   `/api/projects/${id}/attachments/${encodeURIComponent(name)}/cover`
