@@ -11,7 +11,7 @@ It owns the path from an uploaded original to a separate video for each platform
 
 ## The plan comes before any change
 
-- The studio shows a plan and waits for a yes before it cuts or renders, at the cost of one more message in every video.
+- The studio shows one plan for the whole reel and waits for one yes before it cuts or renders, then asks again only about words on the screen, outside material and her face, at the cost of changes the person sees after they are made.
 
 ## The original is never touched
 

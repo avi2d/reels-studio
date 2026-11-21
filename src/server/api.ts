@@ -1,10 +1,12 @@
 import { Effect, FileSystem, Layer, Option, Schema, Stream } from "effect"
 import { Pick } from "../shared/library.ts"
-import { Edits } from "../shared/timeline.ts"
+import { Edits, type TimelinePage } from "../shared/timeline.ts"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { ApiError, badRequest } from "./api-error.ts"
 import { Attachments } from "./attachments.ts"
+import { Brief } from "./brief.ts"
 import { Chat } from "./chat.ts"
+import { Gather } from "./gather.ts"
 import { allowedHosts, isAllowedHost, isHomeAddress, isSameOrigin } from "./home-network.ts"
 import { Media } from "./media.ts"
 import { Effort, Projects } from "./projects.ts"
@@ -32,6 +34,7 @@ const body = <A>(schema: Schema.ConstraintDecoder<A>) =>
   HttpServerRequest.schemaBodyJson(schema).pipe(Effect.mapError(() => badRequest("Запрос не разобран")))
 
 const NewProject = Schema.Struct({ title: Schema.String })
+const SaveEdits = Schema.Struct({ base: Edits, edits: Edits })
 
 const projects = Layer.mergeAll(
   HttpRouter.add("GET", "/api/projects", reply(Effect.gen(function*() {
@@ -51,9 +54,10 @@ const projects = Layer.mergeAll(
     const store = yield* Projects
     const talk = yield* Chat
     const media = yield* Media
+    const gather = yield* Gather
     const id = yield* param("id")
     const dir = yield* store.folder(id)
-    yield* talk.withoutTurn(id, media.withoutWork(dir, store.remove(id)))
+    yield* talk.withoutTurn(id, gather.withoutGather(id, media.withoutWork(dir, store.remove(id))))
     return json({ removed: id })
   })))
 )
@@ -64,6 +68,21 @@ const NewMessage = Schema.Struct({
   model: Schema.String,
   effort: Effort
 })
+
+const NewBrief = Schema.Struct({ text: Schema.String })
+
+const brief = Layer.mergeAll(
+  HttpRouter.add("GET", "/api/projects/:id/brief", reply(Effect.gen(function*() {
+    const store = yield* Brief
+    return json(yield* store.view(yield* param("id")))
+  }))),
+  HttpRouter.add("PUT", "/api/projects/:id/brief", reply(Effect.gen(function*() {
+    const store = yield* Brief
+    const id = yield* param("id")
+    yield* store.write(id, (yield* body(NewBrief)).text)
+    return json(yield* store.view(id))
+  })))
+)
 
 const KEEP_ALIVE = Stream.tick("15 seconds").pipe(Stream.map(() => ": \n\n"))
 
@@ -193,13 +212,17 @@ const videos = Layer.mergeAll(
   }))),
   HttpRouter.add("GET", "/api/projects/:id/timeline", reply(Effect.gen(function*() {
     const media = yield* Media
-    return json(yield* media.timeline(yield* param("id")))
+    const gather = yield* Gather
+    const id = yield* param("id")
+    const gathering = yield* gather.running(id)
+    const view = yield* media.timeline(id)
+    return json({ ...view, gathering, gatherFailed: yield* gather.failed(id) } satisfies TimelinePage)
   }))),
   HttpRouter.add("PUT", "/api/projects/:id/timeline", reply(Effect.gen(function*() {
     const media = yield* Media
     const id = yield* param("id")
-    yield* media.saveEdits(id, yield* body(Edits))
-    return json({ saved: id })
+    const input = yield* body(SaveEdits)
+    return json(yield* media.mergeEdits(id, input.base, input.edits))
   }))),
   HttpRouter.add("GET", "/api/projects/:id/library", reply(Effect.gen(function*() {
     const media = yield* Media
@@ -238,4 +261,4 @@ const homeOnly = HttpRouter.middleware(
   { global: true }
 )
 
-export const apiRoutes = Layer.mergeAll(projects, chat, uploads, videos, reel, homeOnly)
+export const apiRoutes = Layer.mergeAll(projects, brief, chat, uploads, videos, reel, homeOnly)

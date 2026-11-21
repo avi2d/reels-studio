@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import * as Api from "./api.ts"
+import { briefCards } from "./brief.ts"
 import { chatDrawer } from "./chat.ts"
 import { button, iconButton, tooltip } from "./controls.ts"
 import { h } from "./dom.ts"
@@ -96,7 +97,7 @@ const videoCard = (project: Api.ProjectView, onUploaded: () => void): HTMLElemen
   const rows = h("ul", { class: "uploads" })
   if (!uploadsByProject.has(project.id)) uploadsByProject.set(project.id, [])
   rows.append(...(uploadsByProject.get(project.id) ?? []))
-  const input = h("input", { class: "file-input", type: "file", accept: "video/*", multiple: true })
+  const input = h("input", { class: "file-input", name: "videos", type: "file", accept: "video/*", multiple: true })
   const label = h("span", {}, project.files.length === 0 ? PICK_FIRST : PICK_MORE)
   const refresh = (): Effect.Effect<void, Api.Failed> =>
     Effect.map(Api.getProject(project.id), (fresh) => {
@@ -161,7 +162,7 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
         stages.note("takes", notes.takes)
         stages.note("pauses", notes.pauses)
         reel.classList.toggle("blank", status.blocks === undefined)
-        if (seen.first && status.heard > 0) stages.open("takes")
+        if (seen.first && status.blocks !== undefined) stages.open("takes")
         seen.first = false
       },
       edited: () => { builtPane?.edited() },
@@ -175,9 +176,11 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
       pending: () => timeline.busy()
     })
     builtPane = built
+    const brief = briefCards(project.id, (message) => { chat.ask(message) }, () => { timeline.refresh() })
     const refresh = (): void => {
       videos.refresh()
       timeline.refresh()
+      brief.refresh()
       built.refresh()
     }
     const chat = chatDrawer(project, messages, models, refresh)
@@ -188,7 +191,7 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
     const back = iconButton("plain", "back", "Все ролики", { class: "back", href: "#/" })
     const { panels } = timeline
     const stages = stageRail(
-      { brief: h("div", { class: "pane" }, videoCard(project, refresh), videos.node, remove), takes: panels.takes, pauses: panels.pauses, file: built.node },
+      { brief: h("div", { class: "pane" }, videoCard(project, refresh), ...brief.nodes, videos.node, remove), takes: panels.takes, pauses: panels.pauses, file: built.node },
       panels.tracks,
       (stage) => {
         activeStage.now = stage

@@ -99,6 +99,7 @@ The suite in [tests/e2e/browser/](tests/e2e/browser/) runs only in GitHub Action
 
 The project layout lives in [Project layout](docs/project-layout.md).
 The row of blocks and takes is described in [Takes and blocks](docs/timeline.md).
+The brief, the plan and the yes are described in [The brief and the one plan](docs/brief.md).
 
 ## Troubleshooting
 

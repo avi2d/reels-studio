@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { lengthOf } from "../shared/plan.ts"
 import {
-  assemble, clipsOf, NO_EDITS, playedSpans, withChoice, withDeleted, withPauses, within,
+  assemble, clipsOf, mergeEdits, NO_EDITS, playedSpans, withChoice, withDeleted, withManualPauses, within,
   type Clip, type Edits, type Placed, type Take
 } from "../shared/timeline.ts"
 import * as Api from "./api.ts"
@@ -44,7 +44,8 @@ const editKey = (edits: Edits): string => JSON.stringify([
   edits.order,
   edits.deleted,
   edits.chosen.map((one) => [one.block, one.video, one.from]),
-  edits.pauses.map((one) => [one.video, one.after])
+  edits.pauses.map((one) => [one.video, one.after]),
+  (edits.kept ?? []).map((one) => [one.video, one.after])
 ])
 
 const adoptServer = (local: Edits, acked: Edits, server: Edits): boolean =>
@@ -63,8 +64,8 @@ interface State {
   edits: Edits
   acked: Edits
   changes: number
-  history: Array<Edits>
-  undone: Array<Edits>
+  history: Array<{ readonly before: Edits; readonly after: Edits }>
+  undone: Array<{ readonly before: Edits; readonly after: Edits }>
   selected: string | undefined
   open: Placed | undefined
   base: number | undefined
@@ -193,7 +194,7 @@ const loader = (projectId: string, anchor: HTMLElement, show: (loaded: Loaded, t
       Effect.map(([{ videos }, view]) => {
         const heard = videos.flatMap((video) => video.state === "ready" ? [[video.name, video.transcript] as const] : [])
         show({ transcripts: new Map(heard), view }, ticket)
-        if (videos.some((video) => video.state === "waiting") || view.looks.some((look) => look.state === "waiting")) later()
+        if (view.gathering || videos.some((video) => video.state === "waiting") || view.looks.some((look) => look.state === "waiting")) later()
       }),
       Effect.catchTag("Failed", () => Effect.sync(later))
     ))
@@ -226,7 +227,7 @@ const actionsOf = (
       hooks.openTakes()
     },
     reorder: (blocks) => { change({ ...state.edits, order: [...blocks] }) },
-    setPause: (video, after, removed) => { change(withPauses(state.edits, [{ video, after }], removed)) },
+    setPause: (video, after, removed) => { change(withManualPauses(state.edits, [{ video, after }], removed)) },
     choose: (block, take) => { change(withChoice(state.edits, block, take)) },
     hear: (block, take) => { hear(takeClips(state.loaded, state.edits, block, take)) },
     hearPause: (one, pause) => {
@@ -271,7 +272,12 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
   const view = display(parts, state)
   const player = montage(projectId, view.markPlaying)
   ui.frame.prepend(player.node)
-  const saving = saver(projectId, ui.problem, () => state.edits, (ok) => { hooks.settled?.(ok) })
+  const saving = saver(projectId, ui.problem, () => state.edits, () => state.acked, (sent, merged) => {
+    state.acked = merged
+    state.edits = mergeEdits(sent, state.edits, merged)
+    state.changes += 1
+    draw()
+  }, (ok) => { hooks.settled?.(ok) })
   const card: Card = { parts, ui, state, view, player, saving, hooks }
   const draw = (): void => {
     redraw({ parts, ui, state, view, player, hooks }, actions)
@@ -304,23 +310,23 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
   }
 
   const change = (edits: Edits): void => {
-    state.history.push(state.edits)
+    state.history.push({ before: state.edits, after: edits })
     state.undone.length = 0
     apply(edits)
   }
 
   const undo = (): void => {
-    const before = state.history.pop()
-    if (before === undefined) return
-    state.undone.push(state.edits)
-    apply(before)
+    const step = state.history.pop()
+    if (step === undefined) return
+    state.undone.push(step)
+    apply(mergeEdits(step.after, step.before, state.edits))
   }
 
   const redo = (): void => {
-    const after = state.undone.pop()
-    if (after === undefined) return
-    state.history.push(state.edits)
-    apply(after)
+    const step = state.undone.pop()
+    if (step === undefined) return
+    state.history.push(step)
+    apply(mergeEdits(step.before, step.after, state.edits))
   }
 
   const select = (block: string): void => {

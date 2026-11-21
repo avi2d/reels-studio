@@ -5,7 +5,7 @@ import * as Api from "./api.ts"
 export const POLL_MS = 4000
 const NOT_SAVED = "Изменение не сохранилось. Проверьте Wi-Fi: студия попробует сохранить его ещё раз сама."
 
-export const saver = (projectId: string, problem: HTMLElement, edits: () => Edits, settled?: (ok: boolean) => void): { readonly save: () => void; readonly busy: () => boolean; readonly flush: () => Promise<boolean> } => {
+export const saver = (projectId: string, problem: HTMLElement, edits: () => Edits, base: () => Edits, adopt: (sent: Edits, merged: Edits) => void, settled?: (ok: boolean) => void): { readonly save: () => void; readonly busy: () => boolean; readonly flush: () => Promise<boolean> } => {
   const state = { saving: false, unsaved: false }
   const idle: Effect.Effect<void> = Effect.suspend(() =>
     state.saving ? Effect.flatMap(Effect.sleep("25 millis"), () => idle) : Effect.void)
@@ -16,8 +16,12 @@ export const saver = (projectId: string, problem: HTMLElement, edits: () => Edit
     }
     state.saving = true
     state.unsaved = false
-    Effect.runFork(Api.saveEdits(projectId, edits()).pipe(
-      Effect.map(() => { problem.textContent = "" }),
+    const sent = edits()
+    Effect.runFork(Api.saveEdits(projectId, base(), sent).pipe(
+      Effect.map((merged) => {
+        problem.textContent = ""
+        adopt(sent, merged)
+      }),
       Effect.catchTag("Failed", () => Effect.sync(() => {
         problem.textContent = NOT_SAVED
         state.unsaved = true
