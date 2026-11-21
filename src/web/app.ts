@@ -141,9 +141,8 @@ type Page = { readonly kind: "home" } | { readonly kind: "videos" } | { readonly
 
 const pageAt = (pathname: string): Page | undefined => {
   if (pathname === HOME_PATH) return { kind: "home" }
-  const path = pathname.replace(/\/$/, "")
-  if (path === VIDEOS_PATH) return { kind: "videos" }
-  const id = path.startsWith(PROJECT_PREFIX) ? path.slice(PROJECT_PREFIX.length) : ""
+  if (pathname === VIDEOS_PATH) return { kind: "videos" }
+  const id = pathname.startsWith(PROJECT_PREFIX) ? pathname.slice(PROJECT_PREFIX.length) : ""
   return /^[a-z0-9-]+$/.test(id) ? { kind: "project", id } : undefined
 }
 
