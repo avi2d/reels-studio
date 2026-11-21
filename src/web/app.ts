@@ -150,6 +150,8 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
     const videos = videosCard(project.id)
     const reel = h("div", { class: "reel blank" })
     const seen = { first: true }
+    const activeStage: { now: StageId } = { now: "brief" }
+    let builtPane: ReturnType<typeof reelPane> | undefined
     const timeline = timelineCard(project.id, {
       ask: (message) => { chat.ask(message) },
       openTakes: () => { if (stages.now() === "brief") stages.open("takes") },
@@ -161,12 +163,18 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
         reel.classList.toggle("blank", status.blocks === undefined)
         if (seen.first && status.heard > 0) stages.open("takes")
         seen.first = false
-      }
+      },
+      edited: () => { builtPane?.edited() },
+      settled: (ok) => { builtPane?.settled(ok) },
+      active: () => activeStage.now !== "file"
     })
     const built = reelPane(project.id, {
       note: (note) => { stages.note("file", note) },
-      playing: () => { timeline.stop() }
+      playing: () => { timeline.stop() },
+      flush: () => timeline.flush(),
+      pending: () => timeline.busy()
     })
+    builtPane = built
     const refresh = (): void => {
       videos.refresh()
       timeline.refresh()
@@ -183,10 +191,11 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
       { brief: h("div", { class: "pane" }, videoCard(project, refresh), videos.node, remove), takes: panels.takes, pauses: panels.pauses, file: built.node },
       panels.tracks,
       (stage) => {
+        activeStage.now = stage
         reel.dataset.stage = stage
         if (stage !== "file") return built.pause()
         timeline.stop()
-        built.refresh()
+        void timeline.flush().then(() => { built.refresh() })
       })
     reel.append(
       h("header", { class: "bar" },

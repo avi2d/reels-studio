@@ -263,7 +263,7 @@ const showLoaded = (card: Card, draw: () => void, loaded: Loaded, ticket: Ticket
   draw()
 }
 
-export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels: Panels; readonly refresh: () => void; readonly stop: () => void } => {
+export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels: Panels; readonly refresh: () => void; readonly stop: () => void; readonly flush: () => Promise<boolean>; readonly busy: () => boolean } => {
   const parts = partsOf()
   const ui = frameOf(parts)
   const state: State =
@@ -271,7 +271,7 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
   const view = display(parts, state)
   const player = montage(projectId, view.markPlaying)
   ui.frame.prepend(player.node)
-  const saving = saver(projectId, ui.problem, () => state.edits)
+  const saving = saver(projectId, ui.problem, () => state.edits, (ok) => { hooks.settled?.(ok) })
   const card: Card = { parts, ui, state, view, player, saving, hooks }
   const draw = (): void => {
     redraw({ parts, ui, state, view, player, hooks }, actions)
@@ -299,6 +299,7 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
     state.changes += 1
     if (state.loaded !== undefined) state.content = playedKey(state.loaded, edits)
     saving.save()
+    hooks.edited?.()
     draw()
   }
 
@@ -340,11 +341,12 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
   parts.undo.addEventListener("click", undo)
   parts.redo.addEventListener("click", redo)
   onKeys(ui.panels.tracks, () => ({ placed: view.placedNow(), open: state.open }),
-    { choose: actions.choose, setDeleted: actions.setDeleted, step: select, toggle, undo })
+    { choose: actions.choose, setDeleted: actions.setDeleted, step: select, toggle, undo },
+    () => hooks.active?.() ?? true)
 
   const show = (loaded: Loaded, ticket: Ticket): void => {
     showLoaded(card, draw, loaded, ticket)
   }
 
-  return { panels: ui.panels, refresh: loader(projectId, ui.panels.tracks, show, () => ({ changes: state.changes, busy: saving.busy() })), stop: player.stop }
+  return { panels: ui.panels, refresh: loader(projectId, ui.panels.tracks, show, () => ({ changes: state.changes, busy: saving.busy() })), stop: player.stop, flush: saving.flush, busy: saving.busy }
 }

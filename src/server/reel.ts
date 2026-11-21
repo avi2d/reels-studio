@@ -43,9 +43,11 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray
   }
   yield* fs.writeFileString(`${place.work}/parts.txt`, joinList(names))
   yield* tool("ffmpeg", joinArgs(`${place.work}/parts.txt`, `${place.work}/reel.mp4`), settings.heavy)
-  yield* fs.remove(place.record, { force: true })
-  yield* fs.rename(`${place.work}/reel.mp4`, place.file)
-  yield* fs.writeFileString(place.record, yield* encodeRecord({ made: DateTime.formatIso(yield* DateTime.now), parts }))
+  yield* fs.writeFileString(`${place.work}/reel.json`, yield* encodeRecord({ made: DateTime.formatIso(yield* DateTime.now), parts }))
+  yield* Effect.uninterruptible(Effect.gen(function*() {
+    yield* fs.rename(`${place.work}/reel.mp4`, place.file)
+    yield* fs.rename(`${place.work}/reel.json`, place.record)
+  }))
 })
 
 export const buildReel = Effect.fn("Reel.build")(function*(dir: string, clips: ReadonlyArray<Clip>, onDone: (share: number) => Effect.Effect<void>) {

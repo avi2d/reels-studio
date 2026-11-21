@@ -11,6 +11,7 @@ const POLL_MS = 1000
 const ABOUT = "Студия соберёт ролик из исходных видео: выбранные дубли в порядке блоков, без убранных пауз, с мягким звуком на каждой склейке. Исходные видео не меняются."
 const NO_CUT = "В монтаже нет ни одного блока. Соберите блоки, и ролик можно будет собрать."
 const FAILED = "Ролик не собрался. Подробности в журнале студии. Нажмите «Собрать ролик», чтобы попробовать ещё раз."
+const NOT_SAVED = "Монтаж ещё не сохранился. Проверьте Wi-Fi: студия сохраняет его сама."
 const STALE = "Монтаж изменился после сборки. Соберите ролик заново, чтобы файл совпал с монтажом."
 const SAVE_HINT = "На айфоне откройте скачанный файл и выберите «Сохранить видео»: ролик появится в «Фото», и Instagram его найдёт."
 
@@ -27,12 +28,14 @@ const isBusy = (view: ReelView): boolean => view.job.state === "waiting" || view
 const madeAt = (iso: string): string =>
   new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }).format(new Date(iso))
 
-export const reelPane = (projectId: string, hooks: { readonly note: (note: StageNote) => void; readonly playing: () => void }): {
+export const reelPane = (projectId: string, hooks: { readonly note: (note: StageNote) => void; readonly playing: () => void; readonly flush: () => Promise<boolean>; readonly pending: () => boolean }): {
   readonly node: HTMLElement
   readonly refresh: () => void
   readonly pause: () => void
+  readonly edited: () => void
+  readonly settled: (ok: boolean) => void
 } => {
-  const state: { timer: number; made: string | undefined } = { timer: 0, made: undefined }
+  const state: { timer: number; made: string | undefined; dirty: boolean } = { timer: 0, made: undefined, dirty: false }
   const status = h("p", { class: "muted", role: "status" })
   const bar = h("progress", { max: "1", value: "0", hidden: true })
   const problem = h("p", { class: "error", role: "alert" })
@@ -54,7 +57,7 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
 
   const show = (view: ReelView): void => {
     const busy = isBusy(view)
-    make.disabled = busy || view.cut === 0
+    make.disabled = busy || view.cut === 0 || state.dirty || hooks.pending()
     make.hidden = busy
     cancel.hidden = !busy
     cancel.disabled = false
@@ -71,7 +74,7 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
         player.src = Api.reelUrl(projectId, view.file.made)
       }
       facts.textContent = `Длина ${formatLength(view.file.seconds)} · ${formatSize(view.file.size)} · собран ${madeAt(view.file.made)}`
-      stale.hidden = view.file.fresh || busy
+      stale.hidden = busy || (view.file.fresh && !state.dirty)
     }
     hooks.note({ note: "", done: view.file?.fresh === true })
     if (busy) later()
@@ -86,16 +89,38 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
     ))
   }
 
+  const edited = (): void => {
+    state.dirty = true
+    make.disabled = true
+    hooks.note({ note: "", done: false })
+    if (!file.hidden) stale.hidden = false
+  }
+  const settled = (ok: boolean): void => {
+    if (!ok) {
+      make.disabled = true
+      if (!file.hidden) stale.hidden = false
+      return
+    }
+    state.dirty = false
+    refresh()
+  }
   make.addEventListener("click", () => {
     make.disabled = true
     problem.textContent = ""
-    Effect.runFork(Api.buildReel(projectId).pipe(
-      Effect.map(show),
-      Effect.catchTag("Failed", (error) => Effect.sync(() => {
-        problem.textContent = error.message
-        make.disabled = false
-      }))
-    ))
+    void hooks.flush().then((ok) => {
+      if (!node.isConnected) return
+      if (!ok) {
+        problem.textContent = NOT_SAVED
+        return
+      }
+      Effect.runFork(Api.buildReel(projectId).pipe(
+        Effect.map(show),
+        Effect.catchTag("Failed", (error) => Effect.sync(() => {
+          problem.textContent = error.message
+          make.disabled = state.dirty || hooks.pending()
+        }))
+      ))
+    })
   })
 
   cancel.addEventListener("click", () => {
@@ -109,5 +134,5 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
     ))
   })
 
-  return { node, refresh, pause: () => { player.pause() } }
+  return { node, refresh, pause: () => { player.pause() }, edited, settled }
 }
