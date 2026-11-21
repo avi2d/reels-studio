@@ -122,7 +122,7 @@ const mutate = (pane: Pane, run: () => Effect.Effect<ReelView, Api.Failed>, fail
       refresh(pane)
     }),
     Effect.catchTag("Failed", (error) => Effect.sync(() => {
-      const current = seq > pane.state.applied && seq > pane.state.floor
+      const current = seq > pane.state.floor
       invalidate(pane)
       if (current) {
         pane.ui.problem.textContent = error.message
