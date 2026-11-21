@@ -3,7 +3,7 @@ import { BriefView } from "../shared/brief.ts"
 import { Message } from "../shared/chat.ts"
 import { LibraryVideo, type Pick } from "../shared/library.ts"
 import { VideoView } from "../shared/plan.ts"
-import { TimelinePage, type Edits } from "../shared/timeline.ts"
+import { Edits, TimelinePage } from "../shared/timeline.ts"
 
 export class Failed extends Data.TaggedError("Failed")<{ readonly message: string }> {}
 export class Offline extends Data.TaggedError("Offline")<{}> {}

@@ -1,10 +1,10 @@
 import { Array as Arr, Context, Deferred, Effect, Fiber, FileSystem, Layer, Option, Path, type PlatformError, Ref, Schema, Stream } from "effect"
-import { ChildProcess, type ChildProcessSpawner } from "effect/process"
+import { type ChildProcessSpawner } from "effect/process"
 import { approves } from "../shared/brief.ts"
 import { Message, MAX_FILES } from "../shared/chat.ts"
 import { ApiError, badRequest, orUnavailable } from "./api-error.ts"
-import { promptText } from "./attachment-notes.ts"
-import { Attachments, type Shown } from "./attachments.ts"
+import { Attachments } from "./attachments.ts"
+import { piCommand, type Session } from "./pi-command.ts"
 import { Brief } from "./brief.ts"
 import { Media } from "./media.ts"
 import type { VideoView } from "../shared/plan.ts"
@@ -18,7 +18,6 @@ const MessageLine = Schema.fromJsonString(Message)
 const decodeLine = Schema.decodeUnknownOption(MessageLine)
 const encodeLine = Schema.encodeEffect(MessageLine)
 
-const TOOLS = "read,grep,find,ls,write,edit"
 const NOT_STARTED = "чат не запустился. Программа pi не найдена или не запускается на компьютере студии. Установите pi, перезапустите студию и отправьте сообщение ещё раз."
 const EXITED = "программа pi завершилась с ошибкой. Подробности в журнале студии. Проверьте, что команда pi --list-models работает, и отправьте сообщение ещё раз."
 const CLOSED = "программа pi закрылась раньше ответа. Отправьте сообщение ещё раз или выберите другую модель."
@@ -115,8 +114,6 @@ const makeTurns = Effect.gen(function*() {
     )
   return { claim, release, withoutTurn }
 })
-
-type Session = "person" | "studio"
 
 interface RunState {
   readonly text: string
@@ -251,6 +248,8 @@ const piStream = <E>(
 
 type Run = (id: string, dir: string, text: string, names: ReadonlyArray<string>, model: string, effort: Effort, approving: boolean, asker: Session) => Stream.Stream<ChatEvent, ApiError>
 
+
+
 interface GatherNeeds {
   readonly projects: Projects["Service"]
   readonly settings: Settings["Service"]
@@ -266,7 +265,7 @@ const gatherWith = ({ projects, settings, makeDirectory, run }: GatherNeeds) =>
     if (model === undefined) return yield* new ApiError({ status: 500, message: "В студии не задана ни одна модель" })
     yield* makeDirectory(dir)
     const failed = yield* run(id, dir, GATHER_PROMPT, [], model, project.effort ?? "medium", false, "studio").pipe(
-      Stream.runFold(false, (seen, event) => seen || event.type === "error")
+      Stream.runFold(() => false, (seen, event) => seen || event.type === "error")
     )
     if (failed) return yield* new ApiError({ status: 500, message: "Модель не собрала блоки" })
   })
@@ -311,29 +310,6 @@ export class Chat extends Context.Service<Chat, {
         return videoLines(yield* media.videos(id), yield* media.timeline(id))
       }, orBroken)
       const attachedNote = (listed: string): string => listed === "" ? "" : `\nThe files the person attached in the chat:\n${listed}\n`
-      const command = (dir: string, text: string, files: ReadonlyArray<Shown>, model: string, effort: Effort, known: string, asker: Session) => {
-        const images = files.flatMap((file) => file.images)
-        const prompt = JSON.stringify({ id: "prompt", type: "prompt", message: promptText(text, files), ...(images.length === 0 ? {} : { images }) })
-        return ChildProcess.make(settings.pi, [
-          "--mode", "rpc",
-          "--model", model,
-          "--thinking", effort,
-          "--session-dir", path.join(dir, asker === "studio" ? "gather" : "chat"),
-          "--continue",
-          "--tools", TOOLS,
-          "--no-approve",
-          "--no-mcp",
-          "--no-skills",
-          "--skill", path.join(settings.root, "skills"),
-          "--no-context-files",
-          "--no-prompt-templates",
-          "--extension", path.join(settings.root, "src", "pi", "project-guard.ts"),
-          "--system-prompt", `${systemPrompt}\nThe uploaded videos:\n${known}`
-        ], {
-          cwd: dir,
-          stdin: Stream.concat(Stream.make(new TextEncoder().encode(prompt + "\n")), Stream.never),
-        })
-      }
       const run: Run = (id, dir, text, names, model, effort, approving, asker) =>
         Stream.concat(names.length === 0 ? Stream.empty : Stream.make(LOOKING), Stream.unwrap(Effect.gen(function*() {
           const state = yield* Ref.make<RunState>({ text: "", base: "", pending: undefined, failed: undefined, settled: false })
@@ -346,7 +322,7 @@ export class Chat extends Context.Service<Chat, {
           const files = yield* attachments.show(dir, names)
           const task = briefNote((yield* brief.view(id)).brief) + (approving ? YES_NOTE : "")
           const known = `${yield* heardVideos(id)}\n${task}${attachedNote(yield* attachments.listed(dir, files))}`
-          const launched = yield* command(dir, text, files, model, effort, known, asker).pipe(
+          const launched = yield* piCommand(settings.pi, settings.root, (...parts: Array<string>) => path.join(...parts), systemPrompt, dir, text, files, model, effort, known, asker).pipe(
             Effect.tapError((error) => Effect.logError("pi did not start", error)),
             Effect.option
           )
@@ -375,7 +351,7 @@ export class Chat extends Context.Service<Chat, {
         if (approved !== undefined) {
           yield* brief.agree(id, approved)
           if (!(yield* brief.working(id))) {
-            yield* Effect.forkDaemon(brief.workAlone(id, approved, Deferred.await(turn.finished)).pipe(
+            yield* Effect.forkDetach(brief.workAlone(id, approved, Deferred.await(turn.finished)).pipe(
               Effect.catchTag("ApiError", (error) => Effect.logError("the work after the yes failed", error.message))
             ))
           }

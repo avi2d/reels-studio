@@ -68,11 +68,12 @@ export class Brief extends Context.Service<Brief, {
           if (yield* state.running(id)) yield* state.settled(id)
           else {
             const videos = yield* media.videos(id)
-            const view = yield* media.timeline(id)
+            const timelineView = yield* media.timeline(id)
             const heard = videos.flatMap((video) => video.state === "ready" ? [video.name] : [])
             const listening = videos.some((video) => video.state === "waiting")
-            const settled = view.looks.flatMap((look) => look.state === "waiting" ? [] : [look.video])
-            if (gatherStep(heard, settled, listening, yield* readGathered(dir)).kind === "wait" && !gazePending(heard, settled)) return
+            const settled = timelineView.looks.flatMap((look) => look.state === "waiting" ? [] : [look.video])
+            const gathered = yield* readGathered(dir).pipe(Effect.provideService(FileSystem.FileSystem, fs), orBroken)
+            if (gatherStep(heard, settled, listening, gathered).kind === "wait" && !gazePending(heard, settled)) return
           }
           yield* Effect.sleep("1 second")
         }
@@ -81,10 +82,10 @@ export class Brief extends Context.Service<Brief, {
       const working = (id: string): Effect.Effect<boolean> => state.working(id)
 
       const agreed = yield* Ref.make<ReadonlyMap<string, string>>(new Map())
-      const agree = (id: string, plan: string): Effect.Effect<void> =>
+      const agree = (id: string, planText: string): Effect.Effect<void> =>
         Ref.update(agreed, (map) => {
           const next = new Map(map)
-          next.set(id, plan)
+          next.set(id, planText)
           return next
         })
 

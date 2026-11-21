@@ -38,7 +38,7 @@ export class Gather extends Context.Service<Gather, {
 
       const stepOf = Effect.fnUntraced(function*(id: string) {
         const dir = yield* projects.folder(id)
-        const gathered = yield* readGathered(dir)
+        const gathered = yield* readGathered(dir).pipe(Effect.provideService(FileSystem.FileSystem, fs))
         const videos = yield* media.videos(id)
         const heard = videos.flatMap((video) => video.state === "ready" ? [video.name] : [])
         const listening = videos.some((video) => video.state === "waiting")
@@ -52,10 +52,11 @@ export class Gather extends Context.Service<Gather, {
         const after = yield* readBlocks(dir)
         if (!shortenDue(after, gathered?.shortened)) return
         const fresh = yield* media.timeline(id)
-        if (fresh.timeline.state !== "ready") return
+        const timeline = fresh.timeline
+        if (timeline.state !== "ready") return
         const videos = yield* media.videos(id)
         yield* media.exchangeEdits(id, (current) => ({
-          edits: shortenPlaced(fresh.timeline.blocks, current, readyTranscripts(videos)),
+          edits: shortenPlaced(timeline.blocks, current, readyTranscripts(videos)),
           value: undefined
         }))
         yield* remember(dir, gathered?.videos ?? heard, [...(gathered?.gazed ?? [])], gathered?.failed ?? false, gathered?.hash, blocksHash(after))
@@ -72,13 +73,14 @@ export class Gather extends Context.Service<Gather, {
           const exit = yield* Effect.exit(chat.gather(id))
           const after = yield* readBlocks(dir)
           const fresh = yield* media.timeline(id)
-          if (Exit.isFailure(exit) || fresh.timeline.state !== "ready") {
+          const timeline = fresh.timeline
+          if (Exit.isFailure(exit) || timeline.state !== "ready") {
             yield* remember(dir, step.videos, step.settled, true, blocksHash(after), gathered?.shortened)
             return
           }
           const heardVideos = yield* media.videos(id)
           yield* media.exchangeEdits(id, (current) => ({
-            edits: shortenPlaced(fresh.timeline.blocks, current, readyTranscripts(heardVideos)),
+            edits: shortenPlaced(timeline.blocks, current, readyTranscripts(heardVideos)),
             value: undefined
           }))
           yield* remember(dir, step.videos, step.settled, false, undefined, blocksHash(after))
@@ -106,7 +108,7 @@ export class Gather extends Context.Service<Gather, {
       const failed = (id: string): Effect.Effect<boolean> => Effect.gen(function*() {
         const dir = yield* projects.folder(id).pipe(Effect.orElseSucceed(() => undefined))
         if (dir === undefined) return false
-        const gathered = yield* readGathered(dir).pipe(Effect.orElseSucceed(() => undefined))
+        const gathered = yield* readGathered(dir).pipe(Effect.provideService(FileSystem.FileSystem, fs), Effect.orElseSucceed(() => undefined))
         const blocks = yield* readBlocks(dir).pipe(Effect.orElseSucceed(() => undefined))
         return failedShows(gathered, blocks)
       })

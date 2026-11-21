@@ -42,7 +42,8 @@ test("a failed gathering after a new video tries again instead of leaving the re
 })
 
 test("a failed mark still shows over ready blocks until different blocks replace them", () => {
-  const marked = { videos: ["a.mov"], gazed: ["a.mov"], failed: true, hash: blocksHash("blocks-one") }
+  const blockHash = blocksHash("blocks-one")
+  const marked = { videos: ["a.mov"], gazed: ["a.mov"], failed: true, ...(blockHash === undefined ? {} : { hash: blockHash }) }
   expect(failedShows(marked, "blocks-one")).toBe(true)
   expect(failedShows(marked, "blocks-two")).toBe(false)
   expect(failedShows({ videos: ["a.mov"], failed: false }, "blocks-one")).toBe(false)

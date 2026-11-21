@@ -7,9 +7,9 @@ interface Flight {
 
 export class GatherState extends Context.Service<GatherState, {
   readonly running: (id: string) => Effect.Effect<boolean>
-  readonly track: <A, E, R>(id: string, task: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+  readonly track: <A, E, R>(id: string, task: Effect.Effect<A, E, R>) => Effect.Effect<void | A, E, R>
   readonly settled: (id: string) => Effect.Effect<void>
-  readonly trackAlone: <A, E, R>(id: string, task: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+  readonly trackAlone: <A, E, R>(id: string, task: Effect.Effect<A, E, R>) => Effect.Effect<void | A, E, R>
   readonly working: (id: string) => Effect.Effect<boolean>
   readonly blocked: (id: string) => Effect.Effect<boolean>
   readonly withoutGather: <A, E, R>(id: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
@@ -24,7 +24,7 @@ export class GatherState extends Context.Service<GatherState, {
       const running = (id: string): Effect.Effect<boolean> =>
         Effect.map(Ref.get(current), (held) => held?.id === id)
 
-      const track = <A, E, R>(id: string, task: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+      const track = <A, E, R>(id: string, task: Effect.Effect<A, E, R>): Effect.Effect<void | A, E, R> =>
         Effect.acquireUseRelease(
           Effect.gen(function*() {
             const flight: Flight = { stop: yield* Deferred.make<void>(), finished: yield* Deferred.make<void>() }
@@ -45,7 +45,7 @@ export class GatherState extends Context.Service<GatherState, {
           yield* Deferred.await(held.flight.finished)
         })
 
-      const trackAlone = <A, E, R>(id: string, task: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+      const trackAlone = <A, E, R>(id: string, task: Effect.Effect<A, E, R>): Effect.Effect<void | A, E, R> =>
         Effect.acquireUseRelease(
           Effect.gen(function*() {
             const flight: Flight = { stop: yield* Deferred.make<void>(), finished: yield* Deferred.make<void>() }
