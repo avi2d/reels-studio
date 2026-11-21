@@ -180,8 +180,6 @@ export type Actions = RowActions & DetailActions & PlaceActions & { readonly cha
 export const textOf = (transcripts: ReadonlyMap<string, Transcript>, take: Take): string =>
   (transcripts.get(take.video)?.words ?? []).slice(take.from, take.to + 1).map((word) => word.text).join(" ")
 
-export const startOf = (placed: ReadonlyArray<Placed>, index: number): number => lengthOf(placed.slice(0, index).flatMap((one) => one.spans))
-
 const replaceLists = (holder: HTMLElement, ...nodes: ReadonlyArray<HTMLElement>): void => {
   const lists = () => holder.querySelectorAll<HTMLElement>("[data-scroll-key]")
   const offsets = new Map([...lists()].map((list) => [list.dataset.scrollKey, list.scrollTop]))
@@ -204,6 +202,62 @@ export interface DrawnStatus {
   readonly placesComplete: boolean
 }
 
+type PauseMark = { readonly video: string; readonly after: number; readonly removed: boolean }
+
+const drawChrome = (
+  parts: Parts,
+  displayed: ReadonlyArray<Placed>,
+  placed: ReadonlyArray<Placed>,
+  open: Placed | undefined,
+  index: number,
+  pauses: ReadonlyArray<PauseMark>,
+  allRemoved: boolean,
+  edits: Edits,
+  actions: Actions
+): void => {
+  parts.summary.textContent = summaryOf(displayed)
+  parts.strip.disabled = pauses.length === 0
+  const strip = stripWords(allRemoved)
+  parts.strip.textContent = strip.label
+  parts.strip.title = strip.hint
+  parts.strip.onclick = () => { actions.change(withManualPauses(edits, pauses, !allRemoved)) }
+  parts.prev.disabled = index === 0
+  parts.next.disabled = index >= placed.length - 1
+  parts.prev.onclick = () => { actions.select(displayed[index - 1]?.block.id ?? "") }
+  parts.next.onclick = () => { actions.select(displayed[index + 1]?.block.id ?? "") }
+  parts.facts.textContent = open === undefined ? "" : `дубль ${open.block.takes.indexOf(open.take) + 1} из ${open.block.takes.length}`
+}
+
+const drawRows = (parts: Parts, displayed: ReadonlyArray<Placed>, open: Placed | undefined, actions: Actions): void => {
+  const scrollLeft = parts.rowHolder.firstElementChild?.scrollLeft ?? 0
+  const row = blockRow(displayed, open?.block.id, actions)
+  parts.rowHolder.replaceChildren(row)
+  row.scrollLeft = scrollLeft
+  parts.map.replaceChildren(...cutMap(displayed, open?.block.id, actions.select))
+}
+
+const drawPanels = (
+  parts: Parts,
+  displayed: ReadonlyArray<Placed>,
+  placed: ReadonlyArray<Placed>,
+  open: Placed | undefined,
+  index: number,
+  loaded: Loaded,
+  edits: Edits,
+  deleted: ReturnType<typeof arrange>["deleted"],
+  faces: ReturnType<typeof facesByVideo>,
+  actions: Actions
+): { readonly places: ReturnType<typeof placesOf>; readonly coverage: PlaceCoverage } => {
+  replaceLists(parts.detailHolder,
+    ...(open === undefined ? [] : [blockDetail(open.block, index + 1, chosenTake(open.block, edits), loaded.transcripts, edits, actions)]),
+    ...(deleted.length === 0 ? [] : [deletedList(deleted, actions)]))
+  const places = placesOf(clipsOf(placed), faces, loaded.transcripts, edits)
+  const coverage = placeCoverage(loaded.view, placed)
+  replaceLists(parts.placeHolder, placeList(places, displayed, coverage, actions))
+  replaceLists(parts.pauseHolder, pauseList(displayed, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
+  return { places, coverage }
+}
+
 export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { readonly open: Placed | undefined; readonly status: DrawnStatus } => {
   const { edits, loaded, selected, timeline } = drawn
   const placed = assemble(timeline.blocks, edits, loaded.transcripts)
@@ -218,29 +272,9 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { reado
   const allRemoved = pauses.length > 0 && pauses.every((pause) => pause.removed)
   const index = Math.max(0, displayed.findIndex((one) => one.block.id === selected))
   const open = displayed[index]
-  parts.summary.textContent = summaryOf(displayed)
-  parts.strip.disabled = pauses.length === 0
-  const strip = stripWords(allRemoved)
-  parts.strip.textContent = strip.label
-  parts.strip.title = strip.hint
-  parts.strip.onclick = () => { actions.change(withManualPauses(edits, pauses, !allRemoved)) }
-  parts.prev.disabled = index === 0
-  parts.next.disabled = index >= placed.length - 1
-  parts.prev.onclick = () => { actions.select(displayed[index - 1]?.block.id ?? "") }
-  parts.next.onclick = () => { actions.select(displayed[index + 1]?.block.id ?? "") }
-  parts.facts.textContent = open === undefined ? "" : `дубль ${open.block.takes.indexOf(open.take) + 1} из ${open.block.takes.length}`
-  const scrollLeft = parts.rowHolder.firstElementChild?.scrollLeft ?? 0
-  const row = blockRow(displayed, open?.block.id, actions)
-  parts.rowHolder.replaceChildren(row)
-  row.scrollLeft = scrollLeft
-  parts.map.replaceChildren(...cutMap(displayed, open?.block.id, actions.select))
-  replaceLists(parts.detailHolder,
-    ...(open === undefined ? [] : [blockDetail(open.block, index + 1, chosenTake(open.block, edits), loaded.transcripts, edits, actions)]),
-    ...(deleted.length === 0 ? [] : [deletedList(deleted, actions)]))
-  const places = placesOf(clipsOf(placed), faces, loaded.transcripts, edits)
-  const coverage = placeCoverage(loaded.view, placed)
-  replaceLists(parts.placeHolder, placeList(places, displayed, coverage, actions))
-  replaceLists(parts.pauseHolder, pauseList(displayed, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
+  drawChrome(parts, displayed, placed, open, index, pauses, allRemoved, edits, actions)
+  drawRows(parts, displayed, open, actions)
+  const { places, coverage } = drawPanels(parts, displayed, placed, open, index, loaded, edits, deleted, faces, actions)
   return { open, status: { pauses: { removed: pauses.filter((pause) => pause.removed).length, total: pauses.length }, places: openPlaces(places), placesComplete: !coverage.waiting && coverage.failed.length === 0 } }
 }
 

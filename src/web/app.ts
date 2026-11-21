@@ -145,7 +145,7 @@ const stageNotes = ({ blocks, heard, pauses, places, placesComplete }: Status): 
   takes: { note: countNote(blocks ?? 0), done: blocks !== undefined },
   pauses: {
     note: pausesNote({ blocks, heard, pauses, places, placesComplete }),
-    done: pauses.total > 0 && pauses.removed === pauses.total && places === 0 && pausesComplete
+    done: pauses.total > 0 && pauses.removed === pauses.total && places === 0 && placesComplete
   }
 })
 

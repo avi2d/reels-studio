@@ -24,16 +24,19 @@ class FakeEl {
       this.children.push(kid)
     }
   }
-  querySelector(selector: string): FakeEl | null {
-    const walk = (node: FakeEl): FakeEl | null => {
+  querySelectorAll(selector: string): Array<FakeEl> {
+    const found: Array<FakeEl> = []
+    const walk = (node: FakeEl): void => {
       for (const kid of node.children) {
-        if (selector.startsWith(".") ? kid.tag === "ol" : kid.tag === selector) return kid
-        const found = walk(kid)
-        if (found !== null) return found
+        if (selector.startsWith(".") ? kid.tag === "ol" : kid.tag === selector) found.push(kid)
+        walk(kid)
       }
-      return null
     }
-    return walk(this)
+    walk(this)
+    return found
+  }
+  querySelector(selector: string): FakeEl | null {
+    return this.querySelectorAll(selector)[0] ?? null
   }
 }
 
@@ -50,40 +53,40 @@ const place = (answer: JoinAnswer | undefined, cut: number) => ({
   answer
 })
 
-const statusOf = (root: FakeEl): string =>
-  root.children.filter((kid) => kid.tag === "p").map((kid) => kid.textContent).join("\n")
+const statusOf = (root: HTMLElement): string =>
+  [...root.querySelectorAll("p")].map((kid) => kid.textContent).join("\n")
 
-const listOf = (root: FakeEl): FakeEl | null => root.querySelector(".place-list")
+const listOf = (root: HTMLElement): HTMLElement | null => root.querySelector<HTMLElement>(".place-list")
 
 const complete: PlaceCoverage = { waiting: false, failed: [] }
 
 test("an empty list while heads are still measured promises places instead of claiming a clean reel", () => {
-  const root = placeList([], [], { waiting: true, failed: [] }, actions) as unknown as FakeEl
+  const root = placeList([], [], { waiting: true, failed: [] }, actions)
   expect(statusOf(root)).toContain("Студия ещё измеряет")
   expect(statusOf(root)).not.toContain("не прыгает")
 })
 
 test("an empty list with a failed measurement names the videos instead of claiming a clean reel", () => {
-  const root = placeList([], [], { waiting: false, failed: ["a"] }, actions) as unknown as FakeEl
+  const root = placeList([], [], { waiting: false, failed: ["a"] }, actions)
   expect(statusOf(root)).toContain("не удалось измерить")
   expect(statusOf(root)).toContain("a")
   expect(statusOf(root)).not.toContain("не прыгает")
 })
 
 test("an empty list with complete measurement still claims a clean reel", () => {
-  const root = placeList([], [], complete, actions) as unknown as FakeEl
+  const root = placeList([], [], complete, actions)
   expect(statusOf(root)).toContain("Голова нигде не прыгает на склейках.")
 })
 
 test("a failed measurement is attached to the counts instead of replacing them", () => {
-  const root = placeList([place(undefined, 0.4)], [], { waiting: false, failed: ["b"] }, actions) as unknown as FakeEl
+  const root = placeList([place(undefined, 0.4)], [], { waiting: false, failed: ["b"] }, actions)
   expect(statusOf(root)).toContain("Осталось проверить 1 из 1.")
   expect(statusOf(root)).toContain("неполная")
 })
 
 test("the places list carries a stable scroll key across redraws", () => {
-  const first = listOf(placeList([place(undefined, 0.4)], [], complete, actions) as unknown as FakeEl)
-  const second = listOf(placeList([place(undefined, 0.4)], [], complete, actions) as unknown as FakeEl)
+  const first = listOf(placeList([place(undefined, 0.4)], [], complete, actions))
+  const second = listOf(placeList([place(undefined, 0.4)], [], complete, actions))
   expect(first?.dataset["scrollKey"]).toBe("places")
   expect(second?.dataset["scrollKey"]).toBe(first?.dataset["scrollKey"])
 })
