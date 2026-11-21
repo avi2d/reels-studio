@@ -42,13 +42,15 @@ def main() -> None:
     parser.add_argument("audio")
     parser.add_argument("output")
     parser.add_argument("--model", default="gigaam-v3-e2e-rnnt")
+    parser.add_argument("--providers", help="onnxruntime providers separated by commas, in order of preference")
     args = parser.parse_args()
+    providers = args.providers.split(",") if args.providers else None
 
     with wave.open(args.audio, "rb") as audio:
         duration = round(audio.getnframes() / audio.getframerate(), 3)
 
-    vad = onnx_asr.load_vad("silero")
-    model = onnx_asr.load_model(args.model).with_vad(vad, min_silence_duration_ms=150, speech_pad_ms=30).with_timestamps()
+    vad = onnx_asr.load_vad("silero", providers=providers)
+    model = onnx_asr.load_model(args.model, providers=providers).with_vad(vad, min_silence_duration_ms=150, speech_pad_ms=30).with_timestamps()
     segments = list(model.recognize(args.audio))
     words = [
         {"start": round(word["start"], 3), "end": round(word["end"], 3), "text": word["text"]}
