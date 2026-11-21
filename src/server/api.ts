@@ -102,7 +102,7 @@ const chat = Layer.mergeAll(
     )
     return HttpServerResponse.stream(
       Stream.merge(lines, KEEP_ALIVE, { haltStrategy: "left" }).pipe(Stream.encodeText),
-      { contentType: "text/event-stream", headers: { "cache-control": "no-store", "x-accel-buffering": "no" } }
+      { contentType: "text/event-stream", headers: { "cache-control": "no-store", "x-accel-buffering": "no", "connection": "close" } }
     )
   })))
 )

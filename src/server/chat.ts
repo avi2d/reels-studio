@@ -96,8 +96,7 @@ const makeTurns = Effect.gen(function*() {
     })
   const release = (id: string, turn: Turn): Effect.Effect<void> =>
     Ref.update(turns, (map) => new Map([...map].filter(([other, held]) => other !== id || held !== turn))).pipe(
-      Effect.andThen(Deferred.succeed(turn.finished, undefined)),
-      Effect.andThen(Effect.logInfo(`chat trace: released ${id}`))
+      Effect.andThen(Deferred.succeed(turn.finished, undefined))
     )
   const takeOver = (id: string, turn: Turn): Effect.Effect<void> =>
     Effect.gen(function*() {
@@ -188,7 +187,6 @@ const expandError = (state: Ref.Ref<RunState>, message: string): Effect.Effect<R
 
 const expandSettled = (state: Ref.Ref<RunState>, event: ChatEvent): Effect.Effect<ReadonlyArray<ChatEvent>> =>
   Effect.gen(function*() {
-    if (event.type === "done") yield* Effect.logInfo("chat trace: done event")
     const current = yield* Ref.get(state)
     if (current.pending === undefined) {
       yield* Ref.set(state, { ...current, settled: true })
@@ -229,10 +227,7 @@ const stoppedStream = <E>(
 ): Stream.Stream<ChatEvent> =>
   Stream.unwrap(Effect.gen(function*() {
     const last = yield* Ref.get(state)
-    if (last.settled) {
-      yield* Effect.logInfo("chat trace: stopped stream skips, already settled")
-      return Stream.make<Array<ChatEvent>>()
-    }
+    if (last.settled) return Stream.make<Array<ChatEvent>>()
     const code = yield* Fiber.join(exited).pipe(
       Effect.timeoutOption(SETTLE_TIMEOUT),
       Effect.orElseSucceed(() => Option.none()),
@@ -247,7 +242,6 @@ const stoppedStream = <E>(
     } else {
       yield* Effect.logError("pi did not settle in time", code)
     }
-    yield* Effect.logInfo("chat trace: stopped stream ends")
     return yield* endedWith(state, code === 0 ? CLOSED : EXITED)
   }))
 
@@ -334,11 +328,9 @@ export class Chat extends Context.Service<Chat, {
         Stream.concat(names.length === 0 ? Stream.empty : Stream.make(LOOKING), Stream.unwrap(Effect.gen(function*() {
           const state = yield* Ref.make<RunState>({ text: "", base: "", pending: undefined, failed: undefined, settled: false })
           if (asker === "person") {
-            yield* Effect.addFinalizer(() => Effect.logInfo("chat trace: append reply start").pipe(
-              Effect.andThen(Ref.get(state).pipe(Effect.flatMap((last) => append(dir, lastWords(last))),
-                Effect.catchTag("ApiError", (error) => Effect.logError("the reply was not saved", error.message))
-              )),
-              Effect.andThen(Effect.logInfo("chat trace: append reply end"))
+            yield* Effect.addFinalizer(() => Ref.get(state).pipe(
+              Effect.flatMap((last) => append(dir, lastWords(last))),
+              Effect.catchTag("ApiError", (error) => Effect.logError("the reply was not saved", error.message))
             ))
           }
           const files = yield* attachments.show(dir, names)
@@ -354,7 +346,6 @@ export class Chat extends Context.Service<Chat, {
           const exited = yield* handle.exitCode.pipe(Effect.forkScoped)
           return piStream(handle.stdout, makeExpand(state), stoppedStream(state, exited, complaints)).pipe(
             Stream.ensuring(Effect.gen(function*() {
-              yield* Effect.logInfo("chat trace: child cleanup start")
               const running = yield* handle.isRunning.pipe(Effect.orElseSucceed(() => true))
               if (running) {
                 yield* handle.kill().pipe(Effect.timeoutOption(SETTLE_TIMEOUT), Effect.exit)

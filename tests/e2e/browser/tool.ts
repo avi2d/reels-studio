@@ -61,6 +61,8 @@ const runPi = async (): Promise<void> => {
   if (message.startsWith("Собери блоки")) {
     await Bun.write("blocks.json", JSON.stringify(blocks))
     reply = "Блоки готовы."
+  } else if (message.includes("gather the blocks now")) {
+    reply = "Собрала блоки."
   } else {
     assert(message.includes(`attached/${CHAT_PICTURE}`), "The prompt did not name the attached picture")
     const picture = images?.[0]
