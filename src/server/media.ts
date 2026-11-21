@@ -111,6 +111,13 @@ const markGazeFailed = (failures: Unseen, job: Job) => (cause: Cause.Cause<unkno
 const setReel = (reels: Reels, dir: string, job: ReelJob): Effect.Effect<void> =>
   Ref.update(reels, (map) => new Map([...map, [dir, job]]))
 
+const queueWaiting = (reels: Reels, dir: string): Effect.Effect<boolean> =>
+  Ref.modify(reels, (map) => {
+    const job = map.get(dir)
+    if (job?.state === "waiting" || job?.state === "running") return [false, map]
+    return [true, new Map([...map, [dir, { state: "waiting" }]])]
+  })
+
 const forgetReel = (reels: Reels, dir: string): Effect.Effect<void> =>
   Ref.update(reels, (map) => new Map([...map].filter(([other]) => other !== dir)))
 
@@ -188,7 +195,7 @@ const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, r
     if (job?.state === "waiting" || job?.state === "running") return yield* reelOf(dir)
     const clips = yield* readCut(dir, yield* sourceNames(dir))
     if (clips.length === 0) return yield* badRequest("В монтаже нет ни одного блока. Сначала соберите блоки.")
-    yield* setReel(reels, dir, { state: "waiting" })
+    yield* queueWaiting(reels, dir)
     return yield* reelOf(dir)
   }, orBroken, Effect.provideContext(context))
 
