@@ -1,12 +1,24 @@
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import type { Span, Transcript } from "./plan.ts"
 
 export const MIN_PAUSE = 0.5
 export const PAUSE_REST = 0.2
 
+export const Head = Schema.Struct({
+  x: Schema.Finite,
+  y: Schema.Finite,
+  size: Schema.Finite.check(Schema.isGreaterThan(0))
+})
+export type Head = typeof Head.Type
+
+const Step = Schema.Finite.check(Schema.isGreaterThan(0))
+const HeadSamples = Schema.Array(Schema.NullOr(Head))
+const GazeSamples = Schema.Array(Schema.Literals(["camera", "away", "hidden"]))
+
 export const Gaze = Schema.Struct({
-  step: Schema.Finite.check(Schema.isGreaterThan(0)),
-  samples: Schema.Array(Schema.Literals(["camera", "away", "hidden"]))
+  step: Step,
+  samples: GazeSamples,
+  heads: Schema.optionalKey(HeadSamples)
 })
 export type Gaze = typeof Gaze.Type
 
@@ -33,16 +45,25 @@ export type Block = typeof Block.Type
 const PauseRef = Schema.Struct({ video: Schema.String, after: Schema.Int })
 export type PauseRef = typeof PauseRef.Type
 
+const ClipEdge = Schema.Struct({ video: Schema.String, at: Schema.Finite })
+
+export const JoinAnswer = Schema.Literals(["trim", "leave"])
+export type JoinAnswer = typeof JoinAnswer.Type
+
+const AnsweredJoin = Schema.Struct({ end: ClipEdge, start: ClipEdge, answer: JoinAnswer })
+export type AnsweredJoin = typeof AnsweredJoin.Type
+
 export const Edits = Schema.Struct({
   order: Schema.Array(Schema.String),
   deleted: Schema.Array(Schema.String),
   chosen: Schema.Array(Schema.Struct({ block: Schema.String, video: Schema.String, from: Schema.Int })),
   pauses: Schema.Array(PauseRef),
-  kept: Schema.optionalKey(Schema.Array(PauseRef))
+  kept: Schema.optionalKey(Schema.Array(PauseRef)),
+  joins: Schema.Array(AnsweredJoin).pipe(Schema.withDecodingDefaultKey(Effect.succeed([])))
 })
 export type Edits = typeof Edits.Type
 
-export const NO_EDITS: Edits = { order: [], deleted: [], chosen: [], pauses: [], kept: [] }
+export const NO_EDITS: Edits = { order: [], deleted: [], chosen: [], pauses: [], kept: [], joins: [] }
 
 export const GazeFailure = Schema.Literals(["no-tool", "tool-failed", "file-unreadable", "video-unreadable"])
 export type GazeFailure = typeof GazeFailure.Type
@@ -52,8 +73,12 @@ const Look = Schema.Union([
   Schema.Struct({ video: Schema.String, state: Schema.Literal("failed"), reason: GazeFailure })
 ])
 
+export const VideoFaces = Schema.Struct({ video: Schema.String, step: Step, gaze: GazeSamples, heads: HeadSamples })
+export type VideoFaces = typeof VideoFaces.Type
+
 export const TimelineView = Schema.Struct({
   looks: Schema.Array(Look),
+  faces: Schema.Array(VideoFaces),
   timeline: Schema.Union([
     Schema.Struct({ state: Schema.Literals(["none", "unreadable"]) }),
     Schema.Struct({ state: Schema.Literal("ready"), blocks: Schema.Array(Block), dropped: Schema.Int, edits: Edits })
@@ -162,6 +187,9 @@ export interface Placed {
   readonly spans: ReadonlyArray<Span>
 }
 
+export const playedPause = (one: Placed, pause: Pause): ReadonlyArray<Pause> =>
+  one.spans.flatMap((span) => within([pause], span))
+
 export const assemble = (blocks: ReadonlyArray<Block>, edits: Edits, transcripts: Transcripts): ReadonlyArray<Placed> =>
   arrange(blocks, edits).placed.flatMap((block): ReadonlyArray<Placed> => {
     const take = chosenTake(block, edits)
@@ -170,7 +198,7 @@ export const assemble = (blocks: ReadonlyArray<Block>, edits: Edits, transcripts
     return [{ block, take, pauses: pausesOf(transcript, take, edits), spans: playedSpans(transcript, take, edits) }]
   })
 
-const FADE = 0.06
+export const FADE = 0.06
 
 export const fadeGain = (span: Span, time: number): number =>
   Math.max(0, Math.min(1, (time - span.start) / FADE, (span.end - time) / FADE))
@@ -216,6 +244,8 @@ export const withManualPauses = (edits: Edits, pauses: ReadonlyArray<PauseRef>, 
 
 type Choice = Edits["chosen"][number]
 
+const sameClipEdge = (left: typeof ClipEdge.Type, right: typeof ClipEdge.Type): boolean => left.video === right.video && left.at === right.at
+
 const sameChoice = (left: Choice | undefined, right: Choice | undefined): boolean => {
   if (left === undefined || right === undefined) return left === right
   return left.video === right.video && left.from === right.from
@@ -228,6 +258,20 @@ export const mergeEdits = (base: Edits, local: Edits, current: Edits): Edits => 
       ...mine.filter((one) => !baseRefs.some((old) => same(old, one)) && !currentRefs.some((have) => same(have, one)))
     ]
   const mergePauses = mergeRefs(samePause)
+  const sameEnds = (left: AnsweredJoin, right: AnsweredJoin): boolean =>
+    sameClipEdge(left.end, right.end) && sameClipEdge(left.start, right.start)
+  const ends: Array<AnsweredJoin> = []
+  for (const one of [...current.joins, ...local.joins, ...base.joins]) {
+    if (!ends.some((have) => sameEnds(have, one))) ends.push(one)
+  }
+  const answerOf = (list: ReadonlyArray<AnsweredJoin>, one: AnsweredJoin): JoinAnswer | undefined =>
+    list.find((have) => sameEnds(have, one))?.answer
+  const joins = ends.flatMap((one): ReadonlyArray<AnsweredJoin> => {
+    const picked = answerOf(base.joins, one) === answerOf(local.joins, one)
+      ? current.joins.find((have) => sameEnds(have, one))
+      : local.joins.find((have) => sameEnds(have, one))
+    return picked === undefined ? [] : [picked]
+  })
   const choiceOf = (list: ReadonlyArray<Choice>, block: string): Choice | undefined => list.find((one) => one.block === block)
   const blocks = [...new Set([...base.chosen, ...local.chosen, ...current.chosen].map((one) => one.block))]
   const reordered = base.order.length !== local.order.length || base.order.some((id, index) => local.order[index] !== id)
@@ -241,6 +285,7 @@ export const mergeEdits = (base: Edits, local: Edits, current: Edits): Edits => 
       return entry === undefined ? [] : [entry]
     }),
     pauses: mergePauses(local.pauses, base.pauses, current.pauses),
-    kept: mergePauses(local.kept ?? [], base.kept ?? [], current.kept ?? [])
+    kept: mergePauses(local.kept ?? [], base.kept ?? [], current.kept ?? []),
+    joins
   }
 }

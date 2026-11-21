@@ -17,6 +17,9 @@ MODEL_SHA256 = "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff
 SAMPLES_PER_SECOND = 5
 EYE_TURN_DEGREES = 27
 CAMERA_WITHIN_DEGREES = 12
+IRIS_CENTRES = (468, 473)
+BROW_TOP = 10
+CHIN = 152
 
 
 def model_path() -> Path:
@@ -49,6 +52,18 @@ def look_of(face) -> str:
     return "camera" if off <= CAMERA_WITHIN_DEGREES else "away"
 
 
+def head_of(face, aspect: float) -> dict[str, float] | None:
+    if not face.face_landmarks:
+        return None
+    points = face.face_landmarks[0]
+    # Landmarks come as shares of the frame width and height, and a share of the height is the one unit both axes share.
+    eyes = [points[index] for index in IRIS_CENTRES]
+    x = sum(point.x for point in eyes) / len(eyes) * aspect
+    y = sum(point.y for point in eyes) / len(eyes)
+    size = math.hypot((points[BROW_TOP].x - points[CHIN].x) * aspect, points[BROW_TOP].y - points[CHIN].y)
+    return {"x": round(x, 4), "y": round(y, 4), "size": round(size, 4)}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("video")
@@ -68,7 +83,9 @@ def main() -> None:
         print("The video cannot be read.", file=sys.stderr)
         raise SystemExit(65)
     every = max(1, round(rate / SAMPLES_PER_SECOND))
+    aspect = video.get(cv2.CAP_PROP_FRAME_WIDTH) / video.get(cv2.CAP_PROP_FRAME_HEIGHT)
     samples: list[str] = []
+    heads: list[dict[str, float] | None] = []
     number = 0
     while video.grab():
         if number % every == 0:
@@ -76,9 +93,11 @@ def main() -> None:
             if not read:
                 break
             image = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            samples.append(look_of(landmarker.detect(image)))
+            face = landmarker.detect(image)
+            samples.append(look_of(face))
+            heads.append(head_of(face, aspect))
         number += 1
-    result = {"step": every / rate, "samples": samples}
+    result = {"step": every / rate, "samples": samples, "heads": heads}
     Path(args.output).write_text(json.dumps(result), encoding="utf-8")
 
 

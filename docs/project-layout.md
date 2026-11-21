@@ -13,6 +13,8 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/server/` | The routes, the video folders, the resumable upload, the chat and the transcription job |
 | `src/shared/plan.ts` | The transcript and plan formats and the spans the player skips, used by the server and the page |
 | `src/shared/timeline.ts` | The formats of the gaze samples, the blocks, the takes and the person's choices, and the spans the montage plays |
+| `src/shared/joins.ts` | The places to check at joins and the cuts at answered places, used by the page |
+| `src/shared/reel.ts` | The state of a reel build and of the built file, used by the server and the page |
 | `src/shared/gather.ts` | When the studio asks the chat model to gather the blocks by itself |
 | `src/shared/brief.ts` | The format of the brief, the plan and the saved yes, and the work the studio does after the yes |
 | `src/shared/chat.ts` | The format of a chat message and the kinds of file a person can attach to it |

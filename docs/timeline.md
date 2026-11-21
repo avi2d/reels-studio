@@ -7,7 +7,7 @@ The page of one video folder shows the speech of every heard video as a row of b
 
 ## The working screen
 
-Three stages work: «Видео и задание», «Дубли и блоки» and «Паузы и склейки».
+Four stages work: «Видео и задание», «Дубли и блоки», «Паузы и склейки» and «Готовый ролик».
 A bar at the top holds the way back, the title, the undo and redo buttons and the chat.
 The player stands next to the stage tabs, the row of blocks and the open stage.
 The row of blocks sits between the tabs and the open stage, with the text, the clip and the pauses of each block.
@@ -15,8 +15,8 @@ The round button under the player starts playback from the open block.
 Click the stop icon on that button to stop playback.
 The chat opens as a drawer over the page.
 On a phone the player sits above the tabs.
-The take and pause lists scroll without moving the player or the tabs.
-On a phone the tabs read «Видео», «Дубли» and «Паузы», so all three fit on one line.
+The take, pause and place lists scroll without moving the player or the tabs.
+On a phone the tabs read «Видео», «Дубли», «Паузы» and «Ролик», so all four fit on one line.
 
 ## Terms
 
@@ -64,7 +64,7 @@ The gathering and the yes write `timeline.json` under the same lock on top of th
 A pause the person returns stays in the `kept` list of `timeline.json`, and the studio never shortens it by itself, neither after a gathering nor after the yes.
 Removing the pause by hand drops it from that list.
 A deleted block and a removed pause stay listed on the page, and one tap returns each.
-The player shows the chosen takes in order and skips the removed pauses.
+The player shows the chosen takes in order and skips the removed pauses and the cuts at answered places.
 Each preview holds a key frame every half second.
 The studio re-encodes a preview made with the old key frame distance by itself in the background.
 The old preview stays playable until the new one is complete.
@@ -77,7 +77,23 @@ The buttons carry icons, and a tooltip names each when the mouse rests on it or 
 The numbered buttons under the player have equal widths.
 Scroll the strip to reach more blocks, or click a number to open the block.
 During playback, a play mark shows the current block in the numbered strip and the row of clips.
-The studio writes no video file from the row.
+
+## The built reel
+
+«Собрать ролик» on the «Готовый ролик» stage builds one file from the original videos, not from the previews.
+The file holds the chosen takes in row order, without removed pauses, with the same 0.06 s sound fade at each cut.
+It is 1080 by 1920 at 30 frames a second, H.264 High with AAC sound in an MP4.
+An iPhone HDR original is turned into ordinary BT.709 colours, so the reel does not look washed out in Instagram.
+The studio cuts each clip to whole frames, encodes the clips one by one through `REELS_HEAVY` with `REELS_ENCODER`, then joins them without encoding again.
+A bar shows how much of the reel is encoded.
+«Остановить сборку» stops a waiting or running build, ends its ffmpeg and removes the half-built parts, and the last finished reel stays.
+The build waits while the computer hears another video, because the studio runs one heavy job at a time.
+The originals stay untouched.
+
+The stage plays the built file and offers «Скачать».
+On an iPhone, save the downloaded file to «Фото», and the Instagram reel screen finds it there.
+After a change of the cut, the stage says the file no longer matches the cut, and «Собрать заново» builds it again.
+A server restart forgets a build in progress, and the person presses the button again.
 
 ## Keys
 
@@ -102,14 +118,43 @@ A frame counts as a look into the camera when the eyes point within 12 degrees o
 The direction of the eyes is the turn of the head plus the turn of the eyes, which the model gives as blendshape scores.
 A frame with no face counts as no look into the camera.
 
+## Places to check
+
+A join is a place where the cut jumps from one moment of a video to another.
+It comes at a removed pause or between two blocks.
+Two blocks that follow each other in one video with no gap make no join.
+For each sample, the gaze measure also writes where the eyes are.
+It also writes how tall the face is, from brow to chin.
+For each join, the studio takes two faces within 0.4 s of the join.
+One is the last face at or before the join, and the other is the first face at or after it.
+It sums the shift of the eyes and the change of the face height, and divides that by the mean face height.
+A join whose sum is above 0.08 becomes a place to check in the «Паузы и склейки» stage.
+A join with no face on one side is not a place.
+The tab of that stage shows how many places are left unanswered.
+«Посмотреть» plays 1.5 s before the join and 1.5 s after it, as the reel plays it.
+Either answer takes the place off the count:
+
+- «Обрезать» cuts the frames at the join where the eyes are off the camera.
+- «Оставить как есть» keeps the join as it is.
+
+The cut takes picture only over silence and never cuts into a word.
+Before the join it stops at the end of the last word, and after the join at the start of the next word.
+Each place says how many seconds it can cut, or names the word that keeps the eyes down.
+A place with nothing to cut offers only «Оставить как есть».
+The answer is kept in `timeline.json` with the two ends of the join, so a change of the cut that moves the join opens it again.
+The studio re-measures by itself, in the background, a video whose gaze file holds no head positions.
+This runs on the home computer and does not ask the chat model.
+
 ## Files
 
 Each video folder holds these next to `plan.json`:
 
 | Path | What it holds |
 | --- | --- |
-| `gaze/<video>.json` | One sample per 0.2 s: `camera`, `away` or `hidden` |
+| `gaze/<video>.json` | One sample per 0.2 s: `camera`, `away` or `hidden`, and where the eyes are and the face height, as shares of the frame height |
 | `gaze/<video>.txt` | The share of looks into the camera for each stretch of speech, which the chat model reads |
 | `blocks.json` | The blocks and their takes, written by the chat model |
-| `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses and the returned pauses |
+| `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses and the answers to the places to check |
+| `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
+| `reel/reel.json` | The build time, the video file it published and the parts it holds, so the stage can tell whether the cut changed since |
 | `gathered.json` | The heard videos and the settled gaze the studio last asked the chat model to gather blocks from, with a failed mark, the hash of the `blocks.json` the failed attempt saw, and the hash of the `blocks.json` it last shortened pauses for |

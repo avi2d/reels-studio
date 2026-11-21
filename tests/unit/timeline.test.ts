@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test"
 import { videoLines } from "../../src/server/chat.ts"
 import { gazeText } from "../../src/server/media-commands.ts"
-import type { Transcript } from "../../src/shared/plan.ts"
+import { lengthOf, type Transcript } from "../../src/shared/plan.ts"
 import {
-  arrange, assemble, cameraShare, chosenTake, clipsOf, fadeGain, mergeEdits, NO_EDITS, offsetIn, pausesOf, playedSpans, soundBlocks, withChoice, withDeleted,
+  arrange, assemble, cameraShare, chosenTake, clipsOf, fadeGain, mergeEdits, NO_EDITS, offsetIn, pausesOf, playedPause, playedSpans, soundBlocks, withChoice, withDeleted,
   withPauses, within,
-  type Block, type Edits, type Gaze
+  type Block, type Edits, type Gaze, type Pause, type Placed
 } from "../../src/shared/timeline.ts"
 
 const word = (start: number, end: number, text: string) => ({ start, end, text })
@@ -50,6 +50,15 @@ test("a removed pause leaves 0.2 s of rest between its two words, not a cut at t
 test("a removed pause after the last word ends the take 0.2 s after that word, not at the next take", () => {
   const edits = withPauses(NO_EDITS, [{ video: "a", after: 1 }, { video: "a", after: 4 }], true)
   expect(playedSpans(first, take("a", 0, 4), edits)).toEqual([{ start: 1, end: 2.1 }, { start: 2.9, end: 4.8 }])
+})
+
+test("only the part of a kept pause inside the trimmed reel counts as remaining silence, not the whole pause", () => {
+  const pause: Pause = { after: 4, start: 1.8, end: 3.05, removed: false }
+  const one = { block: advance, take: take("a", 0, 4), pauses: [pause], spans: [{ start: 0, end: 1.9 }] } satisfies Placed
+  const shown = playedPause(one, pause)
+  expect(shown).toEqual([{ after: 4, start: 1.8, end: 1.9, removed: false }])
+  expect(lengthOf(shown)).toBeCloseTo(0.1)
+  expect(playedPause({ ...one, spans: [{ start: 0, end: 1.7 }] }, pause)).toEqual([])
 })
 
 test("a pause removed and then returned plays again, and a pause of another video is not touched", () => {
@@ -116,6 +125,7 @@ test("the chat model is told where the gaze file is, or to rank by speech alone 
   const videos = [{ name: "a", state: "ready" as const, transcript: first }, { name: "b", state: "ready" as const, transcript: second }]
   const lines = videoLines(videos, {
     looks: [{ video: "a", state: "measured" }, { video: "b", state: "waiting" }],
+    faces: [],
     timeline: { state: "unreadable" }
   })
   expect(lines).toContain("gaze/a.txt")
@@ -151,7 +161,7 @@ test("a save keeps a picked take and the studio pauses instead of dropping one s
   const base: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)] }
   const local: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0), choice("deposit", "a", 4)] }
   const current: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3)] }
-  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: local.chosen, pauses: [cut("a", 3)], kept: [] })
+  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: local.chosen, pauses: [cut("a", 3)], kept: [], joins: [] })
 })
 
 test("returning a seen pause removes it instead of keeping the studio cut", () => {
@@ -165,26 +175,40 @@ test("a pause shortened after the last ack stays cut instead of coming back", ()
   const base: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3)] }
   const local: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0), choice("deposit", "a", 4)], pauses: [cut("a", 3)] }
   const current: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3), cut("a", 5)] }
-  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: local.chosen, pauses: [cut("a", 3), cut("a", 5)], kept: [] })
+  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: local.chosen, pauses: [cut("a", 3), cut("a", 5)], kept: [], joins: [] })
 })
 
 test("an undone take goes back while a later studio pause stays cut", () => {
   const base: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 2)], pauses: [cut("a", 3)] }
   const local: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3)] }
   const current: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 2)], pauses: [cut("a", 3), cut("a", 5)] }
-  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3), cut("a", 5)], kept: [] })
+  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3), cut("a", 5)], kept: [], joins: [] })
 })
 
 test("a reorder wins the order while untouched fields stay on the server", () => {
   const base: Edits = { ...NO_EDITS, order: ["advance", "deposit"] }
   const local: Edits = { ...NO_EDITS, order: ["deposit", "advance"] }
   const current: Edits = { ...NO_EDITS, order: ["advance", "deposit"], pauses: [cut("a", 3)] }
-  expect(mergeEdits(base, local, current)).toEqual({ order: ["deposit", "advance"], deleted: [], chosen: [], pauses: [cut("a", 3)], kept: [] })
+  expect(mergeEdits(base, local, current)).toEqual({ order: ["deposit", "advance"], deleted: [], chosen: [], pauses: [cut("a", 3)], kept: [], joins: [] })
 })
 
 test("returning a pause while the studio cuts another keeps both", () => {
   const base: Edits = { ...NO_EDITS, pauses: [cut("a", 3)] }
   const local: Edits = { ...NO_EDITS, kept: [cut("a", 3)] }
   const current: Edits = { ...NO_EDITS, pauses: [cut("a", 3), cut("a", 5)] }
-  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: [], pauses: [cut("a", 5)], kept: [cut("a", 3)] })
+  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: [], pauses: [cut("a", 5)], kept: [cut("a", 3)], joins: [] })
+})
+
+const answered = (at: number) => ({ end: { video: "a", at }, start: { video: "a", at: at + 2 }, answer: "leave" as const })
+
+test("an answer given while the studio saves another one keeps both instead of dropping the person's", () => {
+  const local: Edits = { ...NO_EDITS, joins: [answered(3)] }
+  const current: Edits = { ...NO_EDITS, joins: [answered(8)] }
+  expect(mergeEdits(NO_EDITS, local, current).joins).toEqual([answered(8), answered(3)])
+})
+
+test("an answer the person took back does not come back from the server", () => {
+  const base: Edits = { ...NO_EDITS, joins: [answered(3)] }
+  const current: Edits = { ...NO_EDITS, joins: [answered(3)] }
+  expect(mergeEdits(base, NO_EDITS, current).joins).toEqual([])
 })

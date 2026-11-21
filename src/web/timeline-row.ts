@@ -1,4 +1,4 @@
-import { offsetIn, type Pause, type Placed, type Take } from "../shared/timeline.ts"
+import { offsetIn, playedPause, type Pause, type Placed, type Take } from "../shared/timeline.ts"
 import { lengthOf } from "../shared/plan.ts"
 import { icon } from "./controls.ts"
 import { h } from "./dom.ts"
@@ -13,14 +13,16 @@ export interface RowActions {
 
 const share = (part: number, whole: number): string => `${(whole <= 0 ? 0 : (part / whole) * 100).toFixed(2)}%`
 
-const pauseMark = (one: Placed, pause: Pause, length: number, actions: RowActions): HTMLElement => {
-  const size = formatPause(pause.end - pause.start)
+const pauseMark = (one: Placed, pause: Pause, length: number, actions: RowActions): HTMLElement | undefined => {
+  const shown = pause.removed ? pause : playedPause(one, pause)[0]
+  if (shown === undefined) return undefined
+  const size = formatPause(shown.end - shown.start)
   const label = pause.removed ? `Вернуть паузу ${size}` : `Убрать паузу ${size}`
-  const left = share(offsetIn(one.spans, pause.start), length)
+  const left = share(offsetIn(one.spans, shown.start), length)
   return h("button", {
     type: "button",
     class: pause.removed ? "pause removed" : "pause",
-    style: pause.removed ? `left: min(${left}, 100% - var(--gap-min))` : `left: min(${left}, 100% - var(--gap-min)); width: ${share(pause.end - pause.start, length)}`,
+    style: pause.removed ? `left: min(${left}, 100% - var(--gap-min))` : `left: min(${left}, 100% - var(--gap-min)); width: ${share(shown.end - shown.start, length)}`,
     "aria-label": label,
     title: label,
     "data-key": `pause:${one.take.video}:${pause.after}`,
@@ -148,7 +150,7 @@ const slotOf = (row: HTMLElement, one: Placed, at: At, selected: string | undefi
     h("span", { class: "at" }, formatLength(at.start)),
     h("span", { class: "said", title: actions.textOf(take) }, actions.textOf(take)),
     h("div", { class: block.id === selected ? "clip selected" : "clip" }, dragHandle(row, slot, block.title, block.id, selected, actions), pick),
-    h("div", { class: "gaps" }, ...one.pauses.map((pause) => pauseMark(one, pause, length, actions))))
+    h("div", { class: "gaps" }, ...one.pauses.flatMap((pause) => pauseMark(one, pause, length, actions) ?? [])))
   return slot
 }
 
