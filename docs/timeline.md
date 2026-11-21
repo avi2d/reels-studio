@@ -62,7 +62,7 @@ An iPhone HDR original is turned into ordinary BT.709 colours, so the reel does 
 The studio cuts each clip to whole frames, encodes the clips one by one through `REELS_HEAVY` with `REELS_ENCODER`, then joins them without encoding again.
 A bar shows how much of the reel is encoded.
 «Остановить сборку» stops a waiting or running build, ends its ffmpeg and removes the half-built parts, and the last finished reel stays.
-The build waits while the computer hears or measures another video, because the studio runs one heavy job at a time.
+The build waits while the computer hears another video, because the studio runs one heavy job at a time.
 The originals stay untouched.
 
 The stage plays the built file and offers «Скачать».
@@ -103,5 +103,5 @@ Each video folder holds these next to `plan.json`:
 | `gaze/<video>.txt` | The share of looks into the camera for each stretch of speech, which the chat model reads |
 | `blocks.json` | The blocks and their takes, written by the chat model |
 | `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes and the removed pauses |
-| `reel/reel-<stamp>.mp4` | One built reel per build, named by its build time |
+| `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
 | `reel/reel.json` | The build time, the video file it published and the parts it holds, so the stage can tell whether the cut changed since |
