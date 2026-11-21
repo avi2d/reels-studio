@@ -1,7 +1,7 @@
 import type { WaTabShowEvent } from "@awesome.me/webawesome/dist/events/tab-show.js"
 import { h } from "./dom.ts"
 
-const LIVE = [["brief", "Видео и задание", "Видео"], ["takes", "Дубли и блоки", "Дубли"], ["pauses", "Паузы и склейки", "Паузы"]] as const
+const LIVE = [["brief", "Видео и задание", "Видео"], ["takes", "Дубли и блоки", "Дубли"], ["pauses", "Паузы и склейки", "Паузы"], ["file", "Готовый ролик", "Ролик"]] as const
 export type StageId = typeof LIVE[number][0]
 
 const stageOf = (name: string): StageId | undefined => LIVE.find(([id]) => id === name)?.[0]

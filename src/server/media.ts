@@ -2,13 +2,15 @@ import { type Crypto, Cause, Context, Deferred, Effect, Exit, FileSystem, Layer,
 import type { ChildProcessSpawner } from "effect/process"
 import type { LibraryVideo, Pick } from "../shared/library.ts"
 import type { VideoView } from "../shared/plan.ts"
+import type { ReelJob, ReelView } from "../shared/reel.ts"
 import { mergeEdits as joinEdits, type Edits, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
 import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
 import { GazeFailed, listen, look, places, previewIsFresh, readPlan, readTranscript, refreshPreview, type Job } from "./media-jobs.ts"
 import { Projects } from "./projects.ts"
 import { gatherLibrary, heardIn, keysIn, reuse as reuseOne, sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
-import { readEdits, readTimeline, writeEdits } from "./timeline-files.ts"
+import { buildReel, readReel, reelVideoAt } from "./reel.ts"
+import { readCut, readEdits, readTimeline, writeEdits } from "./timeline-files.ts"
 
 const UNAVAILABLE = "Видео недоступно. Попробуйте открыть страницу ещё раз."
 const orBroken = orUnavailable("the media failed", UNAVAILABLE)
@@ -17,11 +19,13 @@ const keyOf = (job: Job): string => places(job).source
 
 type Unheard = Ref.Ref<ReadonlySet<string>>
 type Unseen = Ref.Ref<ReadonlyMap<string, GazeFailure>>
+type Reels = Ref.Ref<ReadonlyMap<string, ReelJob>>
 
 interface Failures {
   readonly unheard: Unheard
   readonly unseen: Unseen
   readonly stale: Unheard
+  readonly reels: Reels
 }
 
 interface Running {
@@ -104,10 +108,46 @@ const markGazeFailed = (failures: Unseen, job: Job) => (cause: Cause.Cause<unkno
     onSome: (error): GazeFailure => error instanceof GazeFailed ? error.reason : "tool-failed"
   })]]))
 
+const setReel = (reels: Reels, dir: string, job: ReelJob): Effect.Effect<void> =>
+  Ref.update(reels, (map) => new Map([...map, [dir, job]]))
+
+const queueWaiting = (reels: Reels, dir: string): Effect.Effect<boolean> =>
+  Ref.modify(reels, (map) => {
+    const job = map.get(dir)
+    if (job?.state === "waiting" || job?.state === "running") return [false, map]
+    return [true, new Map([...map, [dir, { state: "waiting" }]])]
+  })
+
+const forgetReel = (reels: Reels, dir: string): Effect.Effect<void> =>
+  Ref.update(reels, (map) => new Map([...map].filter(([other]) => other !== dir)))
+
+const nextReel = Effect.fnUntraced(function*(reels: Reels, closed: ReadonlySet<string>) {
+  const fs = yield* FileSystem.FileSystem
+  const waiting = [...(yield* Ref.get(reels))].flatMap(([dir, job]) => job.state === "waiting" && !closed.has(dir) ? [dir] : [])
+  for (const dir of waiting) {
+    if (yield* fs.exists(dir)) return dir
+    yield* forgetReel(reels, dir)
+  }
+  return undefined
+})
+
+const startReel = (reels: Reels, dir: string): Effect.Effect<boolean> =>
+  Ref.modify(reels, (map) => map.get(dir)?.state === "waiting" ? [true, new Map([...map, [dir, { state: "running", done: 0 }]])] : [false, map])
+
+const reelTask = (reels: Reels, dir: string) =>
+  Effect.gen(function*() {
+    if (!(yield* startReel(reels, dir))) return
+    const clips = yield* readCut(dir, yield* sourceNames(dir))
+    yield* buildReel(dir, clips, (done) => setReel(reels, dir, { state: "running", done }))
+  }).pipe(Effect.onExit((exit) => Exit.isFailure(exit) && !Exit.hasInterrupts(exit) ? setReel(reels, dir, { state: "failed" }) : forgetReel(reels, dir)))
+
 const step = Effect.fnUntraced(function*(failures: Failures, work: Ref.Ref<Work>) {
-  const jobs = yield* openJobs((yield* Ref.get(work)).closed)
+  const { closed } = yield* Ref.get(work)
+  const jobs = yield* openJobs(closed)
   const unheard = yield* nextUnheard(failures.unheard, jobs)
   if (unheard !== undefined) return yield* attempt(work, unheard, listen(unheard), () => markFailed(failures.unheard, unheard))
+  const reel = yield* nextReel(failures.reels, closed)
+  if (reel !== undefined) return yield* attempt(work, { dir: reel, name: "the reel" }, reelTask(failures.reels, reel), () => Effect.void)
   const stale = yield* nextStale(failures.stale, jobs)
   if (stale !== undefined) return yield* attempt(work, stale, refreshPreview(stale), () => markFailed(failures.stale, stale))
   const unseen = yield* nextUnseen(failures.unseen, jobs)
@@ -127,11 +167,57 @@ const view = Effect.fnUntraced(function*(unheard: Unheard, job: Job) {
   return ready
 })
 
-type MediaContext = FileSystem.FileSystem | Crypto.Crypto | Settings | ChildProcessSpawner.ChildProcessSpawner
+type Needs = FileSystem.FileSystem | Crypto.Crypto | Settings | ChildProcessSpawner.ChildProcessSpawner
+
+const stopReel = Effect.fnUntraced(function*(work: Ref.Ref<Work>, reels: Reels, dir: string) {
+  const job = (yield* Ref.get(reels)).get(dir)
+  if (job?.state === "waiting") return yield* forgetReel(reels, dir)
+  if (job?.state !== "running") return
+  const running = (yield* Ref.get(work)).running
+  if (running?.dir !== dir) return
+  yield* Deferred.succeed(running.stop, undefined)
+  yield* Deferred.await(running.finished)
+})
+
+const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, reels: Reels, work: Ref.Ref<Work>, context: Context.Context<Needs>) => {
+  const reelOf = Effect.fnUntraced(function*(dir: string) {
+    const job = (yield* Ref.get(reels)).get(dir) ?? { state: "idle" }
+    return yield* readReel(dir, yield* readCut(dir, yield* sourceNames(dir)), job)
+  })
+
+  const reel = Effect.fn("Media.reel")(function*(id: string) {
+    return yield* reelOf(yield* folder(id))
+  }, orBroken, Effect.provideContext(context))
+
+  const queueReel = Effect.fn("Media.buildReel")(function*(id: string) {
+    const dir = yield* folder(id)
+    const job = (yield* Ref.get(reels)).get(dir)
+    if (job?.state === "waiting" || job?.state === "running") return yield* reelOf(dir)
+    const clips = yield* readCut(dir, yield* sourceNames(dir))
+    if (clips.length === 0) return yield* badRequest("В монтаже нет ни одного блока. Сначала соберите блоки.")
+    yield* queueWaiting(reels, dir)
+    return yield* reelOf(dir)
+  }, orBroken, Effect.provideContext(context))
+
+  const reelFile = Effect.fn("Media.reelFile")(function*(id: string, made: string) {
+    const target = yield* reelVideoAt(yield* folder(id), made)
+    if (target === undefined) return yield* notFound("Ролик ещё не собран")
+    return target
+  }, orBroken, Effect.provideContext(context))
+
+  const cancelReel = Effect.fn("Media.cancelReel")(function*(id: string) {
+    const dir = yield* folder(id)
+    yield* stopReel(work, reels, dir)
+    return yield* reelOf(dir)
+  }, orBroken, Effect.provideContext(context))
+
+  return { reel, buildReel: queueReel, cancelReel, reelFile }
+}
+
 
 const makeExchange = (
   projects: Projects["Service"],
-  context: Context.Context<MediaContext>
+  context: Context.Context<Needs>
 ) => Effect.gen(function*() {
   const creation = yield* Semaphore.make(1)
   const guards = yield* Ref.make<ReadonlyMap<string, Semaphore.Semaphore>>(new Map())
@@ -178,6 +264,10 @@ export class Media extends Context.Service<Media, {
   readonly timeline: (id: string) => Effect.Effect<TimelineView, ApiError>
   readonly exchangeEdits: <A>(id: string, compute: (current: Edits) => { readonly edits: Edits; readonly value: A }) => Effect.Effect<A, ApiError>
   readonly mergeEdits: (id: string, base: Edits, local: Edits) => Effect.Effect<Edits, ApiError>
+  readonly reel: (id: string) => Effect.Effect<ReelView, ApiError>
+  readonly buildReel: (id: string) => Effect.Effect<ReelView, ApiError>
+  readonly cancelReel: (id: string) => Effect.Effect<ReelView, ApiError>
+  readonly reelFile: (id: string, made: string) => Effect.Effect<string, ApiError>
   readonly withoutWork: <A, E, R>(dir: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }>()("reels-studio/Media") {
   static readonly layer = Layer.effect(
@@ -185,14 +275,15 @@ export class Media extends Context.Service<Media, {
     Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem
       const projects = yield* Projects
-      const context = yield* Effect.context<FileSystem.FileSystem | Crypto.Crypto | Settings | ChildProcessSpawner.ChildProcessSpawner>()
+      const context = yield* Effect.context<Needs>()
       const unheard: Unheard = yield* Ref.make<ReadonlySet<string>>(new Set())
       const unseen: Unseen = yield* Ref.make<ReadonlyMap<string, GazeFailure>>(new Map())
       const stale: Unheard = yield* Ref.make<ReadonlySet<string>>(new Set())
+      const reels: Reels = yield* Ref.make<ReadonlyMap<string, ReelJob>>(new Map())
       const work = yield* Ref.make<Work>({ closed: new Set(), running: undefined })
 
       const guarded = Effect.gen(function*() {
-        const outcome = yield* Effect.exit(step({ unheard, unseen, stale }, work))
+        const outcome = yield* Effect.exit(step({ unheard, unseen, stale, reels }, work))
         if (Exit.isSuccess(outcome)) return
         yield* Effect.logError("the media worker failed", outcome.cause)
         yield* Effect.sleep("3 seconds")
@@ -250,6 +341,8 @@ export class Media extends Context.Service<Media, {
 
       const { exchangeEdits, mergeEdits } = yield* makeExchange(projects, context)
 
+      const { reel, buildReel: queueReel, cancelReel, reelFile } = reelHandlers(projects.folder, reels, work, context)
+
       const withoutWork = <A, E, R>(dir: string, use: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
         Effect.acquireUseRelease(
           Effect.gen(function*() {
@@ -265,7 +358,7 @@ export class Media extends Context.Service<Media, {
           () => Ref.update(work, (state) => ({ ...state, closed: new Set([...state.closed].filter((other) => other !== dir)) }))
         )
 
-      return Media.of({ videos, preview, retry, library, reuse, timeline, exchangeEdits, mergeEdits, withoutWork })
+      return Media.of({ videos, preview, retry, library, reuse, timeline, exchangeEdits, mergeEdits, reel, buildReel: queueReel, cancelReel, reelFile, withoutWork })
     })
   )
 }
