@@ -35,7 +35,7 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
   readonly edited: () => void
   readonly settled: (ok: boolean) => void
 } => {
-  const state: { timer: number; made: string | undefined; dirty: boolean } = { timer: 0, made: undefined, dirty: false }
+  const state: { timer: number; made: string | undefined; dirty: boolean; seen: number } = { timer: 0, made: undefined, dirty: false, seen: 0 }
   const status = h("p", { class: "muted", role: "status" })
   const bar = h("progress", { max: "1", value: "0", hidden: true })
   const problem = h("p", { class: "error", role: "alert" })
@@ -83,13 +83,22 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
   function refresh(): void {
     globalThis.clearTimeout(state.timer)
     if (!node.isConnected) return
+    state.seen += 1
+    const ticket = state.seen
     Effect.runFork(Api.getReel(projectId).pipe(
-      Effect.map(show),
-      Effect.catchTag("Failed", () => Effect.sync(later))
+      Effect.map((view) => {
+        if (ticket !== state.seen) return
+        show(view)
+      }),
+      Effect.catchTag("Failed", () => Effect.sync(() => {
+        if (ticket !== state.seen) return
+        later()
+      }))
     ))
   }
 
   const edited = (): void => {
+    state.seen += 1
     state.dirty = true
     make.disabled = true
     hooks.note({ note: "", done: false })
@@ -113,9 +122,15 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
         problem.textContent = NOT_SAVED
         return
       }
+      state.seen += 1
+      const ticket = state.seen
       Effect.runFork(Api.buildReel(projectId).pipe(
-        Effect.map(show),
+        Effect.map((view) => {
+          if (ticket !== state.seen) return
+          show(view)
+        }),
         Effect.catchTag("Failed", (error) => Effect.sync(() => {
+          if (ticket !== state.seen) return
           problem.textContent = error.message
           make.disabled = state.dirty || hooks.pending()
         }))
@@ -125,9 +140,15 @@ export const reelPane = (projectId: string, hooks: { readonly note: (note: Stage
 
   cancel.addEventListener("click", () => {
     cancel.disabled = true
+    state.seen += 1
+    const ticket = state.seen
     Effect.runFork(Api.cancelReel(projectId).pipe(
-      Effect.map(show),
+      Effect.map((view) => {
+        if (ticket !== state.seen) return
+        show(view)
+      }),
       Effect.catchTag("Failed", (error) => Effect.sync(() => {
+        if (ticket !== state.seen) return
         problem.textContent = error.message
         cancel.disabled = false
       }))
