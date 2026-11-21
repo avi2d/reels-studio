@@ -34,6 +34,19 @@ export const refreshArgs = (source: string, preview: string, hdr: boolean, encod
   "-c:v", encoder, "-b:v", "1500k", "-g", String(KEY_FRAME_EVERY), "-c:a", "aac", "-b:a", "96k", "-ac", "1", "-movflags", "+faststart", "-f", "mp4", preview
 ]
 
+export interface RecognizerFiles {
+  readonly wav: string
+  readonly words: string
+}
+
+// onnxruntime offers CoreML first on macOS, and the GigaAM encoder fails there with error code -1 while the CPU provider hears it.
+const recognizerProviders = (platform: NodeJS.Platform): ReadonlyArray<string> =>
+  platform === "darwin" ? ["--providers", "CPUExecutionProvider"] : []
+
+export const recognizerArgs = (transcriber: string, files: RecognizerFiles, platform: NodeJS.Platform): ReadonlyArray<string> => [
+  "run", "--project", transcriber, "python", `${transcriber}/transcribe.py`, ...recognizerProviders(platform), files.wav, files.words
+]
+
 const LINE_PAUSE = 0.1
 const NAMED_PAUSE = 1
 

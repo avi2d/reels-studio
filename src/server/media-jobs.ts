@@ -2,10 +2,10 @@ import { Data, Effect, FileSystem, Option, Predicate, Schema, Stream, type Platf
 import { ChildProcess } from "effect/process"
 import { Plan, Transcript } from "../shared/plan.ts"
 import { Gaze, type GazeFailure } from "../shared/timeline.ts"
-import { gazeText, isHdr, KEY_FRAME_EVERY, prepareArgs, probeArgs, refreshArgs, transcriptText } from "./media-commands.ts"
+import { gazeText, isHdr, KEY_FRAME_EVERY, prepareArgs, probeArgs, recognizerArgs, refreshArgs, transcriptText } from "./media-commands.ts"
 import { Settings } from "./settings.ts"
 
-export class ToolFailed extends Data.TaggedError("ToolFailed")<{ readonly command: string; readonly code: number; readonly output: string }> {}
+export class ToolFailed extends Data.TaggedError("ToolFailed")<{ readonly command: string; readonly code: number; readonly output: string; readonly message: string }> {}
 
 export class GazeFailed extends Data.TaggedError("GazeFailed")<{ readonly reason: GazeFailure; readonly detail: string }> {}
 
@@ -64,7 +64,10 @@ export const tool = Effect.fnUntraced(function*(command: string, args: ReadonlyA
     handle.stderr.pipe(Stream.decodeText(), Stream.mkString),
     handle.exitCode
   ], { concurrency: 3 })
-  if (code !== 0) return yield* new ToolFailed({ command, code, output: complaints.slice(-2000) })
+  if (code !== 0) {
+    const tail = complaints.slice(-2000)
+    return yield* new ToolFailed({ command, code, output: tail, message: `${command} exited with code ${code}: ${tail}` })
+  }
   return output
 }, Effect.scoped)
 
@@ -101,8 +104,7 @@ export const listen = Effect.fn("Media.listen")(function*(job: Job) {
   const probe = yield* decodeProbe(yield* tool("ffprobe", probeArgs(place.source), []))
   const hdr = isHdr(probe.streams[0]?.color_transfer)
   yield* tool("ffmpeg", prepareArgs({ source: place.source, wav, preview }, hdr, settings.encoder), settings.heavy)
-  const transcriber = `${settings.root}/tools/transcribe`
-  yield* tool("uv", ["run", "--project", transcriber, "python", `${transcriber}/transcribe.py`, wav, words], settings.heavy)
+  yield* tool("uv", recognizerArgs(`${settings.root}/tools/transcribe`, { wav, words }, process.platform), settings.heavy)
   const transcript = yield* decodeTranscript(yield* fs.readFileString(words))
   yield* fs.rename(preview, place.preview)
   yield* markPreviewFresh(job)

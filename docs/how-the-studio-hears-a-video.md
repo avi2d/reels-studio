@@ -9,6 +9,7 @@ The preview holds a key frame every half second so the player can start at the s
 A preview made before that keeps the old key frame distance until the studio re-encodes it by itself in the background, one video at a time and with the same encoder settings.
 The old preview stays playable until the new one is complete, and only the preview is re-encoded.
 GigaAM v3 recognizes the speech, and Silero VAD finds the stretches of speech first.
+On a Mac both run on the CPU provider of onnxruntime, because its CoreML provider fails on the GigaAM encoder.
 
 Each video folder holds these, named after the video:
 
