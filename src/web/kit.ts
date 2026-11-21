@@ -17,6 +17,7 @@ import picture from "lucide-static/icons/image.svg" with { type: "text" }
 import sound from "lucide-static/icons/music.svg" with { type: "text" }
 import attach from "lucide-static/icons/paperclip.svg" with { type: "text" }
 import send from "lucide-static/icons/arrow-up.svg" with { type: "text" }
+import settings from "lucide-static/icons/settings.svg" with { type: "text" }
 import grip from "lucide-static/icons/grip-vertical.svg" with { type: "text" }
 import play from "lucide-static/icons/play.svg" with { type: "text" }
 import redo from "lucide-static/icons/redo-2.svg" with { type: "text" }
@@ -26,7 +27,7 @@ import stop from "lucide-static/icons/square.svg" with { type: "text" }
 import undo from "lucide-static/icons/undo-2.svg" with { type: "text" }
 import close from "lucide-static/icons/x.svg" with { type: "text" }
 
-const ICONS = { attach, back, close, document: fileText, file, grip, next, picture, play, previous, redo, send, sound, stop, undo, video }
+const ICONS = { attach, back, close, document: fileText, file, grip, next, picture, play, previous, redo, send, settings, sound, stop, undo, video }
 
 export type IconName = keyof typeof ICONS
 

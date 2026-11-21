@@ -239,7 +239,7 @@ export const frameOf = (parts: Parts): Frame => {
       h("div", { class: "viewbox" },
         h("div", { class: "stage" }, frame),
         overview,
-        h("div", { class: "transport" }, parts.clock, parts.prev, parts.go, parts.next, parts.facts, ...parts.transportTips), parts.zones.controls)),
+        h("div", { class: "transport" }, parts.clock, parts.prev, parts.go, parts.next, parts.facts, parts.zones.gear, ...parts.transportTips), parts.zones.panel)),
     takes: h("div", { class: "pane" }, notes, parts.detailHolder),
     pauses: h("div", { class: "pane" }, noPauses, parts.strip, parts.pauseHolder),
     history: h("div", { class: "history", role: "group", "aria-label": "Правки монтажа" }, parts.undo, parts.redo, ...parts.historyTips),

@@ -1,5 +1,7 @@
+import type WaButton from "@awesome.me/webawesome/dist/components/button/button.js"
 import type WaSelect from "@awesome.me/webawesome/dist/components/select/select.js"
 import type WaSwitch from "@awesome.me/webawesome/dist/components/switch/switch.js"
+import { iconButton } from "./controls.ts"
 import { h } from "./dom.ts"
 
 export const PLATFORMS = ["Instagram", "YouTube Shorts", "TikTok"] as const
@@ -29,7 +31,8 @@ export const styleOf = (platform: Platform): string => {
 
 export interface Margins {
   readonly overlay: HTMLElement
-  readonly controls: HTMLElement
+  readonly gear: WaButton
+  readonly panel: HTMLDialogElement
 }
 
 const BANDS = ["top", "bottom", "left", "right"] as const
@@ -49,5 +52,11 @@ export const margins = (): Margins => {
     value: PLATFORMS[0],
     change: () => { overlay.setAttribute("style", styleOf(PLATFORMS.find((name) => name === pick.value) ?? PLATFORMS[0])) }
   }, ...PLATFORMS.map((name) => h("wa-option", { value: name }, name)))
-  return { overlay, controls: h("div", { class: "zone-bar" }, toggle, pick) }
+  const panel = h("dialog", { class: "settings", "aria-labelledby": "settings-title" },
+    h("form", { class: "settings-head", method: "dialog" },
+      h("h2", { id: "settings-title" }, "Настройки"),
+      iconButton("plain", "close", "Закрыть настройки", { type: "submit" })),
+    h("div", { class: "zone-bar" }, toggle, pick))
+  const gear = iconButton("plain", "settings", "Настройки", { class: "gear", click: () => { panel.showModal() } })
+  return { overlay, gear, panel }
 }
