@@ -26,6 +26,9 @@ export const gatherStep = (
   return { kind: "gather", videos: heard, settled: now }
 }
 
+export const gazePending = (heard: ReadonlyArray<string>, settled: ReadonlyArray<string>): boolean =>
+  heard.some((name) => !settled.includes(name))
+
 export const blocksHash = (content: string | undefined): string | undefined => {
   if (content === undefined) return undefined
   let hash = 0x811c9dc5

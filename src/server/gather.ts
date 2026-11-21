@@ -1,6 +1,6 @@
 import { Context, Effect, Exit, FileSystem, Layer, Path, Schema } from "effect"
 import { shortenPlaced } from "../shared/brief.ts"
-import { blocksHash, failedShows, Gathered, gatherStep } from "../shared/gather.ts"
+import { blocksHash, failedShows, Gathered, gatherStep, gazePending } from "../shared/gather.ts"
 import { Chat } from "./chat.ts"
 import { GatherState } from "./gather-state.ts"
 import { Media } from "./media.ts"
@@ -44,7 +44,7 @@ export class Gather extends Context.Service<Gather, {
         const listening = videos.some((video) => video.state === "waiting")
         const view = yield* media.timeline(id)
         const settled = view.looks.flatMap((look) => look.state === "waiting" ? [] : [look.video])
-        return { dir, step: gatherStep(heard, settled, listening, gathered) }
+        return { dir, step: gatherStep(heard, settled, listening, gathered), heard, settled }
       })
 
       const visit = Effect.fnUntraced(function*(id: string) {
@@ -52,11 +52,10 @@ export class Gather extends Context.Service<Gather, {
         if (step.kind === "wait") return
         if (yield* state.blocked(id)) return
         yield* state.track(id, Effect.gen(function*() {
-          const before = yield* readBlocks(dir)
-          yield* chat.gather(id)
+          const exit = yield* Effect.exit(chat.gather(id))
           const after = yield* readBlocks(dir)
           const fresh = yield* media.timeline(id)
-          if (before === after || fresh.timeline.state !== "ready") {
+          if (Exit.isFailure(exit) || fresh.timeline.state !== "ready") {
             yield* remember(dir, step.videos, step.settled, true, blocksHash(after))
             return
           }
@@ -84,8 +83,8 @@ export class Gather extends Context.Service<Gather, {
 
       const running = (id: string): Effect.Effect<boolean> => Effect.gen(function*() {
         if (yield* state.running(id)) return true
-        const { step } = yield* stepOf(id).pipe(Effect.orElseSucceed(() => ({ step: { kind: "wait" } as const })))
-        return step.kind !== "wait"
+        const { step, heard, settled } = yield* stepOf(id).pipe(Effect.orElseSucceed(() => ({ step: { kind: "wait" } as const, heard: [], settled: [] })))
+        return step.kind !== "wait" || gazePending(heard, settled)
       })
       const failed = (id: string): Effect.Effect<boolean> => Effect.gen(function*() {
         const dir = yield* projects.folder(id).pipe(Effect.orElseSucceed(() => undefined))

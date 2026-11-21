@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { blocksHash, failedShows, gatherStep } from "../../src/shared/gather.ts"
+import { blocksHash, failedShows, gatherStep, gazePending } from "../../src/shared/gather.ts"
 
 test("a folder whose every video is heard is gathered at once, not left waiting for the plan or the yes", () => {
   expect(gatherStep(["a.mov", "b.mov"], [], false, undefined)).toEqual({ kind: "gather", videos: ["a.mov", "b.mov"], settled: [] })
@@ -47,6 +47,11 @@ test("a failed mark still shows over ready blocks until different blocks replace
   expect(failedShows(marked, "blocks-two")).toBe(false)
   expect(failedShows({ videos: ["a.mov"], failed: false }, "blocks-one")).toBe(false)
   expect(failedShows(undefined, "blocks-one")).toBe(false)
+})
+
+test("a heard video without a settled gaze still owes a regather instead of counting as done", () => {
+  expect(gazePending(["a.mov", "b.mov"], ["a.mov"])).toBe(true)
+  expect(gazePending(["a.mov"], ["a.mov"])).toBe(false)
 })
 
 test("a failure that saw no blocks shows until blocks appear instead of hiding at once", () => {

@@ -162,10 +162,10 @@ test("returning a seen pause removes it instead of keeping the studio cut", () =
 })
 
 test("a pause shortened after the last ack stays cut instead of coming back", () => {
-  const base: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)] }
-  const local: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0), choice("deposit", "a", 4)] }
-  const current: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3)] }
-  expect(mergeEdits(base, local, current).pauses).toEqual([cut("a", 3)])
+  const base: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3)] }
+  const local: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0), choice("deposit", "a", 4)], pauses: [cut("a", 3)] }
+  const current: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3), cut("a", 5)] }
+  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: local.chosen, pauses: [cut("a", 3), cut("a", 5)], kept: [] })
 })
 
 test("an undone take goes back while a later studio pause stays cut", () => {

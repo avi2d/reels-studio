@@ -265,7 +265,10 @@ const gatherWith = ({ projects, settings, makeDirectory, run }: GatherNeeds) =>
     const model = project.model !== undefined && settings.models.includes(project.model) ? project.model : settings.models[0]
     if (model === undefined) return yield* new ApiError({ status: 500, message: "В студии не задана ни одна модель" })
     yield* makeDirectory(dir)
-    yield* run(id, dir, GATHER_PROMPT, [], model, project.effort ?? "medium", false, "studio").pipe(Stream.runDrain)
+    const failed = yield* run(id, dir, GATHER_PROMPT, [], model, project.effort ?? "medium", false, "studio").pipe(
+      Stream.runFold(false, (seen, event) => seen || event.type === "error")
+    )
+    if (failed) return yield* new ApiError({ status: 500, message: "Модель не собрала блоки" })
   })
 
 export class Chat extends Context.Service<Chat, {
@@ -369,10 +372,12 @@ export class Chat extends Context.Service<Chat, {
           yield* projects.setChoice(id, model, effort)
           yield* append(dir, names.length === 0 ? { role: "user", text: trimmed } : { role: "user", text: trimmed, files: names })
         }).pipe(Effect.onError(() => release(id, turn)))
-        const work = approved === undefined ? Stream.empty : Stream.fromEffect(brief.workAlone(id, approved).pipe(
-          Effect.catchTag("ApiError", (error) => Effect.logError("the work after the yes failed", error.message))
-        )).pipe(Stream.drain)
-        return Stream.concat(run(id, dir, trimmed, names, model, effort, approved !== undefined, "person"), work).pipe(
+        if (approved !== undefined) {
+          yield* Effect.forkDaemon(brief.workAlone(id, approved).pipe(
+            Effect.catchTag("ApiError", (error) => Effect.logError("the work after the yes failed", error.message))
+          ))
+        }
+        return run(id, dir, trimmed, names, model, effort, approved !== undefined, "person").pipe(
           Stream.interruptWhen(Deferred.await(turn.stop)),
           Stream.ensuring(release(id, turn))
         )

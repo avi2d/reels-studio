@@ -1,6 +1,6 @@
 import { Context, DateTime, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
 import { afterYes, Approval, MAX_BRIEF, planView, type BriefView, type PlanView } from "../shared/brief.ts"
-import { gatherStep } from "../shared/gather.ts"
+import { gazePending, gatherStep } from "../shared/gather.ts"
 import { NO_EDITS } from "../shared/timeline.ts"
 import { GatherState } from "./gather-state.ts"
 import { readGathered, readyTranscripts } from "./timeline-files.ts"
@@ -70,26 +70,28 @@ export class Brief extends Context.Service<Brief, {
             const heard = videos.flatMap((video) => video.state === "ready" ? [video.name] : [])
             const listening = videos.some((video) => video.state === "waiting")
             const settled = view.looks.flatMap((look) => look.state === "waiting" ? [] : [look.video])
-            if (gatherStep(heard, settled, listening, yield* readGathered(dir)).kind === "wait") return
+            if (gatherStep(heard, settled, listening, yield* readGathered(dir)).kind === "wait" && !gazePending(heard, settled)) return
           }
           yield* Effect.sleep("1 second")
         }
       })
 
       const workAlone = Effect.fn("Brief.workAlone")(function*(id: string, approved: string) {
-        const dir = yield* projects.folder(id)
-        yield* settleGathering(id, dir)
-        const { timeline } = yield* media.timeline(id)
-        const transcripts = readyTranscripts(yield* media.videos(id))
-        const done = timeline.state === "ready"
-          ? yield* media.exchangeEdits(id, (current) => {
-            const outcome = afterYes(timeline.blocks, current, transcripts)
-            return { edits: outcome.edits, value: outcome.done }
-          })
-          : afterYes([], NO_EDITS, transcripts).done
-        const at = DateTime.formatIso(yield* DateTime.now)
-        const text = yield* encodeApproval({ plan: approved, at, done }).pipe(orBroken)
-        yield* replace(path.join(dir, "approval.json"), text).pipe(orBroken)
+        return yield* state.trackAlone(id, Effect.gen(function*() {
+          const dir = yield* projects.folder(id)
+          yield* settleGathering(id, dir)
+          const { timeline } = yield* media.timeline(id)
+          const transcripts = readyTranscripts(yield* media.videos(id))
+          const done = timeline.state === "ready"
+            ? yield* media.exchangeEdits(id, (current) => {
+              const outcome = afterYes(timeline.blocks, current, transcripts)
+              return { edits: outcome.edits, value: outcome.done }
+            })
+            : afterYes([], NO_EDITS, transcripts).done
+          const at = DateTime.formatIso(yield* DateTime.now)
+          const text = yield* encodeApproval({ plan: approved, at, done }).pipe(orBroken)
+          yield* replace(path.join(dir, "approval.json"), text).pipe(orBroken)
+        }))
       })
 
       return Brief.of({ view, write, plan, workAlone })
