@@ -7,7 +7,7 @@ The page of one video folder shows the speech of every heard video as a row of b
 
 ## The working screen
 
-Four stages work: «Видео и задание», «Дубли и блоки», «Паузы и склейки» and «Готовый ролик».
+Five stages work: «Видео и задание», «Дубли и блоки», «Паузы и склейки», «Готовый ролик» and «Внешность».
 A bar at the top holds the way back, the title, the undo and redo buttons and the chat.
 The player stands next to the stage tabs, the row of blocks and the open stage.
 The row of blocks sits between the tabs and the open stage, with the text, the clip and the pauses of each block.
@@ -97,7 +97,9 @@ A server restart forgets a build in progress, and the person presses the button 
 
 ## The skin and eye trial
 
-«Сделать пробу» on the «Готовый ролик» stage tries a retouch on the first 20 s of the cut, on the home computer.
+The «Внешность» stage holds the edits to how the speaker looks.
+Its «Сделать пробу» tries a retouch on the first 20 s of the cut, on the home computer.
+The trial runs only when the person presses that button, and a reel build never runs it.
 The studio builds those 20 s the way it builds the reel, then `tools/gaze/retouch.py` reads them frame by frame.
 In each frame, the Face Landmarker model finds the face, and the retouch changes pixels only inside it.
 It evens the skin tone and lightens the eye whites, and it draws no new frame.
