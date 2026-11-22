@@ -93,20 +93,16 @@ export class Gather extends Context.Service<Gather, {
           Effect.tap((exit) => Exit.isFailure(exit) ? Effect.logError("the gathering failed", project.id, exit.cause) : Effect.void)
         ), { discard: true })
       })
-
       const guarded = Effect.exit(round).pipe(
         Effect.tap((exit) => Exit.isFailure(exit) ? Effect.logError("the gathering round failed", exit.cause) : Effect.void),
         Effect.andThen(Effect.sleep("3 seconds"))
       )
       yield* Effect.forkScoped(Effect.forever(guarded))
-
       const running = (id: string): Effect.Effect<boolean> => Effect.gen(function*() {
         if (yield* state.running(id)) return true
         return yield* Effect.gen(function*() {
           const { dir, step, heard, listening, gathered } = yield* stepOf(id)
-          if (step.kind !== "wait") return true
-          if (listening || heard.length === 0) return false
-          return shortenDue(yield* readBlocks(dir), gathered?.shortened)
+          return step.kind !== "wait" || (!listening && heard.length > 0 && shortenDue(yield* readBlocks(dir), gathered?.shortened))
         }).pipe(Effect.orElseSucceed(() => false))
       })
       const failed = (id: string): Effect.Effect<boolean> => Effect.gen(function*() {

@@ -53,7 +53,8 @@ export class Brief extends Context.Service<Brief, {
       const view = Effect.fn("Brief.view")(function*(id: string) {
         const dir = yield* projects.folder(id)
         const brief = (yield* readText(path.join(dir, "brief.md")).pipe(orBroken)) ?? ""
-        return { brief, plan: yield* plan(id), working: yield* state.working(id) }
+        const working = yield* state.working(id)
+        return { brief, plan: yield* plan(id), working }
       })
 
       const write = Effect.fn("Brief.write")(function*(id: string, text: string) {

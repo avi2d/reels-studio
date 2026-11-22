@@ -6,12 +6,12 @@ import { NO_EDITS, type Edits, type TimelineView } from "../../src/shared/timeli
 
 const unavailable = () => Effect.die("unexpected service call")
 
-export const projectAt = (dir: string) => Projects.of({
+export const projectAt = (dir: string): ReturnType<typeof Projects.of> => Projects.of({
   folder: () => Effect.succeed(dir), list: Effect.succeed([]), create: unavailable,
   get: unavailable, setChoice: unavailable, remove: unavailable
 })
 
-export const mediaWith = (videos: () => ReadonlyArray<VideoView>, timeline: TimelineView) => {
+export const mediaWith = (videos: () => ReadonlyArray<VideoView>, timeline: TimelineView): { readonly service: ReturnType<typeof Media.of>, readonly edits: () => Edits } => {
   let edits: Edits = NO_EDITS
   const service = Media.of({
     videos: () => Effect.sync(videos),
@@ -27,5 +27,5 @@ export const mediaWith = (videos: () => ReadonlyArray<VideoView>, timeline: Time
     reel: unavailable, buildReel: unavailable, cancelReel: unavailable, reelFile: unavailable,
     withoutWork: (_dir, use) => use
   })
-  return { service, edits: () => edits }
+  return { service, edits: (): Edits => edits }
 }
