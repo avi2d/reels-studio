@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { Face } from "./face.ts"
 
 export const ReelJob = Schema.Union([
   Schema.Struct({ state: Schema.Literals(["idle", "waiting", "failed"]) }),
@@ -126,11 +127,13 @@ export const previewDb = (parts: ReadonlyArray<PartGains>, video: string, time: 
 export const ReelView = Schema.Struct({
   job: ReelJob,
   cut: Schema.Finite,
+  face: Face,
   file: Schema.optionalKey(Schema.Struct({
     made: Schema.String,
     seconds: Schema.Finite,
     size: Schema.Finite,
     fresh: Schema.Boolean,
+    face: Face,
     colour: Schema.optionalKey(ColourView),
     levelling: Schema.optionalKey(Levelling)
   }))

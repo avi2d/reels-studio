@@ -105,7 +105,10 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
       pending: () => timeline.busy()
     })
     builtPane = built
-    const looks = retouchCard(project.id)
+    const looks = retouchCard(project.id, () => {
+      stages.open("file")
+      built.build()
+    })
     const brief = briefCards(project.id, (message) => { chat.ask(message) }, () => { timeline.refresh() })
     const refresh = (): void => {
       videos.refresh()
