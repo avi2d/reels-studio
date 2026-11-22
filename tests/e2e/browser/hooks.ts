@@ -125,13 +125,22 @@ const buildBlocks = async (page: Page, title: string): Promise<void> => {
   await page.getByRole("heading", { name: "Блок 1. Начало", exact: true }).waitFor()
 }
 
+const summaryReads = async (page: Page, wanted: string): Promise<void> => {
+  try {
+    await page.getByText(wanted, { exact: true }).waitFor()
+  } catch (error) {
+    const shown = await page.getByText(/^Блоков: /u).allTextContents()
+    throw new Error(`The summary never read «${wanted}», it reads ${JSON.stringify(shown)}`, { cause: error })
+  }
+}
+
 const changeCut = async (page: Page): Promise<void> => {
   const timeline = page.getByRole("region", { name: "Монтаж" })
   await saveEdit(page, () => page.getByRole("radio", { name: /^Дубль 2/u }).check())
   await timeline.getByRole("button", { name: "Блок 2. Конец" }).click()
   await saveEdit(page, () => timeline.getByRole("button", { name: /^Переместить блок «Конец»/u }).press("ArrowLeft"))
   await page.locator('wa-tab[panel="pauses"]').click()
-  await page.getByText("Блоков: 2 · ролик 0:05 · пауз: 1 на 0:02", { exact: true }).waitFor()
+  await summaryReads(page, "Блоков: 2 · ролик 0:05 · пауз: 1 на 0:02")
   await saveEdit(page, () => page.getByRole("button", { name: /^Убрать паузу 1,5 с в блоке 2$/u }).click())
 }
 
@@ -160,7 +169,7 @@ const preview: ProductCheck = {
     await buildBlocks(page, "Сборка ролика")
     await changeCut(page)
     await page.reload()
-    await page.getByText("Блоков: 2 · ролик 0:04 · пауз нет", { exact: true }).waitFor()
+    await summaryReads(page, "Блоков: 2 · ролик 0:04 · пауз нет")
     await verifyPlayback(page)
     return { targets: ["saved cut duration", "reordered first block", "chosen take and pause seek"], found: [] }
   }
