@@ -10,6 +10,7 @@ import { Gather } from "./gather.ts"
 import { openLibrary } from "./library.ts"
 import { allowedHosts, isAllowedHost, isHomeAddress, isSameOrigin } from "./home-network.ts"
 import { Media } from "./media.ts"
+import type { ReelVersion } from "./reel.ts"
 import { Effort, Projects } from "./projects.ts"
 import { parseRange } from "./range.ts"
 import { Settings } from "./settings.ts"
@@ -30,6 +31,9 @@ const param = (name: string) =>
 
 const madeOf = (request: HttpServerRequest.HttpServerRequest): string =>
   new URL(request.url, "http://localhost").searchParams.get("made") ?? ""
+
+const versionOf = (request: HttpServerRequest.HttpServerRequest): ReelVersion =>
+  new URL(request.url, "http://localhost").searchParams.get("version") === "before" ? "before" : "after"
 
 const body = <A>(schema: Schema.ConstraintDecoder<A>) =>
   HttpServerRequest.schemaBodyJson(schema).pipe(Effect.mapError(() => badRequest("Запрос не разобран")))
@@ -217,14 +221,14 @@ const reel = Layer.mergeAll(
   }))),
   HttpRouter.add("GET", "/api/projects/:id/reel/file", (request) => reply(Effect.gen(function*() {
     const media = yield* Media
-    const target = yield* media.reelFile(yield* param("id"), madeOf(request))
+    const target = yield* media.reelFile(yield* param("id"), madeOf(request), versionOf(request))
     return yield* sendFile(target, "video/mp4", request.headers["range"])
   }))),
   HttpRouter.add("GET", "/api/projects/:id/reel/download", (request) => reply(Effect.gen(function*() {
     const media = yield* Media
     const store = yield* Projects
     const id = yield* param("id")
-    const target = yield* media.reelFile(id, madeOf(request))
+    const target = yield* media.reelFile(id, madeOf(request), versionOf(request))
     const { title } = yield* store.get(id)
     return yield* sendFile(target, "video/mp4", request.headers["range"], { "content-disposition": attachment(title) })
   })))

@@ -1,4 +1,6 @@
+import { Schema } from "effect"
 import type { Transcript } from "../shared/plan.ts"
+import { LOUDNESS_TARGET } from "../shared/reel.ts"
 import { cameraShare, FADE, type Clip, type Gaze } from "../shared/timeline.ts"
 
 const HDR_TRANSFERS = new Set(["arib-std-b67", "smpte2084"])
@@ -158,4 +160,77 @@ export const gazeText = (video: string, transcript: Transcript, gaze: Gaze): str
     "",
     ...lines
   ].join("\n") + "\n"
+}
+
+const SILENCE_LUFS = -70
+const LOUDNESS = `I=${LOUDNESS_TARGET}:TP=-1.5:LRA=11`
+
+export const measureArgs = (source: string, segment?: { readonly start: number; readonly seconds: number }): ReadonlyArray<string> => [
+  "-hide_banner", "-nostats",
+  ...(segment === undefined ? [] : ["-ss", segment.start.toFixed(4), "-t", segment.seconds.toFixed(6)]),
+  "-i", source, "-map", "0:a:0", "-af", `loudnorm=${LOUDNESS}:print_format=json`, "-f", "null", "-"
+]
+
+export const LoudnessReport = Schema.Struct({
+  input_i: Schema.String,
+  input_tp: Schema.String,
+  input_lra: Schema.String,
+  input_thresh: Schema.String,
+  target_offset: Schema.String
+})
+
+interface Measure {
+  readonly lufs: number
+  readonly tp: number
+  readonly lra: number
+  readonly thresh: number
+  readonly offset: number
+}
+
+// Silence measures at the gate floor, so it gets no gain.
+export interface Level {
+  readonly lufs: number
+  readonly measured: Measure | undefined
+}
+
+export const levelOf = (report: typeof LoudnessReport.Type): Level => {
+  const lufs = Number(report.input_i)
+  if (!Number.isFinite(lufs)) return { lufs: SILENCE_LUFS, measured: undefined }
+  return {
+    lufs,
+    measured: { lufs, tp: Number(report.input_tp), lra: Number(report.input_lra), thresh: Number(report.input_thresh), offset: Number(report.target_offset) }
+  }
+}
+
+export const normalizeArgs = (source: string, level: Level, output: string): ReadonlyArray<string> => {
+  const m = level.measured
+  const gain = m === undefined ? [] : [`loudnorm=${LOUDNESS}:measured_I=${m.lufs}:measured_TP=${m.tp}:measured_LRA=${m.lra}:measured_thresh=${m.thresh}:offset=${m.offset}:linear=true`]
+  return [
+    "-hide_banner", "-loglevel", "error", "-y", "-i", source,
+    "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy", "-af", [...gain, "aresample=48000"].join(","),
+    "-c:a", "aac", "-b:a", "192k", "-map_metadata", "-1", "-movflags", "+faststart", "-f", "mp4", output
+  ]
+}
+
+export interface Span {
+  readonly name: "quiet" | "loud"
+  readonly from: number
+  readonly to: number
+}
+
+const PASSAGE_FRAMES = REEL_RATE
+
+export const passagesOf = (parts: ReadonlyArray<Part>, levels: ReadonlyArray<Level>): ReadonlyArray<Span> => {
+  const eligible = parts.flatMap((part, index) => {
+    const level = levels[index]
+    return part.frames >= PASSAGE_FRAMES && level?.measured !== undefined ? [{ index, lufs: level.lufs }] : []
+  })
+  if (eligible.length < 2) return []
+  const quiet = eligible.reduce((best, item) => item.lufs < best.lufs ? item : best)
+  const loud = eligible.reduce((best, item) => item.lufs >= best.lufs ? item : best)
+  const span = (name: Span["name"], index: number): Span => {
+    const from = secondsOf(parts.slice(0, index))
+    return { name, from, to: from + (parts[index]?.frames ?? 0) / REEL_RATE }
+  }
+  return [span("quiet", quiet.index), span("loud", loud.index)]
 }

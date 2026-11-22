@@ -2,7 +2,7 @@ import { Data, Effect, FileSystem, Option, Predicate, Schema, Stream, type Platf
 import { ChildProcess } from "effect/process"
 import { Plan, Transcript } from "../shared/plan.ts"
 import { Gaze, type GazeFailure } from "../shared/timeline.ts"
-import { gazeText, isHdr, KEY_FRAME_EVERY, prepareArgs, probeArgs, recognizerArgs, refreshArgs, transcriptText } from "./media-commands.ts"
+import { gazeText, isHdr, KEY_FRAME_EVERY, LoudnessReport, levelOf, measureArgs, prepareArgs, probeArgs, recognizerArgs, refreshArgs, transcriptText } from "./media-commands.ts"
 import { Settings } from "./settings.ts"
 
 export class ToolFailed extends Data.TaggedError("ToolFailed")<{ readonly command: string; readonly code: number; readonly output: string; readonly message: string }> {}
@@ -56,7 +56,7 @@ const markPreviewFresh = Effect.fnUntraced(function*(job: Job) {
   yield* fs.writeFileString(previewFlag(job), `${KEY_FRAME_EVERY}\n`)
 })
 
-export const tool = Effect.fnUntraced(function*(
+const run = Effect.fnUntraced(function*(
   command: string,
   args: ReadonlyArray<string>,
   prefix: ReadonlyArray<string>,
@@ -77,8 +77,32 @@ export const tool = Effect.fnUntraced(function*(
     const tail = complaints.slice(-2000)
     return yield* new ToolFailed({ command, code, output: tail, message: `${command} exited with code ${code}: ${tail}` })
   }
-  return lines.join("\n")
+  return { stdout: lines.join("\n"), stderr: complaints }
 }, Effect.scoped)
+
+export const tool = Effect.fnUntraced(function*(
+  command: string,
+  args: ReadonlyArray<string>,
+  prefix: ReadonlyArray<string>,
+  onLine: (line: string) => Effect.Effect<void> = () => Effect.void
+) {
+  return (yield* run(command, args, prefix, onLine)).stdout
+})
+
+const decodeReport = Schema.decodeUnknownOption(Schema.fromJsonString(LoudnessReport))
+
+// loudnorm's report is the last JSON object on stderr.
+export const measureLoudness = Effect.fnUntraced(function*(file: string, segment?: { readonly start: number; readonly seconds: number }) {
+  const settings = yield* Settings
+  const { stderr } = yield* run("ffmpeg", measureArgs(file, segment), settings.heavy)
+  const json = /\{[^{}]*"input_i"[^{}]*\}/.exec(stderr)?.[0]
+  const report = json === undefined ? Option.none() : decodeReport(json)
+  if (Option.isNone(report)) {
+    const tail = stderr.slice(-2000)
+    return yield* new ToolFailed({ command: "ffmpeg", code: 0, output: tail, message: `ffmpeg gave no loudness report for ${file}: ${tail}` })
+  }
+  return levelOf(report.value)
+})
 
 export const isHdrVideo = Effect.fnUntraced(function*(source: string) {
   const probe = yield* decodeProbe(yield* tool("ffprobe", probeArgs(source), []))
