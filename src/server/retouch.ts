@@ -5,7 +5,7 @@ import type { Clip } from "../shared/timeline.ts"
 import { readFace, retouchVideo } from "./face.ts"
 import { compareArgs, firstSeconds, partsOf, secondsOf } from "./media-commands.ts"
 import { tool } from "./media-jobs.ts"
-import { renderParts } from "./reel.ts"
+import { builtFace, renderParts } from "./reel.ts"
 import { Settings } from "./settings.ts"
 
 const Measured = Schema.fromJsonString(Schema.Struct({ seconds: Schema.Finite, took: Schema.Finite }))
@@ -64,7 +64,8 @@ export const readTrial = Effect.fnUntraced(function*(dir: string, clips: Readonl
   const cut = secondsOf(partsOf(clips))
   const trial = yield* lastTrial(dir)
   const face = yield* readFace(dir)
-  return (trial === undefined ? { job, cut, face } : { job, cut, face, trial }) satisfies RetouchView
+  const built = yield* builtFace(dir)
+  return { job, cut, face, ...(built === undefined ? {} : { built }), ...(trial === undefined ? {} : { trial }) } satisfies RetouchView
 })
 
 export const trialPicture = Effect.fnUntraced(function*(dir: string, name: RetouchPicture) {

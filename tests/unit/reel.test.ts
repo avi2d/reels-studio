@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { attachment } from "../../src/server/api.ts"
 import { videoChain, videoOf } from "../../src/server/reel.ts"
 import { joinList, partArgs, partsOf, progressSeconds, sameParts, secondsOf } from "../../src/server/media-commands.ts"
-import { faceFact, staleText, statusOf } from "../../src/web/reel.ts"
+import { faceFact, faceSetting, staleText, statusOf } from "../../src/web/reel.ts"
 
 const clip = (video: string, start: number, end: number) => ({ block: "a", video, start, end })
 
@@ -94,4 +94,9 @@ test("a file built with another face setting says the face differs, not that the
   expect(staleText({ job: { state: "idle" }, cut: 30, face: "light", file }, false)).toBe("На вкладке «Внешность» выбрано другое лицо, чем в файле. Соберите ролик заново, чтобы файл совпал с выбором.")
   expect(staleText({ job: { state: "idle" }, cut: 30, face: "off", file }, false)).toBe("Монтаж изменился после сборки. Соберите ролик заново, чтобы файл совпал с монтажом.")
   expect(staleText({ job: { state: "idle" }, cut: 30, face: "light", file }, true)).toBe("Монтаж изменился после сборки. Соберите ролик заново, чтобы файл совпал с монтажом.")
+})
+
+test("the reel tab names the face choice, not a face the file may not have yet, and where to change it", () => {
+  expect(faceSetting("light")).toBe("Лицо в ролике: выровнять кожу и белки глаз. Выключить можно на вкладке «Внешность».")
+  expect(faceSetting("off")).toBe("Лицо в ролике: не трогать. Выровнять кожу и белки глаз можно на вкладке «Внешность».")
 })

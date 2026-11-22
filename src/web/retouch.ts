@@ -2,21 +2,32 @@ import { Effect } from "effect"
 import type { Face } from "../shared/face.ts"
 import { minuteTakes, TRIAL_SECONDS, type RetouchView } from "../shared/retouch.ts"
 import * as Api from "./api.ts"
+import type WaSwitch from "@awesome.me/webawesome/dist/components/switch/switch.js"
 import { button } from "./controls.ts"
 import { h } from "./dom.ts"
+import { faceCompare } from "./face-compare.ts"
 
 const POLL_MS = 1000
 const IDLE_MS = 5000
 
-const ABOUT = `Студия возьмёт первые ${TRIAL_SECONDS} секунд ролика и только на лице выровняет тон кожи и осветлит белки глаз. Новых кадров она не рисует, исходные видео не меняются. Проба ролик не меняет: что будет в ролике, вы выбираете ниже.`
+const ABOUT = `Студия возьмёт первые ${TRIAL_SECONDS} секунд ролика и только на лице выровняет тон кожи и осветлит белки глаз. Новых кадров она не рисует, исходные видео не меняются. Проба ролик не меняет: включить выравнивание в ролике можно ниже.`
 const FAILED = "Проба не получилась. Подробности в журнале студии. Нажмите «Сделать пробу», чтобы попробовать ещё раз."
 const NO_CUT = "В монтаже нет ни одного блока. Соберите блоки, и пробу можно будет сделать."
-const FACE_OFF = "Лицо останется таким, как в исходных видео."
-const FACE_LIGHT = "Студия выровняет тон кожи и осветлит белки глаз во всём ролике, только на лице."
-const NEEDS_TRIAL = "Чтобы выбрать «Слегка выровнять», сначала сделайте пробу и сравните лицо до и после."
-const NEXT_BUILD = "Новый выбор попадёт в файл при следующей сборке на вкладке «Готовый ролик»."
+const NEEDS_TRIAL = "Сначала сделайте пробу и сравните лицо до и после. Потом здесь можно включить выравнивание."
+const OFF_KEPT = "Выключено. Лицо в готовом ролике остаётся как в исходных видео."
+const LIGHT_KEPT = "Включено. Готовый ролик уже собран с выровненным лицом."
+const LIGHT_UNBUILT = "Включено. Нажмите «Собрать ролик с выровненным лицом»: студия соберёт ролик, и лицо в нём будет выровнено."
+const LIGHT_STALE = "Включено, но готовый ролик собран без выравнивания. Нажмите «Собрать ролик с выровненным лицом»: студия соберёт его заново."
+const OFF_STALE = "Выключено, но готовый ролик собран с выровненным лицом. Нажмите «Собрать ролик заново», чтобы вернуть исходное лицо."
 
-export const faceHint = (view: RetouchView): string => view.trial === undefined ? NEEDS_TRIAL : NEXT_BUILD
+export const faceNext = (view: RetouchView): string => {
+  if (view.trial === undefined && view.face === "off") return NEEDS_TRIAL
+  if (view.face === "light") return view.built === undefined ? LIGHT_UNBUILT : view.built === "light" ? LIGHT_KEPT : LIGHT_STALE
+  return view.built === "light" ? OFF_STALE : OFF_KEPT
+}
+
+export const needsBuild = (view: RetouchView): boolean =>
+  view.built === undefined ? view.face === "light" : view.built !== view.face
 
 export const spentText = (seconds: number): string => {
   const whole = Math.max(1, Math.round(seconds))
@@ -37,42 +48,34 @@ export const trialStatus = (view: RetouchView): string => {
 export const costText = (trial: { readonly seconds: number; readonly took: number }): string =>
   `На ${spentText(trial.seconds)} видео ушло ${spentText(trial.took)}. Минута видео займёт около ${spentText(minuteTakes(trial))}.`
 
-const picture = (caption: string, image: HTMLImageElement): HTMLElement =>
-  h("figure", { class: "trial-picture" }, image, h("figcaption", {}, caption))
-
-const faceChoice = (projectId: string, onPick: (face: Face) => void): { readonly node: HTMLElement; readonly show: (view: RetouchView) => void } => {
-  const pick = (face: Face): HTMLInputElement =>
-    h("input", { type: "radio", name: `face-${projectId}`, value: face, checked: face === "off", change: () => { onPick(face) } })
-  const off = pick("off")
-  const light = pick("light")
-  const option = (radio: HTMLInputElement, name: string, about: string): HTMLElement =>
-    h("label", { class: "choice" }, radio, h("span", {}, h("span", { class: "name" }, name), h("span", { class: "muted" }, about)))
-  const hint = h("p", { class: "muted" })
-  const node = h("fieldset", { class: "picker" }, h("legend", {}, "Лицо в готовом ролике"),
-    h("div", { class: "face-choices" }, option(off, "Не трогать", FACE_OFF), option(light, "Слегка выровнять", FACE_LIGHT)), hint)
+const faceChoice = (onPick: (face: Face) => void, onBuild: () => void): { readonly node: HTMLElement; readonly show: (view: RetouchView) => void } => {
+  const toggle: WaSwitch = h("wa-switch", { change: () => { onPick(toggle.checked ? "light" : "off") } }, "Выровнять кожу и белки глаз в готовом ролике")
+  const next = h("p", { class: "face-next", role: "status" })
+  const build = button("primary", { click: onBuild }, "Собрать ролик")
+  const buildRow = h("div", { class: "row", hidden: true }, build)
+  const node = h("section", { class: "face-apply" }, h("h3", {}, "Лицо в готовом ролике"), toggle, next, buildRow)
   const show = (view: RetouchView): void => {
-    off.checked = view.face === "off"
-    light.checked = view.face === "light"
-    light.disabled = view.trial === undefined && view.face === "off"
-    hint.textContent = faceHint(view)
+    toggle.checked = view.face === "light"
+    toggle.disabled = view.trial === undefined && view.face === "off"
+    next.textContent = faceNext(view)
+    buildRow.hidden = !needsBuild(view) || view.cut === 0
+    build.textContent = view.face === "light" ? "Собрать ролик с выровненным лицом" : "Собрать ролик заново"
   }
   return { node, show }
 }
 
-export const retouchCard = (projectId: string): { readonly node: HTMLElement; readonly refresh: () => void; readonly pause: () => void } => {
+export const retouchCard = (projectId: string, onBuild: () => void): { readonly node: HTMLElement; readonly refresh: () => void; readonly pause: () => void } => {
   const state = { timer: 0, made: "", busy: false, saving: false, counter: 0, applied: 0 }
   const status = h("p", { class: "muted", role: "status" })
   const bar = h("progress", { max: "1", value: "0", hidden: true })
   const problem = h("p", { class: "error", role: "alert" })
-  const before = h("img", { alt: "Лицо до пробы", width: "720", height: "720" })
-  const after = h("img", { alt: "Лицо после пробы", width: "720", height: "720" })
+  const pair = faceCompare()
   const clip = h("video", { class: "trial-clip", controls: true, playsinline: true, preload: "metadata" })
   const cost = h("p", {})
   const result = h("div", { class: "trial", hidden: true },
-    h("div", { class: "trial-pair" }, picture("До", before), picture("После", after)),
-    clip, h("p", { class: "muted" }, "В видео слева до, справа после."), cost)
+    pair.node, clip, h("p", { class: "muted" }, "В видео слева до, справа после."), cost)
   const start = button("normal", {}, "Сделать пробу")
-  const choice = faceChoice(projectId, (face) => { choose(face) })
+  const choice = faceChoice((face) => { choose(face) }, onBuild)
   const node = h("section", { class: "card reel-card" }, h("h2", {}, "Проба: ровная кожа и белки глаз"), h("p", { class: "muted" }, ABOUT), h("div", { class: "row" }, start), status, bar, problem, result, choice.node)
 
   const show = (view: RetouchView): void => {
@@ -89,8 +92,7 @@ export const retouchCard = (projectId: string): { readonly node: HTMLElement; re
     if (view.trial === undefined) return
     if (state.made !== view.trial.made) {
       state.made = view.trial.made
-      before.src = Api.retouchUrl(projectId, "before.jpg", state.made)
-      after.src = Api.retouchUrl(projectId, "after.jpg", state.made)
+      pair.show(Api.retouchUrl(projectId, "before.jpg", state.made), Api.retouchUrl(projectId, "after.jpg", state.made))
       clip.src = Api.retouchUrl(projectId, "compare.mp4", state.made)
     }
     cost.textContent = costText(view.trial)

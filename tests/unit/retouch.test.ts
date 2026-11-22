@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test"
 import { faceOf } from "../../src/server/face.ts"
 import { compareArgs, firstSeconds, retouchArgs, retouchedFrames } from "../../src/server/media-commands.ts"
-import { costText, faceHint, spentText, trialStatus } from "../../src/web/retouch.ts"
+import { splitAt } from "../../src/web/face-compare.ts"
+import { costText, faceNext, needsBuild, spentText, trialStatus } from "../../src/web/retouch.ts"
 
 test("the trial takes the first 20 seconds of the cut and shortens the part that crosses them, not the whole part", () => {
   const parts = [{ video: "a", start: 0, frames: 450 }, { video: "b", start: 3, frames: 450 }, { video: "c", start: 0, frames: 30 }]
@@ -50,9 +51,37 @@ test("a project with no face file or a broken one reads as off, so her face is n
   expect(faceOf(JSON.stringify({ face: "light" }))).toBe("light")
 })
 
-test("the face choice asks for a trial first when there is none, not for a rebuild of a face she has not seen", () => {
-  expect(faceHint({ job: { state: "idle" }, cut: 30, face: "off" })).toBe("Чтобы выбрать «Слегка выровнять», сначала сделайте пробу и сравните лицо до и после.")
-  expect(faceHint({ job: { state: "idle" }, cut: 30, face: "off", trial: { made: "m", seconds: 20, took: 54 } })).toBe("Новый выбор попадёт в файл при следующей сборке на вкладке «Готовый ролик».")
+const trial = { made: "m", seconds: 20, took: 54 }
+const view = (face: "off" | "light", built?: "off" | "light") =>
+  ({ job: { state: "idle" as const }, cut: 30, face, trial, ...(built === undefined ? {} : { built }) })
+
+test("the face line asks for a trial first when there is none, not for a rebuild of a face she has not seen", () => {
+  expect(faceNext({ job: { state: "idle" }, cut: 30, face: "off" })).toBe("Сначала сделайте пробу и сравните лицо до и после. Потом здесь можно включить выравнивание.")
+})
+
+test("the face line says the file already has the chosen face instead of asking for a needless rebuild", () => {
+  expect(faceNext(view("light", "light"))).toBe("Включено. Готовый ролик уже собран с выровненным лицом.")
+  expect(faceNext(view("off", "off"))).toBe("Выключено. Лицо в готовом ролике остаётся как в исходных видео.")
+  expect(needsBuild(view("light", "light"))).toBe(false)
+  expect(needsBuild(view("off", "off"))).toBe(false)
+})
+
+test("turning the face on after the file was built asks for a rebuild, not a silent no-op", () => {
+  expect(faceNext(view("light", "off"))).toBe("Включено, но готовый ролик собран без выравнивания. Нажмите «Собрать ролик с выровненным лицом»: студия соберёт его заново.")
+  expect(faceNext(view("off", "light"))).toBe("Выключено, но готовый ролик собран с выровненным лицом. Нажмите «Собрать ролик заново», чтобы вернуть исходное лицо.")
+  expect(needsBuild(view("light", "off"))).toBe(true)
+  expect(needsBuild(view("off", "light"))).toBe(true)
+})
+
+test("with no file yet only the face turned on offers a build, since off changes nothing", () => {
+  expect(needsBuild(view("light"))).toBe(true)
+  expect(needsBuild(view("off"))).toBe(false)
+})
+
+test("the split line follows the pointer and stops at the frame edges instead of leaving it", () => {
+  expect(splitAt(150, 100, 200)).toBe(25)
+  expect(splitAt(50, 100, 200)).toBe(0)
+  expect(splitAt(400, 100, 200)).toBe(100)
 })
 
 test("the reel retouch writes no face close-ups, while the trial still asks for them", () => {

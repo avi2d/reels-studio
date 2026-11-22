@@ -92,6 +92,10 @@ const publishedReel = Effect.fnUntraced(function*(dir: string) {
   return { target, record } as const
 })
 
+export const builtFace = Effect.fnUntraced(function*(dir: string) {
+  return (yield* publishedReel(dir))?.record.face
+})
+
 const builtFileAt = Effect.fnUntraced(function*(dir: string, name: string) {
   const fs = yield* FileSystem.FileSystem
   const target = reelPlaces(dir).video(name)

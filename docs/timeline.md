@@ -140,13 +140,18 @@ Without such a frame the trial fails, and the last trial stays.
 
 ## The face in the reel
 
-Under the trial, the «Внешность» stage asks how the face goes into the reel: «Не трогать» or «Слегка выровнять».
-Each reel starts at «Не трогать», and the studio keeps no choice from one reel for the next.
-«Слегка выровнять» opens only after a trial, so the person picks it next to the close-ups before and after.
-With «Не трогать», the build is the same as without the setting, and no step touches the frames.
-With «Слегка выровнять», the build runs `tools/gaze/retouch.py` on the whole levelled reel, before the inserts go on, so the inserts stay as they are.
+The trial shows one face close-up as a single frame, with the left side before and the right side after.
+The person drags the line between them, holds «Держите, чтобы увидеть до» to see the whole frame before, and presses «Крупнее» to zoom to the face.
+Under the trial, the switch «Выровнять кожу и белки глаз в готовом ролике» sets how the face goes into the reel.
+Each reel starts with the switch off, and the studio keeps no choice from one reel for the next.
+The switch turns on only after a trial, so the person sets it after comparing the close-ups.
+A line under the switch says whether the built file already has the chosen face.
+When it does not, the button «Собрать ролик с выровненным лицом» or «Собрать ролик заново» opens the «Готовый ролик» stage and starts the build there.
+With the switch off, the build is the same as without the setting, and no step touches the frames.
+With the switch on, the build runs `tools/gaze/retouch.py` on the whole levelled reel, before the inserts go on, so the inserts stay as they are.
 That retouch changes pixels only inside the face, the same way the trial does.
-The «Ролик» stage names the setting of the built file, and after a new choice it says the file no longer matches.
+The «Готовый ролик» stage names the chosen face above its build button and the face of the built file in the file facts.
+After a new choice it says the file no longer matches.
 
 ## Keys
 
