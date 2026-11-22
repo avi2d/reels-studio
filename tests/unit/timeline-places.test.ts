@@ -42,7 +42,7 @@ class FakeEl {
 
 Object.assign(globalThis, { document: { createElement: (tag: string) => new FakeEl(tag) } })
 
-const actions = { hearJoin: (): void => {}, hearUnaligned: (): void => {}, answer: (): void => {} }
+const actions = { hearJoin: (): void => {}, hearUnaligned: (): void => {}, answer: (): void => {}, cover: (): void => {}, pictureUrl: (picture: string): string => picture }
 
 const edge = (video: string, block: string, at: number): Clip => ({ video, block, start: at, end: at })
 
@@ -51,7 +51,8 @@ const place = (answer: JoinAnswer | undefined, cut: number) => ({
   shift: 0.5,
   trim: { end: 1.9, start: 0.5, cut, spoken: undefined },
   align: { kind: "unmeasured" as const },
-  answer
+  answer,
+  answered: answer === undefined ? undefined : { end: { video: "a", at: 2 }, start: { video: "b", at: 0.5 }, answer }
 })
 
 const statusOf = (root: HTMLElement): string =>
@@ -60,32 +61,32 @@ const statusOf = (root: HTMLElement): string =>
 const complete: PlaceCoverage = { waiting: false, failed: [] }
 
 test("an empty list while heads are still measured promises places instead of claiming a clean reel", () => {
-  const root = placeList([], [], { waiting: true, failed: [] }, actions)
+  const root = placeList([], [], { waiting: true, failed: [] }, [], actions)
   expect(statusOf(root)).toContain("Студия ещё измеряет")
   expect(statusOf(root)).not.toContain("не прыгает")
 })
 
 test("an empty list with a failed measurement names the videos instead of claiming a clean reel", () => {
-  const root = placeList([], [], { waiting: false, failed: ["a"] }, actions)
+  const root = placeList([], [], { waiting: false, failed: ["a"] }, [], actions)
   expect(statusOf(root)).toContain("не удалось измерить")
   expect(statusOf(root)).toContain("a")
   expect(statusOf(root)).not.toContain("не прыгает")
 })
 
 test("an empty list with complete measurement still claims a clean reel", () => {
-  const root = placeList([], [], complete, actions)
+  const root = placeList([], [], complete, [], actions)
   expect(statusOf(root)).toContain("Голова нигде не прыгает на склейках.")
 })
 
 test("a failed measurement is attached to the counts instead of replacing them", () => {
-  const root = placeList([place(undefined, 0.4)], [], { waiting: false, failed: ["b"] }, actions)
+  const root = placeList([place(undefined, 0.4)], [], { waiting: false, failed: ["b"] }, [], actions)
   expect(statusOf(root)).toContain("Осталось проверить 1 из 1.")
   expect(statusOf(root)).toContain("неполная")
 })
 
 test("the places panel carries a stable scroll key across redraws", () => {
-  const first = placeList([place(undefined, 0.4)], [], complete, actions)
-  const second = placeList([place(undefined, 0.4)], [], complete, actions)
+  const first = placeList([place(undefined, 0.4)], [], complete, [], actions)
+  const second = placeList([place(undefined, 0.4)], [], complete, [], actions)
   expect(first.dataset["scrollKey"]).toBe("places")
   expect(second.dataset["scrollKey"]).toBe(first.dataset["scrollKey"])
 })

@@ -23,6 +23,15 @@
 .frame .screen { position: absolute; inset: 0; }
 .frame .player { position: absolute; inset: 0; display: block; width: 100%; height: 100%; max-width: none; border-radius: 0; object-fit: cover; transform-origin: 0 0; }
 .frame .player:not(.shown) { visibility: hidden; }
+.insert-view { position: absolute; z-index: 1; inset: 0; pointer-events: none; container-type: size; }
+.insert-view:not([data-shape]) { visibility: hidden; }
+.insert-box { position: absolute; display: flex; align-items: center; justify-content: center; }
+.insert-card { overflow: hidden; line-height: 0; }
+.insert-card img { display: block; max-width: none; border-radius: 0; }
+.insert-view[data-shape="fill"] :is(.insert-box, .insert-card, img) { inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.insert-view[data-shape="card"] .insert-box { left: 6.019%; top: 14.01%; width: 87.963%; height: 50.99%; }
+.insert-view[data-shape="card"] .insert-card { border: 1.111cqw solid #fff; }
+.insert-view[data-shape="card"] img { width: min(calc(87.963cqw - 2.222cqw), calc((50.99cqh - 2.222cqw) * var(--ar, 1))); height: auto; max-width: calc(87.963cqw - 2.222cqw); max-height: calc(50.99cqh - 2.222cqw); }
 .tag { position: absolute; z-index: 2; left: 8px; top: 8px; max-width: calc(100% - 16px); padding: 3px 10px; border-radius: 99px; background: var(--wa-color-overlay-media); font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tag b { margin-right: 6px; color: var(--wa-color-brand-fill-loud); }
 

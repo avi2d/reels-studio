@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import type { Edits } from "../shared/timeline.ts"
+import { insertKey, replyKey, type Edits } from "../shared/timeline.ts"
 import * as Api from "./api.ts"
 
 export const POLL_MS = 4000
@@ -52,3 +52,21 @@ export const saver = (projectId: string, problem: HTMLElement, edits: () => Edit
     }))
   return { save, busy: () => state.saving || state.unsaved, flush }
 }
+
+export interface Ticket { readonly changes: number; readonly busy: boolean }
+
+const editKey = (edits: Edits): string => JSON.stringify([
+  edits.order,
+  edits.deleted,
+  edits.chosen.map((one) => [one.block, one.video, one.from]),
+  edits.pauses.map((one) => [one.video, one.after]),
+  (edits.kept ?? []).map((one) => [one.video, one.after]),
+  edits.joins.map((one) => [one.end.video, one.end.at, one.start.video, one.start.at, replyKey(one)]),
+  edits.inserts.map((one) => [one.id, insertKey(one)])
+])
+
+const adoptServer = (local: Edits, acked: Edits, server: Edits): boolean =>
+  editKey(server) === editKey(local) || editKey(local) === editKey(acked)
+
+export const takeServer = (local: Edits, acked: Edits, server: Edits, ticket: Ticket, changes: number, busy: boolean): boolean =>
+  !busy && !ticket.busy && ticket.changes === changes && adoptServer(local, acked, server)
