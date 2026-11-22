@@ -1,7 +1,8 @@
 import { Data, Effect, FileSystem, Option, Path, Schema } from "effect"
-import { assOf, fitWord, hasCaptions, NO_CAPTIONS, shownTexts, TextsFile, type CaptionPart, type Captions } from "../shared/captions.ts"
+import { assOf, fitWord, hasCaptions, NO_CAPTIONS, shownTexts, type CaptionPart, type Captions } from "../shared/captions.ts"
 import type { Transcript } from "../shared/plan.ts"
 import { subtitleWords } from "../shared/subtitles.ts"
+import { TextsFile, type PlannedTexts } from "../shared/texts.ts"
 import type { Clip } from "../shared/timeline.ts"
 import { fitsArea, textAreaOf } from "../shared/zones.ts"
 import { REEL_RATE } from "./media-commands.ts"
@@ -11,17 +12,23 @@ import { readApproval } from "./approval.ts"
 
 const decodeTexts = Schema.decodeUnknownOption(Schema.fromJsonString(TextsFile))
 
-const readTexts = Effect.fnUntraced(function*(written: string | undefined, file: string) {
-  if (written === undefined) return []
-  const decoded = Option.getOrUndefined(decodeTexts(written))
-  if (decoded === undefined) yield* Effect.logError("the on-screen texts are unreadable", file)
-  return decoded?.texts ?? []
+const textsOf = Effect.fnUntraced(function*({ plan, texts }: Effect.Success<ReturnType<typeof readApproval>>, dir: string) {
+  if (texts === undefined) return { state: "none" } satisfies PlannedTexts
+  const decoded = Option.getOrUndefined(decodeTexts(texts))
+  if (decoded !== undefined) return { state: "ready", planned: decoded.texts, approved: plan.state === "approved" } satisfies PlannedTexts
+  yield* Effect.logError("the on-screen texts are unreadable", `${dir}/texts.json`)
+  return { state: "unreadable" } satisfies PlannedTexts
+})
+
+export const readTexts = Effect.fnUntraced(function*(dir: string) {
+  return yield* textsOf(yield* readApproval(dir), dir)
 })
 
 export const readCaptions = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, transcripts: ReadonlyMap<string, Transcript>) {
-  const { plan, texts } = yield* readApproval(dir)
-  if (plan.state !== "approved") return NO_CAPTIONS
-  return { words: subtitleWords(clips, transcripts), texts: shownTexts(yield* readTexts(texts, `${dir}/texts.json`), clips, transcripts) } satisfies Captions
+  const approval = yield* readApproval(dir)
+  if (approval.plan.state !== "approved") return NO_CAPTIONS
+  const texts = yield* textsOf(approval, dir)
+  return { words: subtitleWords(clips, transcripts), texts: texts.state === "ready" ? shownTexts(texts.planned, clips, transcripts) : [] } satisfies Captions
 })
 
 // Two levels: the option value inside the filter, then the filter inside the graph.

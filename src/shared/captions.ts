@@ -1,23 +1,9 @@
-import { Schema } from "effect"
 import { phraseSpan } from "./inserts.ts"
 import type { Span, Transcript } from "./plan.ts"
 import type { ShownWord } from "./subtitles.ts"
+import type { PlannedText, TextLine } from "./texts.ts"
 import type { Clip } from "./timeline.ts"
 import { fitsArea, textAreaOf, type Rect } from "./zones.ts"
-
-const TextLine = Schema.Struct({ text: Schema.String, accent: Schema.Boolean })
-type TextLine = typeof TextLine.Type
-
-export const PlannedText = Schema.Struct({
-  id: Schema.String,
-  video: Schema.String,
-  from: Schema.Int,
-  to: Schema.Int,
-  lines: Schema.Array(TextLine)
-})
-export type PlannedText = typeof PlannedText.Type
-
-export const TextsFile = Schema.Struct({ texts: Schema.Array(PlannedText) })
 
 export interface ShownText extends Span {
   readonly id: string
@@ -38,23 +24,47 @@ export const NO_CAPTIONS: Captions = { words: [], texts: [] }
 const TEXT_SHORTEST = 2.5
 const MOST_LINES = 3
 
-// A later text starts where the earlier one ends, so two key thoughts never stand on the screen at once.
-export const shownTexts = (planned: ReadonlyArray<PlannedText>, clips: ReadonlyArray<Clip>, transcripts: ReadonlyMap<string, Transcript>): ReadonlyArray<ShownText> => {
-  const total = clips.reduce((sum, clip) => sum + clip.end - clip.start, 0)
-  const wanted = planned.flatMap((one): ReadonlyArray<ShownText> => {
-    const transcript = transcripts.get(one.video)
-    const said = transcript === undefined ? undefined : phraseSpan(clips, transcript, one)
-    const lines = one.lines.filter((line) => line.text.trim() !== "").slice(0, MOST_LINES)
-    if (said === undefined || lines.length === 0) return []
-    return [{ id: one.id, lines, start: said.start, end: Math.min(total, Math.max(said.end, said.start + TEXT_SHORTEST)) }]
-  }).toSorted((left, right) => left.start - right.start)
-  const shown: Array<ShownText> = []
-  for (const one of wanted) {
-    const start = Math.max(one.start, shown.at(-1)?.end ?? 0)
-    if (one.end > start) shown.push({ ...one, start })
-  }
-  return shown
+export type TextDrop = "unknown-video" | "out-of-range" | "cut" | "empty" | "covered"
+
+export type TextPlace =
+  | { readonly planned: PlannedText; readonly state: "shown"; readonly shown: ShownText }
+  | { readonly planned: PlannedText; readonly state: "dropped"; readonly reason: TextDrop }
+
+const wantedOf = (one: PlannedText, clips: ReadonlyArray<Clip>, transcripts: ReadonlyMap<string, Transcript>, total: number): ShownText | Exclude<TextDrop, "covered"> => {
+  const transcript = transcripts.get(one.video)
+  if (transcript === undefined) return "unknown-video"
+  if (transcript.words[one.from] === undefined || transcript.words[one.to] === undefined || one.from > one.to) return "out-of-range"
+  const said = phraseSpan(clips, transcript, one)
+  if (said === undefined) return "cut"
+  const lines = one.lines.filter((line) => line.text.trim() !== "").slice(0, MOST_LINES)
+  if (lines.length === 0) return "empty"
+  return { id: one.id, lines, start: said.start, end: Math.min(total, Math.max(said.end, said.start + TEXT_SHORTEST)) }
 }
+
+// A later text starts where the earlier one ends, so two key thoughts never stand on the screen at once.
+export const textPlaces = (planned: ReadonlyArray<PlannedText>, clips: ReadonlyArray<Clip>, transcripts: ReadonlyMap<string, Transcript>): ReadonlyArray<TextPlace> => {
+  const total = clips.reduce((sum, clip) => sum + clip.end - clip.start, 0)
+  const wanted = planned.map((one) => wantedOf(one, clips, transcripts, total))
+  const byStart = wanted.flatMap((one, index) => typeof one === "string" ? [] : [{ one, index }]).toSorted((left, right) => left.one.start - right.one.start)
+  const placed = new Map<number, ShownText | "covered">()
+  let shownEnd = 0
+  for (const { one, index } of byStart) {
+    const start = Math.max(one.start, shownEnd)
+    if (one.end <= start) {
+      placed.set(index, "covered")
+      continue
+    }
+    placed.set(index, { ...one, start })
+    shownEnd = one.end
+  }
+  return planned.map((one, index): TextPlace => {
+    const place = placed.get(index) ?? wanted[index]
+    return typeof place === "object" ? { planned: one, state: "shown", shown: place } : { planned: one, state: "dropped", reason: place ?? "covered" }
+  })
+}
+
+export const shownTexts = (planned: ReadonlyArray<PlannedText>, clips: ReadonlyArray<Clip>, transcripts: ReadonlyMap<string, Transcript>): ReadonlyArray<ShownText> =>
+  textPlaces(planned, clips, transcripts).flatMap((place) => place.state === "shown" ? [place.shown] : []).toSorted((left, right) => left.start - right.start)
 
 interface Face {
   readonly name: string

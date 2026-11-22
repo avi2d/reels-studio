@@ -94,7 +94,8 @@ A part shorter than 1.2 s is measured played over until it fills 1.2 s, because 
 The gain moves from one part's value to the next only inside the two 0.06 s fades at their join.
 The sound there is near silence.
 One more constant gain over the whole reel hits -14 LUFS, and a limiter keeps the true peak under -1.5 dBTP.
-When the cut shows inserts or approved on-screen text, one more pass lays the inserts and the text over the levelled file and copies its sound as it is.
+When the cut shows inserts or approved on-screen text, one more pass lays them over the levelled file.
+That pass copies the sound as it is.
 The studio draws each spoken word as a single word subtitle and the titles and key thoughts of texts.json in that pass.
 The studio draws a long subtitle word smaller to fit the Instagram box.
 A key thought that leaves the box stops the build.
@@ -172,7 +173,8 @@ The switch turns on only after a trial, so the person sets it after comparing th
 A line under the switch says whether the built file already has the chosen face.
 When it does not, the button «Собрать ролик с выровненным лицом» or «Собрать ролик заново» opens the «Готовый ролик» stage and starts the build there.
 With the switch off, the build is the same as without the setting, and no step touches the frames.
-With the switch on, the build runs `tools/gaze/retouch.py` on the whole levelled reel, before the inserts and the text go on, so the inserts and the text stay as they are.
+With the switch on, the build runs `tools/gaze/retouch.py` on the whole levelled reel.
+It runs before the inserts and the text go on, so they stay as they are.
 That retouch changes pixels only inside the face, the same way the trial does.
 The «Готовый ролик» stage names the chosen face above its build button and the face of the built file in the file facts.
 After a new choice it says the file no longer matches.
@@ -264,6 +266,23 @@ The «Паузы и склейки» stage lists every insert as a place to chec
 «Посмотреть» plays 1 s before the insert, the insert and 1 s after it, with the insert over the player as the reel shows it.
 «Оставить» keeps it, «Со звуком» keeps a clip with its sound, «Заменить» puts another attached picture in its place, and «Убрать» takes it out of the reel.
 Each answer takes the place off the count, and `timeline.json` keeps it by the insert id.
+
+## Key thoughts
+
+The chat model writes the key thoughts to `texts.json`, each tied to the words of one phrase.
+The «Паузы и склейки» stage lists every key thought of `texts.json` under «Ключевые мысли», with its lines, its words and its time in the cut.
+A key thought the reel does not show stays in the list, marked «не видна», with its reason:
+
+| Reason | What the list says |
+| --- | --- |
+| Its video is not in the project | The video is not in the project, so the studio does not know where to show it |
+| Its word numbers are not in the transcript, or the first comes after the last | The video text has no such words |
+| The cut removed every word of its phrase | The phrase is not in the reel now |
+| It has no line with text | There is nothing to show |
+| The thought before it stands for the whole phrase | The earlier thought holds the screen |
+
+When `texts.json` does not read, the list says so and offers to ask the studio to write the thoughts again.
+While the plan waits for a yes, the list says the thoughts appear after the yes.
 
 ## Files
 
