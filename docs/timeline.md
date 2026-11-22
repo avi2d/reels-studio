@@ -97,6 +97,19 @@ A bar follows the parts, the levelling and the inserts.
 The build waits while the computer hears another video, because the studio runs one heavy job at a time.
 The originals stay untouched.
 
+## Sound in the montage
+
+After each change of the cut, the studio checks the sound of the cut on the home computer, without the picture.
+It cuts the sound of each clip from the original video and levels it with the same gain curve and limiter as the build.
+The check waits while another heavy job runs, and a failed check waits for the next change of the cut.
+Under the player, a line names the verdict of that check in the words of the «Готовый ролик» stage.
+So the owner knows the sound before the build and the download.
+The line opens to the same notes on jumps, average loudness and peaks.
+While the check runs, the line says so with its share done.
+The montage plays each clip with the gain the build gives that moment, through a limiter at −2.5 dBFS.
+So a quiet part sounds as loud as it does in the built file.
+A take outside the cut plays with the gain of the nearest clip from the same video.
+
 ## Skin colour across videos
 
 Before it encodes, the build measures the skin colour of each video in the cut, on the home computer and without the chat model.
@@ -137,6 +150,22 @@ It also shows how long the retouch of the 20 s took and how long a minute of vid
 The trial waits in the same queue as the other heavy jobs, and a new trial replaces the last one.
 The close-up comes from the first frame with a face from 3 s on.
 Without such a frame the trial fails, and the last trial stays.
+
+## The face in the reel
+
+The trial shows one face close-up as a single frame, with the left side before and the right side after.
+The person drags the line between them.
+Holding «Держите, чтобы увидеть до» shows the whole frame before, and «Крупнее» zooms to the face.
+Under the trial, the switch «Выровнять кожу и белки глаз в готовом ролике» sets how the face goes into the reel.
+Each reel starts with the switch off, and the studio keeps no choice from one reel for the next.
+The switch turns on only after a trial, so the person sets it after comparing the close-ups.
+A line under the switch says whether the built file already has the chosen face.
+When it does not, the button «Собрать ролик с выровненным лицом» or «Собрать ролик заново» opens the «Готовый ролик» stage and starts the build there.
+With the switch off, the build is the same as without the setting, and no step touches the frames.
+With the switch on, the build runs `tools/gaze/retouch.py` on the whole levelled reel, before the inserts go on, so the inserts stay as they are.
+That retouch changes pixels only inside the face, the same way the trial does.
+The «Готовый ролик» stage names the chosen face above its build button and the face of the built file in the file facts.
+After a new choice it says the file no longer matches.
 
 ## Keys
 
@@ -234,8 +263,11 @@ Each video folder holds these next to `plan.json`:
 | `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
 | `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |
-| `reel/reel.json` | The build time, the video file it published, the parts, the inserts, a hash of the subtitles and key thoughts, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
+| `reel/reel.json` | The build time, the video file it published, the parts, the inserts, a hash of the subtitles and key thoughts, the face setting, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
+| `reel/sound.json` | The parts of the last checked cut, its measured loudness before and after levelling, and the gain of each part over its source time, which the montage plays |
+| `reel/sound-work/` | The sound of each clip and the levelled sound while a check runs, removed when it ends |
+| `looks.json` | The face setting of the reel, `off` or `light`, written when the person picks it |
 | `retouch/trial.json` | The time of the last skin and eye trial, the seconds it retouched and the seconds that took |
 | `retouch/before.jpg`, `retouch/after.jpg` | The face close-up of the trial before and after |
-| `retouch/compare.mp4` | The 20 s of the trial with the original on the left and the retouch on the right
+| `retouch/compare.mp4` | The 20 s of the trial with the original on the left and the retouch on the right |
 | `gathered.json` | The heard videos and the settled gaze the studio last asked the chat model to gather blocks from, with a failed mark, the hash of the `blocks.json` the failed attempt saw, and the hash of the `blocks.json` it last shortened pauses for |

@@ -15,6 +15,7 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/shared/timeline.ts` | The formats of the gaze samples, the blocks, the takes and the person's choices, and the spans the montage plays |
 | `src/shared/framing.ts` | The zoom that keeps the eyes on one line across a join, used by the page and the reel build |
 | `src/shared/joins.ts` | The places to check at joins and the cuts at answered places, used by the page |
+| `src/shared/face.ts` | The face setting of the reel, off or light, used by the server and the page |
 | `src/shared/retouch.ts` | The state of the skin and eye trial and the time a minute of video takes, used by the server and the page |
 | `src/shared/inserts.ts` | Where each insert stands in the cut, its shape, and what the page and the build show of it |
 | `src/shared/zones.ts` | The share of the frame each player covers and the box where text stays visible |

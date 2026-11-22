@@ -1,16 +1,19 @@
 import { Data, DateTime, Effect, FileSystem, Option, Schema } from "effect"
+import { Face } from "../shared/face.ts"
 import { shapeOf, type Shown } from "../shared/inserts.ts"
 import { Frame } from "../shared/timeline.ts"
 import { Levelling, LOUDNESS_TARGET, SERIES_STEP, VideoColour, type ColourView, type PictureSide, type ReelView } from "../shared/reel.ts"
 import { pictureProbeArgs } from "./attachment-notes.ts"
-import { curveOf, gainsOf, levelArgs, type PartLevel } from "./level-curve.ts"
+import { curveOf, gainsOf, levelArgs, partGainsOf, type PartLevel } from "./level-curve.ts"
 import {
-  joinArgs, joinList, lastFrameOf, partArgs, partsOf, passagesOf, pictureArgs, progressSeconds, sameParts, sampledAt, secondsOf, type Moment, type Part, type Span
+  joinList, lastFrameOf, partArgs, partsOf, passagesOf, pictureArgs, progressSeconds, sameParts, sampledAt, secondsOf, type Moment, type Part, type Span
 } from "./media-commands.ts"
+import { joinArgs, type Streams } from "./sound-commands.ts"
 import { hasCaptions, type Captions } from "../shared/captions.ts"
 import { placeCaptions } from "./captions.ts"
 import { finishArgs, type InsertPicture } from "./finish-commands.ts"
 import { isHdrVideo, measureLoudness, momentaryLoudness, places, tool } from "./media-jobs.ts"
+import { readFace, retouchVideo } from "./face.ts"
 import { Settings } from "./settings.ts"
 import { colourJoins, coloursOf, gainOf, measureSkin } from "./skin.ts"
 import type { Cut } from "./timeline-files.ts"
@@ -22,13 +25,16 @@ type Colour = typeof Colour.Type
 const ShownInsert = Schema.Struct({ picture: Schema.String, start: Schema.Finite, end: Schema.Finite })
 type ShownInsert = typeof ShownInsert.Type
 
+export const PartRecord = Schema.Struct({ video: Schema.String, start: Schema.Finite, frames: Schema.Int, frame: Schema.optionalKey(Frame) })
+
 const Record = Schema.Struct({
   made: Schema.String,
   video: Schema.String,
-  parts: Schema.Array(Schema.Struct({ video: Schema.String, start: Schema.Finite, frames: Schema.Int, frame: Schema.optionalKey(Frame) })),
+  parts: Schema.Array(PartRecord),
   colour: Schema.optionalKey(Colour),
   inserts: Schema.Array(ShownInsert).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   captions: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed(""))),
+  face: Face.pipe(Schema.withDecodingDefaultKey(Effect.succeed("off" as const))),
   levelling: Schema.optionalKey(Levelling)
 })
 const RecordFile = Schema.fromJsonString(Record)
@@ -93,6 +99,10 @@ const publishedReel = Effect.fnUntraced(function*(dir: string) {
   const target = place.video(record.video)
   if (!(yield* fs.exists(target))) return undefined
   return { target, record } as const
+})
+
+export const builtFace = Effect.fnUntraced(function*(dir: string) {
+  return (yield* publishedReel(dir))?.record.face
 })
 
 const builtFileAt = Effect.fnUntraced(function*(dir: string, name: string) {
@@ -170,7 +180,6 @@ const publishPictures = Effect.fnUntraced(function*(dir: string, made: string, j
 })
 
 export const renderParts = Effect.fnUntraced(function*(dir: string, parts: ReadonlyArray<Part>, colours: ReadonlyArray<VideoColour>, work: string, output: string, onDone: (share: number) => Effect.Effect<void>) {
-  const fs = yield* FileSystem.FileSystem
   const settings = yield* Settings
   const total = secondsOf(parts)
   const hdr = new Map<string, boolean>()
@@ -178,15 +187,14 @@ export const renderParts = Effect.fnUntraced(function*(dir: string, parts: Reado
   for (const part of parts) {
     const { source, look } = yield* lookOf(dir, part.video, colours, hdr)
     const before = secondsOf(parts.slice(0, names.length))
-    const name = `part-${String(names.length + 1).padStart(3, "0")}.mov`
+    const name = partFileOf(names.length, "mov")
     yield* tool("ffmpeg", partArgs(source, part, look, settings.encoder, `${work}/${name}`), settings.heavy, (line) => {
       const seconds = progressSeconds(line)
       return seconds === undefined ? Effect.void : onDone(Math.min(1, (before + seconds) / total))
     })
     names.push(name)
   }
-  yield* fs.writeFileString(`${work}/parts.txt`, joinList(names))
-  yield* tool("ffmpeg", joinArgs(`${work}/parts.txt`, output), settings.heavy)
+  yield* concatParts(work, names, output, "picture-and-sound")
 })
 
 const measurePassages = Effect.fnUntraced(function*(work: string, levelled: string, spans: ReadonlyArray<Span>) {
@@ -199,20 +207,21 @@ const measurePassages = Effect.fnUntraced(function*(work: string, levelled: stri
 })
 
 // One gain curve over the whole reel, not per part, so quiet and loud passages share one target.
-const levelReel = Effect.fnUntraced(function*(work: string, moments: ReadonlyArray<Moment>, parts: ReadonlyArray<PartLevel>, offset: number, output: string) {
+const levelReel = Effect.fnUntraced(function*(work: string, moments: ReadonlyArray<Moment>, parts: ReadonlyArray<PartLevel>, offset: number, output: string, streams: Streams) {
   const fs = yield* FileSystem.FileSystem
   const settings = yield* Settings
   const curve = `${work}/curve.txt`
-  yield* fs.writeFileString(curve, curveOf(gainsOf(moments, parts, offset)))
-  yield* tool("ffmpeg", levelArgs(`${work}/joined.mp4`, curve, output), settings.heavy)
-  return yield* measureLoudness(output)
+  const gains = gainsOf(moments, parts, offset)
+  yield* fs.writeFileString(curve, curveOf(gains))
+  yield* tool("ffmpeg", levelArgs(`${work}/joined.mp4`, curve, output, streams), settings.heavy)
+  return { sound: yield* measureLoudness(output), gains }
 })
 
-const concatParts = Effect.fnUntraced(function*(work: string, names: ReadonlyArray<string>, output: string) {
+const concatParts = Effect.fnUntraced(function*(work: string, names: ReadonlyArray<string>, output: string, streams: Streams) {
   const fs = yield* FileSystem.FileSystem
   const settings = yield* Settings
   yield* fs.writeFileString(`${work}/parts.txt`, joinList(names))
-  yield* tool("ffmpeg", joinArgs(`${work}/parts.txt`, output), settings.heavy)
+  yield* tool("ffmpeg", joinArgs(`${work}/parts.txt`, output, streams), settings.heavy)
 })
 
 // Written last: the record names only files that are already whole.
@@ -225,33 +234,71 @@ const publish = Effect.fnUntraced(function*(dir: string, record: typeof Record.T
   yield* Effect.uninterruptible(fs.rename(`${place.work}/reel.json`, place.record))
 })
 
-type Rendered = PartLevel & { readonly name: string }
+export type Rendered = Part & PartLevel & { readonly name: string }
 
-const levelSound = Effect.fnUntraced(function*(work: string, parts: ReadonlyArray<Part>, rendered: ReadonlyArray<Rendered>, levelledFile: string, soundDone: (step: number) => Effect.Effect<void>) {
-  const total = secondsOf(parts)
-  yield* concatParts(work, rendered.map((part) => part.name), `${work}/joined.mp4`)
+export const partFileOf = (index: number, extension: "mov" | "wav"): string => `part-${String(index + 1).padStart(3, "0")}.${extension}`
+
+export const renderedOf = Effect.fnUntraced(function*(work: string, parts: ReadonlyArray<Part>, index: number, part: Part, name: string) {
+  const lufs = (yield* measureLoudness(`${work}/${name}`)).lufs
+  return { ...part, name, from: secondsOf(parts.slice(0, index)), to: secondsOf(parts.slice(0, index + 1)), lufs } satisfies Rendered
+})
+
+export const SOUND_STEPS = 5
+
+export const levelSound = Effect.fnUntraced(function*(
+  work: string, rendered: ReadonlyArray<Rendered>, levelledFile: string, streams: Streams, soundDone: (step: number) => Effect.Effect<void>
+) {
+  const total = secondsOf(rendered)
+  yield* concatParts(work, rendered.map((part) => part.name), `${work}/joined.mp4`, streams)
   const heard = yield* measureLoudness(`${work}/joined.mp4`)
   const moments = yield* momentaryLoudness(`${work}/joined.mp4`, `${work}/moments.txt`)
   yield* soundDone(1)
-  const trial = yield* levelReel(work, moments, rendered, 0, `${work}/trial.mp4`)
+  const trial = yield* levelReel(work, moments, rendered, 0, `${work}/trial.mp4`, streams)
   yield* soundDone(2)
-  const changed = yield* levelReel(work, moments, rendered, LOUDNESS_TARGET - trial.lufs, levelledFile)
+  const { sound: changed, gains } = yield* levelReel(work, moments, rendered, LOUDNESS_TARGET - trial.sound.lufs, levelledFile, streams)
   yield* soundDone(3)
   const changedMoments = yield* momentaryLoudness(levelledFile, `${work}/moments-after.txt`)
   yield* soundDone(4)
-  const passages = yield* measurePassages(work, levelledFile, passagesOf(parts, rendered.map((part) => part.lufs)))
+  const passages = yield* measurePassages(work, levelledFile, passagesOf(rendered, rendered.map((part) => part.lufs)))
   yield* soundDone(5)
-  return {
+  const levelling = {
     before: heard.lufs,
     after: changed,
     series: { before: sampledAt(moments, SERIES_STEP, total), after: sampledAt(changedMoments, SERIES_STEP, total) },
     passages
   } satisfies Levelling
+  return { levelling, parts: partGainsOf(gains, rendered) }
 })
 
 const SOUND_SHARE = 0.2
-const SOUND_STEPS = 5
+const FACE_SHARE = 0.4
 const INSERTS_SHARE = 0.25
+
+type VideoStep =
+  | { readonly kind: "face"; readonly from: string; readonly to: string }
+  | { readonly kind: "inserts"; readonly from: string; readonly to: string }
+
+interface VideoChain {
+  readonly levelled: string
+  readonly steps: ReadonlyArray<VideoStep>
+}
+
+// Her face is retouched before the inserts go on, so no attached picture is ever retouched.
+export const videoChain = (work: string, face: Face, inserts: boolean): VideoChain => {
+  const reel = `${work}/reel.mp4`
+  const retouched = `${work}/retouched.mp4`
+  const levelled = face === "off" && !inserts ? reel : `${work}/levelled.mp4`
+  const faceStep: ReadonlyArray<VideoStep> = face === "light" ? [{ kind: "face", from: levelled, to: inserts ? retouched : reel }] : []
+  const insertStep: ReadonlyArray<VideoStep> = inserts ? [{ kind: "inserts", from: face === "light" ? retouched : levelled, to: reel }] : []
+  return { levelled, steps: [...faceStep, ...insertStep] }
+}
+
+const retouchStep = Effect.fnUntraced(function*(work: string, step: VideoStep, frames: number, onDone: (share: number) => Effect.Effect<void>) {
+  const fs = yield* FileSystem.FileSystem
+  const folder = `${work}/face`
+  yield* fs.makeDirectory(folder, { recursive: true })
+  yield* fs.rename(yield* retouchVideo({ before: step.from, folder, frames, closeUp: false }, onDone), step.to)
+})
 
 const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (share: number) => Effect.Effect<void>) {
   const fs = yield* FileSystem.FileSystem
@@ -260,9 +307,11 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
   const parts = partsOf(cut.clips)
   const total = secondsOf(parts)
   const pictures = yield* Effect.forEach(cut.inserts, (insert) => insertPictureOf(dir, insert))
+  const face = yield* readFace(dir)
   const finishing = pictures.length > 0 || hasCaptions(cut.captions)
   const insertsShare = finishing ? INSERTS_SHARE : 0
-  const partsShare = 1 - SOUND_SHARE - insertsShare
+  const faceShare = face === "light" ? FACE_SHARE : 0
+  const partsShare = 1 - SOUND_SHARE - faceShare - insertsShare
   yield* fs.remove(place.work, { recursive: true, force: true })
   yield* fs.makeDirectory(place.work, { recursive: true })
   yield* sweepReel(dir)
@@ -271,18 +320,18 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
   const joins = yield* makePictures(dir, parts, colours, new Map())
   yield* renderParts(dir, parts, colours, place.work, `${place.work}/joined.mp4`, (share) => onDone(share * partsShare))
   const rendered: Array<Rendered> = []
-  for (const [index] of parts.entries()) {
-    const name = `part-${String(index + 1).padStart(3, "0")}.mov`
-    rendered.push({ name, from: secondsOf(parts.slice(0, index)), to: secondsOf(parts.slice(0, index + 1)), lufs: (yield* measureLoudness(`${place.work}/${name}`)).lufs })
+  for (const [index, part] of parts.entries()) {
+    rendered.push(yield* renderedOf(place.work, parts, index, part, partFileOf(index, "mov")))
   }
-  const levelledFile = finishing ? `${place.work}/levelled.mp4` : `${place.work}/reel.mp4`
-  const levelling = yield* levelSound(place.work, parts, rendered, levelledFile, (step) => onDone(partsShare + SOUND_SHARE * step / SOUND_STEPS))
-  if (finishing) {
-    yield* tool("ffmpeg", finishArgs(levelledFile, pictures, captions, settings.encoder, `${place.work}/reel.mp4`), settings.heavy, (line) => {
+  const chain = videoChain(place.work, face, finishing)
+  const { levelling } = yield* levelSound(place.work, rendered, chain.levelled, "picture-and-sound", (step) => onDone(partsShare + SOUND_SHARE * step / SOUND_STEPS))
+  const frames = parts.reduce((sum, part) => sum + part.frames, 0)
+  yield* Effect.forEach(chain.steps, (step) => step.kind === "face"
+    ? retouchStep(place.work, step, frames, (share) => onDone(partsShare + SOUND_SHARE + faceShare * share))
+    : tool("ffmpeg", finishArgs(step.from, pictures, captions, settings.encoder, step.to), settings.heavy, (line) => {
       const seconds = progressSeconds(line)
       return seconds === undefined ? Effect.void : onDone(1 - insertsShare + insertsShare * Math.min(1, seconds / total))
-    })
-  }
+    }), { discard: true })
   const made = DateTime.formatIso(yield* DateTime.now)
   const record = {
     made,
@@ -290,6 +339,7 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
     parts,
     inserts: recorded(cut.inserts),
     captions: captionsKey(cut.captions),
+    face,
     colour: { videos: colours, joins },
     levelling
   }
@@ -321,16 +371,18 @@ export const readReel = Effect.fnUntraced(function*(dir: string, cut: Cut, job: 
   const parts = partsOf(cut.clips)
   const seconds = secondsOf(parts)
   const published = yield* publishedReel(dir)
-  if (published === undefined) return { job, cut: seconds } satisfies ReelView
+  const face = yield* readFace(dir)
+  if (published === undefined) return { job, cut: seconds, face } satisfies ReelView
   const size = Number((yield* fs.stat(published.target)).size)
   const { record } = published
   const file = {
     made: record.made,
     seconds: secondsOf(record.parts),
     size,
-    fresh: sameParts(record.parts, parts) && sameInserts(record.inserts, recorded(cut.inserts)) && record.captions === captionsKey(cut.captions),
+    fresh: sameParts(record.parts, parts) && sameInserts(record.inserts, recorded(cut.inserts)) && record.captions === captionsKey(cut.captions) && record.face === face,
+    face: record.face,
     ...(record.colour === undefined ? {} : { colour: colourView(record.colour) }),
     ...(record.levelling === undefined ? {} : { levelling: record.levelling })
   }
-  return { job, cut: seconds, file } satisfies ReelView
+  return { job, cut: seconds, face, file } satisfies ReelView
 })
