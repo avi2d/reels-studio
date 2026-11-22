@@ -6,21 +6,34 @@ description: The parts of a 1080 by 1920 Reels frame that the Instagram player c
 # Player zones of Instagram Reels
 
 The frame is 1080 by 1920 pixels.
-The player covers the top with the header and the bottom with the name, the caption and the buttons.
+The player covers a strip at the top, the name and the caption at the bottom, and a column of buttons on the right.
+[src/shared/zones.ts](../../src/shared/zones.ts) holds the numbers the studio checks, and this table repeats them.
 
-## Numbers
+## An ordinary reel
 
-| Edge | Share | Pixels | Source |
+| Part | Share | Pixels | Source |
 | --- | --- | --- | --- |
-| Top | 14% | 269 | Meta Ads Guide, Instagram Reels |
-| Bottom | 35% | 672 | Meta Ads Guide, Instagram Reels |
-| Left and right | 6% each | 65 each | Meta Ads Guide, Instagram Reels |
+| Top | 6% | 115 | Instagram web player, 22 November 2026, and Azalia's reference reels |
+| Bottom | 12% | 230 | the same |
+| Left and right | 6% each | 65 each | the same |
+| Button column | 13% wide, from 55% of the height down | x 940 to 1080, y 1056 to 1690 | the same |
 
-The box for text is 950 by 979 pixels and starts at the point 65, 269.
-It ends at x 1015 and y 1248.
+The box for text starts at the point 65, 115 and ends at x 1015 and y 1690.
+No text enters the button column, the corner from x 940 and y 1056.
 
-Meta wrote these numbers for ads in Reels and publishes none for ordinary videos.
-The studio takes them as the strict border.
+Meta publishes no numbers for an ordinary reel, so these come from measuring the player.
+
+## A reel for ads
+
+| Part | Share | Pixels | Source |
+| --- | --- | --- | --- |
+| Top | 14% | 269 | Meta Business Help, text overlays and the Safe Zone |
+| Bottom | 35% | 672 | the same |
+| Left and right | 6% each | 65 each | the same |
+| Button column | 21% wide, from 60% of the height down | x 853 to 1080, y 1152 to 1248 | the same |
+
+Use this box only when the person says the reel goes to ads.
+On the page it is the platform «Instagram, реклама».
 
 ## The rule
 
@@ -30,19 +43,18 @@ Move the text, break the line or shorten it instead, and tell the person what ch
 
 ## Where each template goes
 
-- Captions: two lines right above the lower border, the last line ends by y 1248.
-- Key thought: a plate in the upper half of the box, the first line starts no higher than y 269.
-- Title: the centre of the frame, between y 240 and y 1680, so that the profile grid shows it whole.
-  The title must still stay inside the box.
+- Subtitles: one word at a time, centred, the ink ends 24 pixels above y 1690.
+- Key thought and title: from the upper left of the box, the ink of the first line starts 8 pixels below y 115 and keeps 28 pixels from the left edge.
 
 ## Other crops
 
 - The feed shows 4:5, rows 285 to 1635.
 - The profile grid shows 3:4, rows 240 to 1680.
 
-The box lies inside both crops, so a text in the box is visible in the player, the feed and the grid.
+A key thought in the upper part of the box sits above row 285, so the feed and the grid cut it.
+Put the words that must show in the grid lower than row 285.
 
 ## The face
 
-Keep the eyes and the mouth inside the box.
-When the person describes a frame where the face sits low, say that the buttons may cover it.
+Keep the eyes and the mouth inside the box and out of the button column.
+When the person describes a frame where the face sits low or far right, say that the buttons may cover it.

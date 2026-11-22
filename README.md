@@ -8,7 +8,8 @@ The studio builds the chosen takes into one 1080 by 1920 file to watch and downl
 It brings the skin colour of the later videos to the first.
 The person can attach pictures, screenshots, PDF files, video and sound to a chat message, and the studio says what each holds.
 The chat model runs at its provider in the cloud, so the attached files and the pictures and text taken from them are sent there.
-It does not caption, restyle or publish a video yet.
+It draws one-word subtitles and the key thoughts of the plan on the reel.
+It does not publish a video.
 
 ## Before you begin
 

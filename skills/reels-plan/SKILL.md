@@ -148,6 +148,7 @@ It shows the words of the plan struck through, and its player skips them, so the
 It gathers the blocks and takes of all videos, and the round play/stop button under the take numbers plays the chosen takes one after another on the page.
 After the yes it chooses the takes, shortens the pauses and lists what it did.
 It shows the person's attached pictures and screenshots over the phrases they belong to, as the reels-inserts skill says.
-It cannot yet cut a video, add subtitles, titles or templates, save several videos as one file, crop a video or send a file anywhere.
+After the yes it draws one-word subtitles and the titles and key thoughts of `texts.json` on the reel, as the reels-style skill says.
+It cannot yet cut a video, save several videos as one file, crop a video or send a file anywhere.
 Say so in one sentence when the person asks for any of these.
 Never say that a video is cut or ready.
