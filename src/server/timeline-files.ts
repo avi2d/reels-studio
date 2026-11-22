@@ -38,7 +38,7 @@ export const writeEdits = Effect.fnUntraced(function*(dir: string, edits: Edits)
 type Look = TimelineView["looks"][number]
 
 const lookOf = (video: string, measured: Gaze | undefined, written: boolean, failure: GazeFailure | undefined): Look => {
-  if (measured !== undefined && measured.heads !== undefined) return { video, state: "measured" }
+  if (measured !== undefined && measured.heads !== undefined && measured.aspect !== undefined) return { video, state: "measured" }
   if (failure !== undefined) return { video, state: "failed", reason: failure }
   if (measured !== undefined) return { video, state: "waiting" }
   if (written) return { video, state: "failed", reason: "file-unreadable" }

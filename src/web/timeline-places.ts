@@ -36,7 +36,7 @@ const ANSWERS: ReadonlyArray<readonly [JoinAnswer, AnswerText]> = [
 
 const seconds = (value: number): string => `${value.toFixed(1).replace(".", ",")} с`
 
-const percent = (scale: number): string => `${Math.max(1, Math.round((scale - 1) * 100))} %`
+const percent = (scale: number): string => `${Math.round((scale - 1) * 100)} %`
 
 const doneText = ({ answer, trim, align }: Place, text: AnswerText): string => {
   if (answer === "trim") return `${text.done}: ${seconds(trim.cut)}`
@@ -50,7 +50,7 @@ const doneOf = (place: Place): ReadonlyArray<string> =>
 const alignNote = ({ align, answer }: Place): string => {
   if (answer !== undefined) return ""
   if (align.kind === "zoom") return `глаза можно выровнять: картинка после склейки станет крупнее на ${percent(align.frame.scale)}`
-  if (align.kind === "far") return "выровнять нельзя: картинку пришлось бы приблизить так сильно, что она станет нечёткой"
+  if (align.kind === "far") return "выровнять нельзя: сдвиг слишком большой, приближением его не скрыть"
   return "студия ещё измеряет кадр, выровнять можно будет позже"
 }
 

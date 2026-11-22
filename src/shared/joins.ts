@@ -70,7 +70,8 @@ const seenAt = (faces: VideoFaces | undefined, time: number, side: "before" | "a
 const alignOf = (before: Head, after: Seen, measured: boolean): Align => {
   if (!measured) return { kind: "unmeasured" }
   const frame = frameToward(before, after.head)
-  return frame === undefined ? { kind: "far" } : { kind: "zoom", frame }
+  if (frame === undefined || frame.scale <= 1 + 1e-9) return { kind: "far" }
+  return { kind: "zoom", frame }
 }
 
 type Faces = ReadonlyMap<string, VideoFaces>
