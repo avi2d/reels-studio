@@ -13,6 +13,24 @@ const FILL_FROM = 1.3
 
 export type Shape = "fill" | "card"
 
+export type Visual =
+  | { readonly kind: "picture"; readonly file: string }
+  | { readonly kind: "clip"; readonly file: string; readonly start: number; readonly sound: boolean }
+  | { readonly kind: "page"; readonly file: string; readonly page: number; readonly quote: string }
+
+export const plannedVisual = (planned: PlannedInsert): Visual => {
+  if ("picture" in planned) return { kind: "picture", file: planned.picture }
+  if ("clip" in planned) return { kind: "clip", file: planned.clip, start: planned.start ?? 0, sound: false }
+  return { kind: "page", file: planned.document, page: planned.page, quote: planned.quote }
+}
+
+// A picture keys by its bare name, so a reel built before clips and pages still matches its cut.
+export const visualKey = (visual: Visual): string => {
+  if (visual.kind === "picture") return visual.file
+  if (visual.kind === "clip") return `clip:${visual.file}:${visual.start}:${visual.sound ? "sound" : "silent"}`
+  return `page:${visual.file}:${visual.page}:${visual.quote}`
+}
+
 export const shapeOf = (width: number, height: number): Shape => height / width >= FILL_FROM ? "fill" : "card"
 
 const startsOf = (clips: ReadonlyArray<Span>): ReadonlyArray<number> => {
@@ -59,14 +77,20 @@ const coverSpan = (clips: ReadonlyArray<Clip>, join: Join): Span => {
 
 export interface InsertPlace {
   readonly planned: PlannedInsert
-  readonly picture: string
+  readonly visual: Visual
   readonly answer: InsertAnswer["answer"] | undefined
   readonly span: Span | undefined
 }
 
 export interface Shown extends Span {
   readonly id: string
-  readonly picture: string
+  readonly visual: Visual
+}
+
+const answeredVisual = (planned: PlannedInsert, answered: InsertAnswer | undefined, pictures: ReadonlyArray<string>): Visual | undefined => {
+  if (answered?.answer === "replace") return pictures.includes(answered.picture) ? { kind: "picture", file: answered.picture } : undefined
+  const visual = plannedVisual(planned)
+  return visual.kind === "clip" && answered?.answer === "sound" ? { ...visual, sound: true } : visual
 }
 
 const answerOf = (edits: Edits, id: string): InsertAnswer | undefined => edits.inserts.find((one) => one.id === id)
@@ -79,11 +103,11 @@ export const insertPlaces = (
     const answered = answerOf(edits, one.id)
     const transcript = transcripts.get(one.video)
     const said = transcript === undefined ? undefined : phraseSpan(reel, transcript, one)
-    const replacement = answered?.answer === "replace" && pictures.includes(answered.picture) ? answered.picture : undefined
+    const visual = answeredVisual(one, answered, pictures)
     return {
       planned: one,
-      picture: replacement ?? one.picture,
-      answer: replacement !== undefined ? answered?.answer : answered?.answer === "replace" ? undefined : answered?.answer,
+      visual: visual ?? plannedVisual(one),
+      answer: visual === undefined ? undefined : answered?.answer,
       span: said === undefined ? undefined : fitted(said, total)
     }
   }).toSorted((left, right) => (left.span?.start ?? Infinity) - (right.span?.start ?? Infinity))
@@ -94,8 +118,8 @@ export const shownInserts = (places: ReadonlyArray<InsertPlace>, reel: ReadonlyA
   const covers = (resolved ?? coversOf(reel, edits, pictures)).filter((cover) => pictures.includes(cover.picture))
   const wanted = [
     ...places.flatMap((place): ReadonlyArray<Shown> =>
-      place.span === undefined || place.answer === "remove" ? [] : [{ id: place.planned.id, picture: place.picture, ...place.span }]),
-    ...covers.map(({ join, picture }): Shown => ({ id: coverId(join), picture, ...coverSpan(reel, join) }))
+      place.span === undefined || place.answer === "remove" ? [] : [{ id: place.planned.id, visual: place.visual, ...place.span }]),
+    ...covers.map(({ join, picture }): Shown => ({ id: coverId(join), visual: { kind: "picture", file: picture }, ...coverSpan(reel, join) }))
   ].toSorted((left, right) => left.start - right.start)
   const shown: Array<Shown> = []
   for (const one of wanted) {
@@ -136,9 +160,10 @@ export const shiftedBy = (shown: ReadonlyArray<Shown>, offset: number): Readonly
   shown.map((one) => ({ ...one, start: one.start - offset, end: one.end - offset }))
 
 export interface InsertLook {
-  readonly picture: string
+  readonly visual: Visual
   readonly opacity: number
   readonly scale: number
+  readonly since: number
 }
 
 export const lookAt = (shown: ReadonlyArray<Shown>, time: number): InsertLook | undefined => {
@@ -146,8 +171,9 @@ export const lookAt = (shown: ReadonlyArray<Shown>, time: number): InsertLook | 
   if (one === undefined) return undefined
   const fade = Math.min(INSERT_FADE, (one.end - one.start) / 2)
   return {
-    picture: one.picture,
+    visual: one.visual,
     opacity: Math.max(0, Math.min(1, (time - one.start) / fade, (one.end - time) / fade)),
-    scale: 1 + INSERT_DRIFT * (time - one.start) / (one.end - one.start)
+    scale: one.visual.kind === "clip" ? 1 : 1 + INSERT_DRIFT * (time - one.start) / (one.end - one.start),
+    since: time - one.start
   }
 }

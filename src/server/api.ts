@@ -46,6 +46,12 @@ const pictureOf = (request: HttpServerRequest.HttpServerRequest) => {
     : badRequest("Такой картинки нет")
 }
 
+const pageOf = (request: HttpServerRequest.HttpServerRequest) => {
+  const page = Number(queryOf(request, "page"))
+  const quote = queryOf(request, "quote")
+  return Number.isInteger(page) && page >= 1 && quote.trim() !== "" ? Effect.succeed({ page, quote }) : badRequest("Такой страницы нет")
+}
+
 const versionOf = (request: HttpServerRequest.HttpServerRequest): ReelVersion =>
   new URL(request.url, "http://localhost").searchParams.get("version") === "before" ? "before" : "after"
 
@@ -191,6 +197,15 @@ const uploads = Layer.mergeAll(
     return yield* HttpServerResponse.file(target, { contentType: "image/jpeg", headers: { "cache-control": "no-store" } }).pipe(
       Effect.mapError(() => new ApiError({ status: 500, message: "Файл недоступен. Попробуйте открыть страницу ещё раз." }))
     )
+  }))),
+  HttpRouter.add("GET", "/api/projects/:id/attachments/:name/clip", (request) => reply(Effect.gen(function*() {
+    const attachments = yield* Attachments
+    return yield* sendFile(yield* attachments.clip(yield* param("id"), yield* param("name")), "video/mp4", request.headers["range"])
+  }))),
+  HttpRouter.add("GET", "/api/projects/:id/attachments/:name/page", (request) => reply(Effect.gen(function*() {
+    const attachments = yield* Attachments
+    const { page, quote } = yield* pageOf(request)
+    return yield* sendFile(yield* attachments.page(yield* param("id"), yield* param("name"), page, quote), "image/jpeg", request.headers["range"])
   })))
 )
 

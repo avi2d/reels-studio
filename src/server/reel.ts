@@ -1,12 +1,14 @@
 import { Data, DateTime, Effect, FileSystem, Option, Schema } from "effect"
-import { shapeOf, type Shown } from "../shared/inserts.ts"
+import { shapeOf, visualKey, type Shown, type Visual } from "../shared/inserts.ts"
 import { Frame } from "../shared/timeline.ts"
 import { Levelling, LOUDNESS_TARGET, SERIES_STEP, VideoColour, type ColourView, type PictureSide, type ReelView } from "../shared/reel.ts"
 import { pictureProbeArgs } from "./attachment-notes.ts"
 import { curveOf, gainsOf, levelArgs, type PartLevel } from "./level-curve.ts"
 import {
-  insertArgs, joinArgs, joinList, lastFrameOf, partArgs, partsOf, passagesOf, pictureArgs, progressSeconds, sameParts, sampledAt, secondsOf, type InsertPicture, type Moment, type Part, type Span
+  isHdr, joinArgs, joinList, lastFrameOf, partArgs, partsOf, passagesOf, pictureArgs, progressSeconds, sameParts, sampledAt, secondsOf, type Moment, type Part, type Span
 } from "./media-commands.ts"
+import { insertArgs, type InsertLayer } from "./insert-commands.ts"
+import { markedPage } from "./insert-files.ts"
 import { isHdrVideo, measureLoudness, momentaryLoudness, places, tool } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
 import { colourJoins, coloursOf, gainOf, measureSkin } from "./skin.ts"
@@ -33,32 +35,66 @@ const encodeRecord = Schema.encodeEffect(RecordFile)
 
 export type ReelVersion = "after" | "before"
 
+const Size = Schema.Struct({ width: Schema.optionalKey(Schema.Finite), height: Schema.optionalKey(Schema.Finite) })
+const Rotations = Schema.Array(Schema.Struct({ rotation: Schema.optionalKey(Schema.Finite) }))
+
 const PictureProbe = Schema.fromJsonString(Schema.Struct({
-  streams: Schema.Array(Schema.Struct({ width: Schema.optionalKey(Schema.Finite), height: Schema.optionalKey(Schema.Finite) })),
-  frames: Schema.optionalKey(Schema.Array(Schema.Struct({
-    side_data_list: Schema.optionalKey(Schema.Array(Schema.Struct({ rotation: Schema.optionalKey(Schema.Finite) })))
-  })))
+  streams: Schema.Array(Size),
+  frames: Schema.optionalKey(Schema.Array(Schema.Struct({ side_data_list: Schema.optionalKey(Rotations) })))
 }))
 const decodePictureProbe = Schema.decodeUnknownEffect(PictureProbe)
 
+const ClipProbe = Schema.fromJsonString(Schema.Struct({
+  streams: Schema.Array(Schema.Struct({
+    ...Size.fields,
+    codec_type: Schema.optionalKey(Schema.String),
+    color_transfer: Schema.optionalKey(Schema.String),
+    side_data_list: Schema.optionalKey(Rotations)
+  }))
+}))
+const decodeClipProbe = Schema.decodeUnknownEffect(ClipProbe)
+
+const clipProbeArgs = (file: string): ReadonlyArray<string> =>
+  ["-v", "error", "-show_entries", "stream=codec_type,width,height,color_transfer:stream_side_data=rotation", "-of", "json", file]
+
 const recorded = (inserts: ReadonlyArray<Shown>): ReadonlyArray<ShownInsert> =>
-  inserts.map((one) => ({ picture: one.picture, start: Number(one.start.toFixed(4)), end: Number(one.end.toFixed(4)) }))
+  inserts.map((one) => ({ picture: visualKey(one.visual), start: Number(one.start.toFixed(4)), end: Number(one.end.toFixed(4)) }))
 
 const sameInserts = (left: ReadonlyArray<ShownInsert>, right: ReadonlyArray<ShownInsert>): boolean =>
   JSON.stringify(left) === JSON.stringify(right)
 
 class PictureUnreadable extends Data.TaggedError("PictureUnreadable")<{ readonly picture: string }> {}
 
-const insertPictureOf = Effect.fnUntraced(function*(dir: string, insert: Shown) {
-  const file = `${dir}/attached/${insert.picture}`
-  const probe = yield* decodePictureProbe(yield* tool("ffprobe", pictureProbeArgs(file), []))
-  const stream = probe.streams.find((one) => one.width !== undefined)
-  if (stream?.width === undefined || stream.height === undefined) return yield* new PictureUnreadable({ picture: insert.picture })
-  const rotation = probe.frames?.[0]?.side_data_list?.find((one) => one.rotation !== undefined)?.rotation
+const shownSize = (stream: typeof Size.Type, sides: typeof Rotations.Type | undefined, file: string) => {
+  if (stream.width === undefined || stream.height === undefined) return Effect.fail(new PictureUnreadable({ picture: file }))
+  const rotation = sides?.find((one) => one.rotation !== undefined)?.rotation
   const upright = rotation !== undefined && Math.abs(rotation % 180) === 90
-  const width = upright ? stream.height : stream.width
-  const height = upright ? stream.width : stream.height
-  return { file, shape: shapeOf(width, height), width, height, start: insert.start, end: insert.end } satisfies InsertPicture
+  return Effect.succeed(upright ? { width: stream.height, height: stream.width } : { width: stream.width, height: stream.height })
+}
+
+const stillOf = Effect.fnUntraced(function*(file: string, insert: Shown) {
+  const probe = yield* decodePictureProbe(yield* tool("ffprobe", pictureProbeArgs(file), []))
+  const stream = probe.streams.find((one) => one.width !== undefined) ?? {}
+  const { width, height } = yield* shownSize(stream, probe.frames?.[0]?.side_data_list, file)
+  return { kind: "still", file, shape: shapeOf(width, height), width, height, start: insert.start, end: insert.end } satisfies InsertLayer
+})
+
+const clipOf = Effect.fnUntraced(function*(file: string, visual: Visual & { readonly kind: "clip" }, insert: Shown) {
+  const probe = yield* decodeClipProbe(yield* tool("ffprobe", clipProbeArgs(file), []))
+  const stream = probe.streams.find((one) => one.codec_type === "video") ?? {}
+  const { width, height } = yield* shownSize(stream, stream.side_data_list, file)
+  const sound = visual.sound && probe.streams.some((one) => one.codec_type === "audio")
+  return {
+    kind: "clip", file, shape: shapeOf(width, height), width, height, start: insert.start, end: insert.end,
+    from: visual.start, hdr: isHdr(stream.color_transfer), sound
+  } satisfies InsertLayer
+})
+
+const insertLayerOf = Effect.fnUntraced(function*(dir: string, insert: Shown) {
+  const { visual } = insert
+  if (visual.kind === "clip") return yield* clipOf(`${dir}/attached/${visual.file}`, visual, insert)
+  if (visual.kind === "page") return yield* stillOf(yield* markedPage(dir, visual.file, visual.page, visual.quote), insert)
+  return yield* stillOf(`${dir}/attached/${visual.file}`, insert)
 })
 
 
@@ -253,7 +289,7 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
   const place = reelPlaces(dir)
   const parts = partsOf(cut.clips)
   const total = secondsOf(parts)
-  const pictures = yield* Effect.forEach(cut.inserts, (insert) => insertPictureOf(dir, insert))
+  const pictures = yield* Effect.forEach(cut.inserts, (insert) => insertLayerOf(dir, insert))
   const insertsShare = pictures.length === 0 ? 0 : INSERTS_SHARE
   const partsShare = 1 - SOUND_SHARE - insertsShare
   yield* fs.remove(place.work, { recursive: true, force: true })

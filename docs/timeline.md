@@ -89,7 +89,8 @@ The studio cuts each clip to whole frames, encodes the clips one by one through 
 The studio then brings the joined file to -14 LUFS with one gain curve over the whole reel.
 A limiter keeps the true peak under -1.5 dBTP.
 The gain change at each join is a short ramp that ends at the join, so the levelled line stays flat there.
-When the cut shows inserts, one more pass lays the pictures over the levelled file and copies its sound as it is.
+When the cut shows inserts, one more pass lays them over the levelled file and copies its sound as it is.
+When the person turned the sound of a clip on, that pass mixes the clip's sound under the voice and encodes the sound again, with a limiter at 0.84.
 The joined file before levelling stays beside the reel as `before-<stamp>.mp4`.
 The download always serves the levelled file.
 A bar follows the parts, the levelling and the inserts.
@@ -202,9 +203,10 @@ It shows the chosen picture from 1 s before the join to 1.5 s after it, and take
 
 ## Inserts
 
-An insert shows a picture or a screenshot the person attached in the chat over the video while a phrase is said.
+An insert shows a file the person attached in the chat over the video while a phrase is said: a picture or a screenshot, a video clip, or one page of a PDF.
 The chat model chooses the phrase by its meaning and writes it to `inserts.json`, as the reels-inserts skill says.
-The studio leaves out an insert with a repeated id, a picture that is not in `attached/`, or word numbers the transcript does not hold, and the page says how many it left out.
+The studio leaves out an insert with a repeated id, a file that is not in `attached/` or is not of its kind, a quote that the text of its PDF page does not hold, or word numbers the transcript does not hold, and the page says how many it left out.
+The quote is matched without regard to case, ё, line breaks and hyphens.
 An insert covers the words of its phrase that the cut plays, and at least 2 s.
 Two inserts never stand at once: the later one starts where the earlier one ends, and one left shorter than 1 s is dropped.
 
@@ -213,10 +215,15 @@ Any other picture stands as a card with a 12 px white border, as large as fits t
 The picture fades in and out over 0.3 s and grows by 6 % while it stands.
 The voice and the video sound go on under it.
 
+A clip plays from its `start` for as long as its phrase, and holds its last frame when it is shorter.
+A clip is silent until the person turns its sound on, and it does not grow.
+A PDF page is rendered 1800 px wide, its quoted lines are marked in yellow, and it is cropped around the marked lines as wide as the text of the page, at most square and no taller than the text, so it stands as a card.
+The marked page and the clip preview the page plays are kept in `attached-views/<file>/`.
+
 The row of blocks shows each insert as a mark under the blocks it covers, and the mark plays it.
 The «Паузы и склейки» stage lists every insert as a place to check, with its picture, its words and the reason the model gave.
 «Посмотреть» plays 1 s before the insert, the insert and 1 s after it, with the picture over the player as the reel shows it.
-«Оставить» keeps it, «Заменить» puts another attached picture in its place, and «Убрать» takes it out of the reel.
+«Оставить» keeps it, «Со звуком» keeps a clip with its sound, «Заменить» puts another attached picture in its place, and «Убрать» takes it out of the reel.
 Each answer takes the place off the count, and `timeline.json` keeps it by the insert id.
 
 ## Files
@@ -228,7 +235,7 @@ Each video folder holds these next to `plan.json`:
 | `gaze/<video>.json` | One sample per 0.2 s: `camera`, `away` or `hidden`, and where the eyes are and the face height, as shares of the frame height, and the frame shape as `aspect` |
 | `gaze/<video>.txt` | The share of looks into the camera for each stretch of speech, which the chat model reads |
 | `blocks.json` | The blocks and their takes, written by the chat model |
-| `inserts.json` | The pictures to show over phrases, written by the chat model |
+| `inserts.json` | The pictures, clips and PDF pages to show over phrases, written by the chat model |
 | `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses and the answers to the places to check and to the inserts |
 | `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |

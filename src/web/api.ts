@@ -1,5 +1,6 @@
 import { Data, Effect, Option, Schema } from "effect"
 import { BriefView } from "../shared/brief.ts"
+import type { Visual } from "../shared/inserts.ts"
 import { Message } from "../shared/chat.ts"
 import { Offer, type Pick, UploadedVideo } from "../shared/library.ts"
 import { VideoView } from "../shared/plan.ts"
@@ -165,3 +166,23 @@ export const saveBrief = (id: string, text: string): Effect.Effect<BriefView, Fa
 
 export const coverUrl = (id: string, name: string): string =>
   `/api/projects/${id}/attachments/${encodeURIComponent(name)}/cover`
+
+const clipUrl = (id: string, name: string): string =>
+  `/api/projects/${id}/attachments/${encodeURIComponent(name)}/clip`
+
+const visualUrl = (id: string, visual: Visual): string =>
+  visual.kind === "page"
+    ? `/api/projects/${id}/attachments/${encodeURIComponent(visual.file)}/page?${new URLSearchParams({ page: String(visual.page), quote: visual.quote })}`
+    : coverUrl(id, visual.file)
+
+export interface InsertUrls {
+  readonly pictureUrl: (name: string) => string
+  readonly visualUrl: (visual: Visual) => string
+  readonly clipUrl: (name: string) => string
+}
+
+export const insertUrls = (id: string): InsertUrls => ({
+  pictureUrl: (name: string): string => coverUrl(id, name),
+  visualUrl: (visual: Visual): string => visualUrl(id, visual),
+  clipUrl: (name: string): string => clipUrl(id, name)
+})

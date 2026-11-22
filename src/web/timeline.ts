@@ -256,7 +256,7 @@ const actionsOf = (
       hear(reelWithin(view.reelNow(), window), shiftedBy(state.shown, window.start))
     },
     answerInsert: (answer) => { change(withInsert(state.edits, answer)) },
-    pictureUrl: (picture) => Api.coverUrl(projectId, picture),
+    ...Api.insertUrls(projectId),
     ask: hooks.ask,
     setDeleted: (block, deleted) => {
       state.selected = deleted && block === state.open?.block.id ? neighbourOf(view.placedNow(), block) : state.selected
@@ -304,7 +304,7 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
   const ui = frameOf(parts)
   const state: State =
     { loaded: undefined, edits: NO_EDITS, acked: NO_EDITS, changes: 0, history: [], undone: [], selected: undefined, open: undefined, base: undefined, playing: undefined, shown: [], overlay: [], drawn: "", content: "", pending: undefined }
-  const overlay = insertView((picture) => Api.coverUrl(projectId, picture))
+  const overlay = insertView(Api.insertUrls(projectId))
   const view = display(parts, state, overlay.paint)
   const player = montage(projectId, view.markPlaying)
   ui.frame.prepend(player.node, overlay.node)
