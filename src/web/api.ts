@@ -4,6 +4,7 @@ import { Message } from "../shared/chat.ts"
 import { Offer, type Pick, UploadedVideo } from "../shared/library.ts"
 import { VideoView } from "../shared/plan.ts"
 import { ReelView, type PictureSide } from "../shared/reel.ts"
+import type { Face } from "../shared/face.ts"
 import { RetouchView, type RetouchPicture } from "../shared/retouch.ts"
 import { Edits, TimelinePage } from "../shared/timeline.ts"
 
@@ -147,6 +148,9 @@ export const getRetouch = (id: string): Effect.Effect<RetouchView, Failed> =>
 
 export const startRetouch = (id: string): Effect.Effect<RetouchView, Failed> =>
   call(RetouchView, `/api/projects/${id}/retouch`, { method: "POST" })
+
+export const setFace = (id: string, face: Face): Effect.Effect<RetouchView, Failed> =>
+  call(RetouchView, `/api/projects/${id}/retouch/face`, { ...post({ face }), method: "PUT" })
 
 export const retouchUrl = (id: string, name: RetouchPicture, made: string): string =>
   `/api/projects/${id}/retouch/${name}?made=${encodeURIComponent(made)}`
