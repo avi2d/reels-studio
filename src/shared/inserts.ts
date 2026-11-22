@@ -114,7 +114,7 @@ export const insertPlaces = (
   }).toSorted((left, right) => (left.span?.start ?? Infinity) - (right.span?.start ?? Infinity))
 }
 
-// A later insert starts where the earlier one ends, so two pictures never stand on the screen at once.
+// A later insert starts where the earlier one ends, so two inserts never stand on the screen at once.
 export const shownInserts = (places: ReadonlyArray<InsertPlace>, reel: ReadonlyArray<Clip>, edits: Edits, pictures: ReadonlyArray<string>, resolved?: ReadonlyArray<Cover>): ReadonlyArray<Shown> => {
   const covers = (resolved ?? coversOf(reel, edits, pictures)).filter((cover) => pictures.includes(cover.picture))
   const wanted = [

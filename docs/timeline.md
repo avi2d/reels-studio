@@ -221,8 +221,8 @@ A PDF page is rendered 1800 px wide, its quoted lines are marked in yellow, and 
 The marked page and the clip preview the page plays are kept in `attached-views/<file>/`.
 
 The row of blocks shows each insert as a mark under the blocks it covers, and the mark plays it.
-The «Паузы и склейки» stage lists every insert as a place to check, with its picture, its words and the reason the model gave.
-«Посмотреть» plays 1 s before the insert, the insert and 1 s after it, with the picture over the player as the reel shows it.
+The «Паузы и склейки» stage lists every insert as a place to check, with what it shows, its words and the reason the model gave.
+«Посмотреть» plays 1 s before the insert, the insert and 1 s after it, with the insert over the player as the reel shows it.
 «Оставить» keeps it, «Со звуком» keeps a clip with its sound, «Заменить» puts another attached picture in its place, and «Убрать» takes it out of the reel.
 Each answer takes the place off the count, and `timeline.json` keeps it by the insert id.
 
