@@ -2,7 +2,8 @@ import { Data, Effect, FileSystem, Option, Predicate, Schema, Stream, type Platf
 import { ChildProcess } from "effect/process"
 import { Plan, Transcript } from "../shared/plan.ts"
 import { Gaze, type GazeFailure } from "../shared/timeline.ts"
-import { envelopeArgs, gazeText, isHdr, KEY_FRAME_EVERY, measureArgs, momentsOf, prepareArgs, probeArgs, readingOf, recognizerArgs, refreshArgs, transcriptText } from "./media-commands.ts"
+import { envelopeArgs, measureArgs, momentsOf, readingOf, repeatsFor } from "./loudness-meter.ts"
+import { gazeText, isHdr, KEY_FRAME_EVERY, prepareArgs, probeArgs, recognizerArgs, refreshArgs, transcriptText } from "./media-commands.ts"
 import { Settings } from "./settings.ts"
 
 export class ToolFailed extends Data.TaggedError("ToolFailed")<{ readonly command: string; readonly code: number; readonly output: string; readonly message: string }> {}
@@ -89,9 +90,9 @@ export const tool = Effect.fnUntraced(function*(
   return (yield* run(command, args, prefix, onLine)).stdout
 })
 
-export const measureLoudness = Effect.fnUntraced(function*(file: string, segment?: { readonly start: number; readonly seconds: number }) {
+const loudnessOf = Effect.fnUntraced(function*(file: string, args: ReadonlyArray<string>) {
   const settings = yield* Settings
-  const { stderr } = yield* run("ffmpeg", measureArgs(file, segment), settings.heavy)
+  const { stderr } = yield* run("ffmpeg", args, settings.heavy)
   const reading = readingOf(stderr)
   if (reading === undefined) {
     const tail = stderr.slice(-2000)
@@ -100,7 +101,15 @@ export const measureLoudness = Effect.fnUntraced(function*(file: string, segment
   return reading
 })
 
-export const momentaryLoudness = Effect.fnUntraced(function*(file: string, metadata: string) {
+export const measureLoudness = Effect.fnUntraced(function*(file: string, segment?: { readonly start: number; readonly seconds: number }) {
+  return yield* loudnessOf(file, measureArgs(file, segment))
+})
+
+export const measurePart = Effect.fnUntraced(function*(file: string, seconds: number) {
+  return yield* loudnessOf(file, measureArgs(file, undefined, repeatsFor(seconds)))
+})
+
+export const shortTermLoudness = Effect.fnUntraced(function*(file: string, metadata: string) {
   const settings = yield* Settings
   const fs = yield* FileSystem.FileSystem
   yield* run("ffmpeg", envelopeArgs(file, metadata), settings.heavy)
