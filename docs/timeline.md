@@ -89,7 +89,10 @@ The studio cuts each clip to whole frames, encodes the clips one by one through 
 The studio then brings the joined file to -14 LUFS with one gain curve over the whole reel.
 A limiter keeps the true peak under -1.5 dBTP.
 The gain change at each join is a short ramp that ends at the join, so the levelled line stays flat there.
-When the cut shows inserts, one more pass lays the pictures over the levelled file and copies its sound as it is.
+When the cut shows inserts or approved on-screen text, one more pass lays the pictures and the text over the levelled file and copies its sound as it is.
+The studio draws each spoken word as a single word subtitle and the titles and key thoughts of texts.json in that pass.
+The studio draws a long subtitle word smaller to fit the Instagram box.
+A key thought that leaves the box stops the build.
 The joined file before levelling stays beside the reel as `before-<stamp>.mp4`.
 The download always serves the levelled file.
 A bar follows the parts, the levelling and the inserts.
