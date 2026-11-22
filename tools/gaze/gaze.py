@@ -80,7 +80,7 @@ def main() -> None:
             samples.append(look_of(face))
             heads.append(head_of(face, aspect))
         number += 1
-    result = {"step": every / rate, "samples": samples, "heads": heads}
+    result = {"step": every / rate, "samples": samples, "heads": heads, "aspect": round(aspect, 4)}
     Path(args.output).write_text(json.dumps(result), encoding="utf-8")
 
 

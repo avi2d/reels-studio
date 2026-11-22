@@ -1,5 +1,5 @@
 import { DateTime, Effect, FileSystem, Option, Schema } from "effect"
-import type { Clip } from "../shared/timeline.ts"
+import { Frame, type Clip } from "../shared/timeline.ts"
 import { VideoColour, type ColourView, type PictureSide, type ReelView } from "../shared/reel.ts"
 import { joinArgs, joinList, lastFrameOf, partArgs, partsOf, pictureArgs, progressSeconds, sameParts, secondsOf, type Part } from "./media-commands.ts"
 import { isHdrVideo, places, tool } from "./media-jobs.ts"
@@ -12,7 +12,7 @@ type Colour = typeof Colour.Type
 const Record = Schema.Struct({
   made: Schema.String,
   video: Schema.String,
-  parts: Schema.Array(Schema.Struct({ video: Schema.String, start: Schema.Finite, frames: Schema.Int })),
+  parts: Schema.Array(Schema.Struct({ video: Schema.String, start: Schema.Finite, frames: Schema.Int, frame: Schema.optionalKey(Frame) })),
   colour: Schema.optionalKey(Colour)
 })
 const RecordFile = Schema.fromJsonString(Record)

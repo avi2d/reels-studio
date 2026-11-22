@@ -12,6 +12,7 @@ class FakeVideo {
   paused = true
   isConnected = true
   readyState = 0
+  style = { transform: "" }
   srcSets = 0
   readonly classList = { toggle: (): void => {} }
   private innerSrc = ""

@@ -34,6 +34,8 @@ class FakeEl {
   volume = 1
   ended = false
   seeking = false
+  readyState = 0
+  style = { transform: "" }
   src = ""
   private attrs: Record<string, string> = {}
   private classes = new Set<string>()

@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { AROUND_JOIN_SECONDS, aroundJoin, facesByVideo, trimmed, withAnswer } from "../shared/joins.ts"
+import { AROUND_JOIN_SECONDS, aroundJoin, cutOf, facesByVideo, withAnswer } from "../shared/joins.ts"
 import { lengthOf } from "../shared/plan.ts"
 import {
   assemble, clipsOf, mergeEdits, NO_EDITS, playedSpans, withChoice, withDeleted, withManualPauses, within,
@@ -59,7 +59,7 @@ export const takeServer = (local: Edits, acked: Edits, server: Edits, ticket: Ti
   !busy && !ticket.busy && ticket.changes === changes && adoptServer(local, acked, server)
 
 const reelOf = (loaded: Loaded, edits: Edits): ReadonlyArray<Clip> =>
-  trimmed(clipsOf(placedOf(loaded, edits)), facesByVideo(loaded.view.faces), loaded.transcripts, edits)
+  cutOf(clipsOf(placedOf(loaded, edits)), facesByVideo(loaded.view.faces), loaded.transcripts, edits)
 
 export const playedKey = (loaded: Loaded, edits: Edits): string => JSON.stringify(reelOf(loaded, edits))
 
@@ -174,8 +174,8 @@ const redraw = ({ hooks, parts, player, state, ui, view }: Desk, actions: Action
   parts.undo.disabled = state.history.length === 0
   parts.redo.disabled = state.undone.length === 0
   if (!isReady) parts.summary.textContent = ""
-  const first = open?.spans[0]
-  if (open !== undefined && first !== undefined) player.show({ ...first, video: open.take.video, block: open.block.id })
+  const first = open === undefined ? undefined : view.reelNow().find((clip) => clip.block === open.block.id)
+  if (first !== undefined) player.show(first)
   if (state.playing === undefined) view.showTag(open?.block.id)
   else view.paintPlaying()
   view.showClock()
@@ -244,6 +244,9 @@ const actionsOf = (
       hear(within(takeClips(state.loaded, state.edits, one.block.id, one.take), window))
     },
     hearJoin: (join) => { hear(aroundJoin(view.reelNow(), join, AROUND_JOIN_SECONDS)) },
+    hearUnaligned: (join) => {
+      if (state.loaded !== undefined) hear(aroundJoin(reelOf(state.loaded, withAnswer(state.edits, join, "leave")), join, AROUND_JOIN_SECONDS))
+    },
     answer: (join, answer) => { change(withAnswer(state.edits, join, answer)) },
     setDeleted: (block, deleted) => {
       state.selected = deleted && block === state.open?.block.id ? neighbourOf(view.placedNow(), block) : state.selected

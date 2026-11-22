@@ -1,5 +1,5 @@
 import { lengthOf, type Transcript } from "../shared/plan.ts"
-import { facesByVideo, openPlaces, placesOf, trimmed } from "../shared/joins.ts"
+import { cutOf, facesByVideo, openPlaces, placesOf } from "../shared/joins.ts"
 import { arrange, assemble, chosenTake, clipsOf, playedPause, withManualPauses, type Edits, type GazeFailure, type Placed, type Take, type TimelinePage, type TimelineView } from "../shared/timeline.ts"
 import type WaButton from "@awesome.me/webawesome/dist/components/button/button.js"
 import { button, focusWhenReady, iconButton, tooltip } from "./controls.ts"
@@ -265,7 +265,7 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): { reado
   const { edits, loaded, selected, timeline } = drawn
   const placed = assemble(timeline.blocks, edits, loaded.transcripts)
   const faces = facesByVideo(loaded.view.faces)
-  const reel = trimmed(clipsOf(placed), faces, loaded.transcripts, edits)
+  const reel = cutOf(clipsOf(placed), faces, loaded.transcripts, edits)
   const displayed = placed.map((one) => ({
     ...one,
     spans: reel.filter((clip) => clip.block === one.block.id).map((clip) => ({ start: clip.start, end: clip.end }))
