@@ -43,7 +43,7 @@ Once your answer ends, the studio itself chooses the take ranked first in every 
 It then lists on the page what it did, with the reason of every chosen take.
 
 1. When `blocks.json` is missing or no longer matches the heard videos, gather the blocks now, without another question.
-2. Leave `plan.md` as it is, since a changed plan waits for a new yes.
+2. Leave `plan.md` and `texts.json` as they are, since a change to either waits for a new yes.
 3. Say in two or three sentences that the studio now chooses the takes and shortens the pauses, and that the list of what it did appears under the plan in the stage «Видео и задание».
 4. Ask nothing else, unless a question is about the words on the screen, outside material or the face of the speaker.
 

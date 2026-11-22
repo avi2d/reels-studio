@@ -32,7 +32,7 @@ The card then lists every chosen take with its reason and every shortened pause 
 Every change stays undoable on the stages «Дубли и блоки» and «Паузы и склейки».
 A change to `plan.md` or `texts.json` after the yes makes the plan wait for a new yes.
 Adding or removing `texts.json` also requires a new yes.
-An approval saved without a text snapshot requires a new yes.
+An approval saved without a text snapshot stays valid while the project has no `texts.json`.
 
 ## Files
 

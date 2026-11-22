@@ -28,7 +28,7 @@ Never write them to a file.
 
 ## texts.json
 
-Write every title and key thought of the plan to `texts.json`, with the same words the plan quotes.
+Write every title and key thought of the plan to `texts.json`, with the same words the plan quotes, before you show the plan.
 
 ```json
 {

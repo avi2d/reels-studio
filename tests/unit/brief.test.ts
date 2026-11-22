@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import { afterYes, approves, planView } from "../../src/shared/brief.ts"
+import { Schema } from "effect"
+import { afterYes, Approval, approves, planView } from "../../src/shared/brief.ts"
 import type { Transcript } from "../../src/shared/plan.ts"
 import { NO_EDITS, withChoice, withManualPauses, withPauses, type Block } from "../../src/shared/timeline.ts"
 
@@ -36,6 +37,13 @@ test("changing, adding or removing on-screen text revokes the yes instead of kee
   const withoutTexts = { ...approval, texts: null }
   expect(planView("план", undefined, withoutTexts).state).toBe("approved")
   expect(planView("план", texts, withoutTexts).state).toBe("proposed")
+})
+
+test("an approval saved before text snapshots stays approved without texts.json instead of failing to read", () => {
+  const saved = Schema.decodeSync(Schema.fromJsonString(Approval))('{"plan":"план","at":"2026-11-20T10:00:00.000Z","done":[]}')
+  expect(saved.texts).toBeNull()
+  expect(planView("план", undefined, saved).state).toBe("approved")
+  expect(planView("план", '{"texts":[]}', saved).state).toBe("proposed")
 })
 
 test("after the yes the studio pins the shown take as the person chose", () => {

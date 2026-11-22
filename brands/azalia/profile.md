@@ -33,4 +33,5 @@ The reference reels use fonts the studio could not name, and these are the neare
 
 The key-thought limits are the average width of Russian text in these fonts across the box.
 A line of wide letters such as «ж», «ш» or «ю» fits fewer.
-The studio measures every text before the render and stops it when a text leaves the box.
+The studio measures every text before the render.
+It stops the render when a key thought leaves the box, and draws a long subtitle word smaller.

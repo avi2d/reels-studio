@@ -18,7 +18,7 @@ test("a long subtitle word shrinks instead of reaching under the Instagram butto
   expect([fitted.start, fitted.end]).toEqual([0, 1])
 })
 
-test("a subtitle word that fits keeps its normal size instead of shrinking with a longer neighbour", () => {
+test("a subtitle word whose ink fits comes back unchanged instead of shrinking", () => {
   const word = { text: "слово", start: 0, end: 1 }
   expect(fitWord(word, { left: 400, right: 680, top: 1412, bottom: 1486 })).toBe(word)
 })

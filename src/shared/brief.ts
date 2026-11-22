@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { lengthOf, type Transcript } from "./plan.ts"
 import { assemble, keptOf, samePause, withChoice, withPauses, type Block, type Edits } from "./timeline.ts"
 
@@ -11,7 +11,7 @@ export const Done = Schema.Union([
 ])
 export type Done = typeof Done.Type
 
-export const Approval = Schema.Struct({ plan: Schema.String, texts: Schema.NullOr(Schema.String), at: Schema.String, done: Schema.Array(Done) })
+export const Approval = Schema.Struct({ plan: Schema.String, texts: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))), at: Schema.String, done: Schema.Array(Done) })
 export type Approval = typeof Approval.Type
 
 export const PlanView = Schema.Union([
