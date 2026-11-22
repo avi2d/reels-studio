@@ -217,6 +217,7 @@ const placesScroll: ProductCheck = {
     await buildBlocks(page, "Склейки для проверки")
     await changeCut(page)
     await page.getByRole("heading", { name: "Места для проверки", exact: true }).waitFor()
+    await page.getByRole("button", { name: /^Выровнять: склейка/u, pressed: true }).first().waitFor()
     assert.equal(await page.getByRole("button", { name: /^Выровнять: склейка/u, pressed: true }).count(), 1, "A place the studio can align must start with «Выровнять» on")
     const address = page.url()
     const browser = page.context().browser()
