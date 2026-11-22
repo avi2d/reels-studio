@@ -7,7 +7,7 @@ import { curveOf, gainsOf, levelArgs, type PartLevel } from "./level-curve.ts"
 import {
   isHdr, joinArgs, joinList, lastFrameOf, partArgs, partsOf, passagesOf, pictureArgs, progressSeconds, sameParts, sampledAt, secondsOf, type Moment, type Part, type Span
 } from "./media-commands.ts"
-import { clipFrom, insertArgs, type InsertLayer } from "./insert-commands.ts"
+import { clipFrom, clipSoundArgs, insertArgs, type InsertLayer } from "./insert-commands.ts"
 import { markedPage } from "./insert-files.ts"
 import { isHdrVideo, measureLoudness, momentaryLoudness, places, tool } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
@@ -259,9 +259,16 @@ const publish = Effect.fnUntraced(function*(dir: string, record: typeof Record.T
 
 type Rendered = PartLevel & { readonly name: string }
 
-const levelSound = Effect.fnUntraced(function*(work: string, parts: ReadonlyArray<Part>, rendered: ReadonlyArray<Rendered>, levelledFile: string, soundDone: (step: number) => Effect.Effect<void>) {
+const joinSound = Effect.fnUntraced(function*(work: string, rendered: ReadonlyArray<Rendered>, layers: ReadonlyArray<InsertLayer>) {
+  const joined = `${work}/joined.mp4`
+  const mix = clipSoundArgs(`${work}/voice.mp4`, layers, joined)
+  yield* concatParts(work, rendered.map((part) => part.name), mix === undefined ? joined : `${work}/voice.mp4`)
+  if (mix !== undefined) yield* tool("ffmpeg", mix, (yield* Settings).heavy)
+})
+
+const levelSound = Effect.fnUntraced(function*(work: string, parts: ReadonlyArray<Part>, rendered: ReadonlyArray<Rendered>, layers: ReadonlyArray<InsertLayer>, levelledFile: string, soundDone: (step: number) => Effect.Effect<void>) {
   const total = secondsOf(parts)
-  yield* concatParts(work, rendered.map((part) => part.name), `${work}/joined.mp4`)
+  yield* joinSound(work, rendered, layers)
   const heard = yield* measureLoudness(`${work}/joined.mp4`)
   const moments = yield* momentaryLoudness(`${work}/joined.mp4`, `${work}/moments.txt`)
   yield* soundDone(1)
@@ -306,7 +313,7 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
     rendered.push({ name, from: secondsOf(parts.slice(0, index)), to: secondsOf(parts.slice(0, index + 1)), lufs: (yield* measureLoudness(`${place.work}/${name}`)).lufs })
   }
   const levelledFile = pictures.length === 0 ? `${place.work}/reel.mp4` : `${place.work}/levelled.mp4`
-  const levelling = yield* levelSound(place.work, parts, rendered, levelledFile, (step) => onDone(partsShare + SOUND_SHARE * step / SOUND_STEPS))
+  const levelling = yield* levelSound(place.work, parts, rendered, pictures, levelledFile, (step) => onDone(partsShare + SOUND_SHARE * step / SOUND_STEPS))
   if (pictures.length > 0) {
     yield* tool("ffmpeg", insertArgs(levelledFile, pictures, settings.encoder, `${place.work}/reel.mp4`), settings.heavy, (line) => {
       const seconds = progressSeconds(line)

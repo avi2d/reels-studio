@@ -14,6 +14,8 @@ export type InsertLayer =
   | InsertPlacement & { readonly kind: "still" }
   | InsertPlacement & { readonly kind: "clip"; readonly from: number; readonly hdr: boolean; readonly sound: boolean }
 
+type ClipLayer = InsertLayer & { readonly kind: "clip" }
+
 const FRAME = { width: 1080, height: 1920 }
 const CARD_BOX = { left: 65, top: 269, width: 950, height: 979 }
 const CARD_BORDER = 12
@@ -30,7 +32,7 @@ const drift = (width: number, height: number, frames: number): string =>
   `zoompan=z='1+${INSERT_DRIFT}*on/${Math.max(1, frames)}':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=${Math.max(1, frames)}:s=${width}x${height}:fps=${REEL_RATE}`
 
 // A clip shorter than its phrase holds its last frame, so it still fades out instead of vanishing.
-const moving = (layer: InsertLayer & { readonly kind: "clip" }, width: number, height: number): string => {
+const moving = (layer: ClipLayer, width: number, height: number): string => {
   const seconds = (layer.end - layer.start).toFixed(4)
   return `${layer.hdr ? `${TO_SDR},` : ""}tpad=stop_mode=clone:stop_duration=${seconds},trim=duration=${seconds},fps=${REEL_RATE},` +
     `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1`
@@ -66,22 +68,26 @@ const pictureGraph = (layers: ReadonlyArray<InsertLayer>): string =>
     return `${layer};${over}${index === layers.length - 1 ? ",format=yuv420p[out]" : `[v${index + 1}]`}`
   }).join(";")
 
-const CLIP_PEAK = 0.84
+const clipInput = (layer: ClipLayer): ReadonlyArray<string> =>
+  ["-ss", layer.from.toFixed(3), "-t", (layer.end - layer.start).toFixed(3), "-i", layer.file]
 
-const soundGraph = (layers: ReadonlyArray<InsertLayer>): string | undefined => {
-  const heard = layers.flatMap((layer, index) => layer.kind === "clip" && layer.sound ? [{ layer, input: index + 1 }] : [])
+const inputOf = (layer: InsertLayer): ReadonlyArray<string> => layer.kind === "clip" ? clipInput(layer) : ["-i", layer.file]
+
+export const clipSoundArgs = (voice: string, layers: ReadonlyArray<InsertLayer>, output: string): ReadonlyArray<string> | undefined => {
+  const heard = layers.flatMap((layer) => layer.kind === "clip" && layer.sound ? [layer] : [])
   if (heard.length === 0) return undefined
-  const lanes = heard.map(({ layer, input }, lane) => {
+  const lanes = heard.map((layer, lane) => {
     const fade = fadeOf(layer)
     const seconds = layer.end - layer.start
-    return `[${input}:a]aresample=48000,afade=t=in:st=0:d=${fade},afade=t=out:st=${(seconds - fade).toFixed(4)}:d=${fade},adelay=${Math.round(layer.start * 1000)}:all=1[s${lane}]`
+    return `[${lane + 1}:a]aresample=48000,afade=t=in:st=0:d=${fade},afade=t=out:st=${(seconds - fade).toFixed(4)}:d=${fade},adelay=${Math.round(layer.start * 1000)}:all=1[s${lane}]`
   })
-  const mixed = `[0:a]${heard.map((_, lane) => `[s${lane}]`).join("")}amix=inputs=${heard.length + 1}:duration=first:normalize=0,alimiter=limit=${CLIP_PEAK}:level=0[aout]`
-  return [...lanes, mixed].join(";")
+  const mixed = `[0:a]${heard.map((_, lane) => `[s${lane}]`).join("")}amix=inputs=${heard.length + 1}:duration=first:normalize=0[aout]`
+  return [
+    "-hide_banner", "-loglevel", "error", "-y", "-i", voice, ...heard.flatMap(clipInput),
+    "-filter_complex", [...lanes, mixed].join(";"), "-map", "0:v:0", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+    "-map_metadata", "-1", "-movflags", "+faststart", "-f", "mp4", output
+  ]
 }
-
-const inputOf = (layer: InsertLayer): ReadonlyArray<string> =>
-  layer.kind === "clip" ? ["-ss", layer.from.toFixed(3), "-t", (layer.end - layer.start).toFixed(3), "-i", layer.file] : ["-i", layer.file]
 
 // A seek at or past the clip's last frame gives no frame, and tpad then has none to hold.
 // The step back is wider than a frame of any usual rate, and wider than the seek's rounding to milliseconds.
@@ -90,15 +96,11 @@ const LAST_FRAME_BACK = 0.5
 export const clipFrom = (start: number, duration: number | undefined): number =>
   duration === undefined ? start : Math.min(start, Math.max(0, duration - LAST_FRAME_BACK))
 
-export const insertArgs = (reel: string, layers: ReadonlyArray<InsertLayer>, encoder: string, output: string): ReadonlyArray<string> => {
-  const sound = soundGraph(layers)
-  return [
-    "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y", "-i", reel,
-    ...layers.flatMap(inputOf),
-    "-filter_complex", sound === undefined ? pictureGraph(layers) : `${pictureGraph(layers)};${sound}`,
-    "-map", "[out]", ...(sound === undefined ? ["-map", "0:a:0"] : ["-map", "[aout]"]),
-    "-c:v", encoder, "-profile:v", "high", "-b:v", "10M", "-maxrate", "12M", "-bufsize", "24M", "-g", String(REEL_RATE * 2),
-    "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
-    ...(sound === undefined ? ["-c:a", "copy"] : ["-c:a", "aac", "-b:a", "192k"]), "-map_metadata", "-1", "-movflags", "+faststart", "-f", "mp4", output
-  ]
-}
+export const insertArgs = (reel: string, layers: ReadonlyArray<InsertLayer>, encoder: string, output: string): ReadonlyArray<string> => [
+  "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y", "-i", reel,
+  ...layers.flatMap(inputOf),
+  "-filter_complex", pictureGraph(layers), "-map", "[out]", "-map", "0:a:0",
+  "-c:v", encoder, "-profile:v", "high", "-b:v", "10M", "-maxrate", "12M", "-bufsize", "24M", "-g", String(REEL_RATE * 2),
+  "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
+  "-c:a", "copy", "-map_metadata", "-1", "-movflags", "+faststart", "-f", "mp4", output
+]

@@ -8,7 +8,9 @@ const decodeChars = Schema.decodeUnknownEffect(Schema.fromJsonString(PageChars))
 
 class QuoteNotFound extends Data.TaggedError("QuoteNotFound")<{ readonly document: string; readonly page: number }> {}
 
-const viewOf = (dir: string, name: string): string => `${dir}/attached-views/${name}`
+export const sharedViewOf = (name: string): string => `attached-views/${name}`
+
+export const viewOf = (dir: string, name: string): string => `${dir}/${sharedViewOf(name)}`
 
 // Made under a fresh name and renamed, so a second request for the same file never reads it half-written.
 const madeOnce = Effect.fnUntraced(function*<E, R>(target: string, make: (fresh: string) => Effect.Effect<unknown, E, R>) {

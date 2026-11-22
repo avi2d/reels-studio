@@ -4,7 +4,7 @@ import { kindOfName, type FileKind } from "../shared/chat.ts"
 import { ApiError, notFound, orUnavailable } from "./api-error.ts"
 import { about, attachedLines, deliveryNote, fileProbeArgs, frameArgs, frameTimes, pagesText, pictureArgs, type Seen, SHOWN_PAGES, soundArgs, type Speech, speechText } from "./attachment-notes.ts"
 import { isHdr, recognizerArgs } from "./media-commands.ts"
-import { clipPreview, markedPage } from "./insert-files.ts"
+import { clipPreview, markedPage, sharedViewOf, viewOf } from "./insert-files.ts"
 import { decodeTranscript, tool } from "./media-jobs.ts"
 import { readAttached } from "./timeline-files.ts"
 import { Projects } from "./projects.ts"
@@ -55,9 +55,9 @@ interface Place {
 
 const placeOf = (dir: string, name: string): Place => ({
   file: `${dir}/attached/${name}`,
-  view: `${dir}/attached-views/${name}`,
-  look: `${dir}/attached-views/${name}/look.json`,
-  shared: `attached-views/${name}`
+  view: viewOf(dir, name),
+  look: `${viewOf(dir, name)}/look.json`,
+  shared: sharedViewOf(name)
 })
 
 const probe = (file: string) => Effect.flatMap(tool("ffprobe", fileProbeArgs(file), []), decodeProbe)

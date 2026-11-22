@@ -86,11 +86,11 @@ The file holds the chosen takes in row order, without removed pauses, with the s
 It is 1080 by 1920 at 30 frames a second, H.264 High with AAC sound in an MP4.
 An iPhone HDR original is turned into ordinary BT.709 colours, so the reel does not look washed out in Instagram.
 The studio cuts each clip to whole frames, encodes the clips one by one through `REELS_HEAVY` with `REELS_ENCODER`, then joins them without encoding again.
+When the person turned the sound of a clip insert on, the studio mixes the clip's sound under the voice of the joined file.
 The studio then brings the joined file to -14 LUFS with one gain curve over the whole reel.
 A limiter keeps the true peak under -1.5 dBTP.
 The gain change at each join is a short ramp that ends at the join, so the levelled line stays flat there.
 When the cut shows inserts, one more pass lays them over the levelled file and copies its sound as it is.
-When the person turned the sound of a clip on, that pass mixes the clip's sound under the voice and encodes the sound again, with a limiter at 0.84.
 The joined file before levelling stays beside the reel as `before-<stamp>.mp4`.
 The download always serves the levelled file.
 A bar follows the parts, the levelling and the inserts.

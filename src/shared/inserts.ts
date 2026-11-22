@@ -90,7 +90,8 @@ export interface Shown extends Span {
 const answeredVisual = (planned: PlannedInsert, answered: InsertAnswer | undefined, pictures: ReadonlyArray<string>): Visual | undefined => {
   if (answered?.answer === "replace") return pictures.includes(answered.picture) ? { kind: "picture", file: answered.picture } : undefined
   const visual = plannedVisual(planned)
-  return visual.kind === "clip" && answered?.answer === "sound" ? { ...visual, sound: true } : visual
+  if (answered?.answer !== "sound") return visual
+  return visual.kind === "clip" ? { ...visual, sound: true } : undefined
 }
 
 const answerOf = (edits: Edits, id: string): InsertAnswer | undefined => edits.inserts.find((one) => one.id === id)

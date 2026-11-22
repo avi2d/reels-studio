@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { insertPlaces, lookAt, shownInserts, visualKey } from "../../src/shared/inserts.ts"
+import { insertPlaces, lookAt, openInserts, shownInserts, visualKey } from "../../src/shared/inserts.ts"
 import { NO_EDITS, type Clip, type Edits, type PlannedInsert } from "../../src/shared/timeline.ts"
 
 const REEL: ReadonlyArray<Clip> = [{ video: "talk.mov", block: "one", start: 0, end: 20 }]
@@ -33,8 +33,16 @@ test("a document insert stands at its own phrase and carries the quoted line, no
 
 test("a video insert plays from the moment the plan names, not from the clip's start, and does not drift closer like a picture", () => {
   const look = lookAt(shownWith(NO_EDITS), 6)
+  expect(look?.visual).toEqual({ kind: "clip", file: "walk.mov", start: 3, sound: false })
   expect(look?.since).toBe(1)
   expect(look?.scale).toBe(1)
+})
+
+test("a sound answer left on an insert that is now a page counts as unanswered, not as a page that stays with its sound", () => {
+  const edits = { ...NO_EDITS, inserts: [{ id: "contract", answer: "sound" as const }] }
+  const places = insertPlaces([CLIP, PAGE], REEL, TRANSCRIPTS, edits, ["photo.jpg"])
+  expect(places.find((one) => one.planned.id === "contract")?.answer).toBeUndefined()
+  expect(openInserts(places)).toBe(2)
 })
 
 test("a video insert the person replaces with a picture becomes that picture, not a silent clip", () => {
