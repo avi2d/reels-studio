@@ -1,10 +1,12 @@
-import { Context, Effect, FileSystem, Layer, Option, Schema } from "effect"
+import { Context, type Crypto, Effect, FileSystem, Layer, Option, Schema } from "effect"
 import type { ChildProcessSpawner } from "effect/process"
 import { kindOfName, type FileKind } from "../shared/chat.ts"
 import { ApiError, notFound, orUnavailable } from "./api-error.ts"
 import { about, attachedLines, deliveryNote, fileProbeArgs, frameArgs, frameTimes, pagesText, pictureArgs, type Seen, SHOWN_PAGES, soundArgs, type Speech, speechText } from "./attachment-notes.ts"
 import { isHdr, recognizerArgs } from "./media-commands.ts"
+import { clipPreview, markedPage, sharedViewOf, viewOf } from "./insert-files.ts"
 import { decodeTranscript, tool } from "./media-jobs.ts"
+import { readAttached } from "./timeline-files.ts"
 import { Projects } from "./projects.ts"
 import { Settings } from "./settings.ts"
 
@@ -53,9 +55,9 @@ interface Place {
 
 const placeOf = (dir: string, name: string): Place => ({
   file: `${dir}/attached/${name}`,
-  view: `${dir}/attached-views/${name}`,
-  look: `${dir}/attached-views/${name}/look.json`,
-  shared: `attached-views/${name}`
+  view: viewOf(dir, name),
+  look: `${viewOf(dir, name)}/look.json`,
+  shared: sharedViewOf(name)
 })
 
 const probe = (file: string) => Effect.flatMap(tool("ffprobe", fileProbeArgs(file), []), decodeProbe)
@@ -178,25 +180,20 @@ const imagesOf = Effect.fnUntraced(function*(dir: string, name: string, look: Lo
   return { readable, unreadable }
 })
 
-const attachedNames = Effect.fnUntraced(function*(dir: string) {
-  const fs = yield* FileSystem.FileSystem
-  const folder = `${dir}/attached`
-  if (!(yield* fs.exists(folder))) return []
-  return (yield* fs.readDirectory(folder)).toSorted()
-})
-
 const UNAVAILABLE = "Файл недоступен. Попробуйте открыть страницу ещё раз."
 
 export class Attachments extends Context.Service<Attachments, {
   readonly show: (dir: string, names: ReadonlyArray<string>) => Effect.Effect<ReadonlyArray<Shown>>
   readonly listed: (dir: string, current: ReadonlyArray<Shown>) => Effect.Effect<string>
   readonly cover: (id: string, name: string) => Effect.Effect<string, ApiError>
+  readonly clip: (id: string, name: string) => Effect.Effect<string, ApiError>
+  readonly page: (id: string, name: string, page: number, quote: string) => Effect.Effect<string, ApiError>
 }>()("reels-studio/Attachments") {
   static readonly layer = Layer.effect(
     Attachments,
     Effect.gen(function*() {
       const projects = yield* Projects
-      const context = yield* Effect.context<FileSystem.FileSystem | Settings | ChildProcessSpawner.ChildProcessSpawner>()
+      const context = yield* Effect.context<FileSystem.FileSystem | Settings | ChildProcessSpawner.ChildProcessSpawner | Crypto.Crypto>()
 
       const show = Effect.fn("Attachments.show")(function*(dir: string, names: ReadonlyArray<string>) {
         const examined = yield* Effect.forEach(names, (name) => Effect.gen(function*() {
@@ -214,7 +211,7 @@ export class Attachments extends Context.Service<Attachments, {
       }, Effect.provideContext(context))
 
       const listed = Effect.fn("Attachments.listed")(function*(dir: string, current: ReadonlyArray<Shown>) {
-        const names = yield* attachedNames(dir)
+        const names = yield* readAttached(dir)
         const sent = new Map(current.map((file) => [file.name, file.about]))
         const seen = yield* Effect.forEach(names, (name) => Effect.gen(function*() {
           const hit = sent.get(name)
@@ -230,14 +227,31 @@ export class Attachments extends Context.Service<Attachments, {
 
       const cover = Effect.fn("Attachments.cover")(function*(id: string, name: string) {
         const dir = yield* projects.folder(id)
-        if (!(yield* attachedNames(dir)).includes(name)) return yield* notFound("Такого файла в ролике нет")
+        if (!(yield* readAttached(dir)).includes(name)) return yield* notFound("Такого файла в ролике нет")
         const place = placeOf(dir, name)
         const first = (yield* savedLook(place))?.shown[0]
         if (first === undefined) return yield* notFound("У этого файла нет картинки")
         return `${place.view}/${first}`
       }, orUnavailable("the cover failed", UNAVAILABLE), Effect.provideContext(context))
 
-      return Attachments.of({ show, listed, cover })
+      const attachedOf = Effect.fnUntraced(function*(id: string, name: string, kind: FileKind) {
+        const dir = yield* projects.folder(id)
+        if (!(yield* readAttached(dir)).includes(name) || kindOfName(name) !== kind) return yield* notFound("Такого файла в ролике нет")
+        return dir
+      })
+
+      const clip = Effect.fn("Attachments.clip")(function*(id: string, name: string) {
+        return yield* clipPreview(yield* attachedOf(id, name, "video"), name)
+      }, orUnavailable("the clip view failed", UNAVAILABLE), Effect.provideContext(context))
+
+      const page = Effect.fn("Attachments.page")(function*(id: string, name: string, number: number, quote: string) {
+        const dir = yield* attachedOf(id, name, "document")
+        return yield* markedPage(dir, name, number, quote).pipe(
+          Effect.catchTag("QuoteNotFound", () => notFound("На этой странице нет такой строки"))
+        )
+      }, orUnavailable("the page view failed", UNAVAILABLE), Effect.provideContext(context))
+
+      return Attachments.of({ show, listed, cover, clip, page })
     })
   )
 }

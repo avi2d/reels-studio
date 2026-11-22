@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
-import { aroundJoin, headAt, headShift, joinsOf, JUMP_STEP, openPlaces, placesOf, trimmed, trimOf, withAnswer } from "../../src/shared/joins.ts"
+import { aroundJoin, cutOf, headAt, headShift, joinsOf, JUMP_STEP, openPlaces, placesOf, trimmed, trimOf, withAnswer } from "../../src/shared/joins.ts"
 import type { Transcript } from "../../src/shared/plan.ts"
 import { Edits, NO_EDITS, type Clip, type Head, type VideoFaces } from "../../src/shared/timeline.ts"
 
@@ -142,4 +142,27 @@ test("the seconds around a join reach back across an earlier cut instead of stop
 test("a timeline saved before joins took answers keeps its removed pauses instead of reading as no edits", () => {
   const old = JSON.stringify({ order: [], deleted: [], chosen: [], pauses: [{ video: "a", after: 3 }] })
   expect(Schema.decodeSync(Schema.fromJsonString(Edits))(old)).toEqual({ order: [], deleted: [], chosen: [], pauses: [{ video: "a", after: 3 }], joins: [], inserts: [] })
+})
+
+const framed = (video: string, y: number): VideoFaces => ({ ...still(video, y, 5), aspect: 9 / 16 })
+const zoomable = new Map([["a", framed("a", 0.4)], ["b", framed("b", 0.44)]])
+const zoomPair = [clip("a", "one", 0, 2), clip("b", "two", 1, 3)]
+
+test("a place the studio can align starts aligned with no answer given, not open with «Выровнять» off", () => {
+  const [place] = placesOf(zoomPair, zoomable, unheard, NO_EDITS)
+  expect(place?.align.kind).toBe("zoom")
+  expect(place?.answer).toBe("zoom")
+  expect(cutOf(zoomPair, zoomable, unheard, NO_EDITS)[1]?.frame).toBeDefined()
+})
+
+test("another answer replaces the default alignment instead of the alignment staying on", () => {
+  const [place] = placesOf(zoomPair, zoomable, unheard, NO_EDITS)
+  if (place === undefined) throw new Error("no place")
+  const left = withAnswer(NO_EDITS, place.join, "leave")
+  expect(placesOf(zoomPair, zoomable, unheard, left)[0]?.answer).toBe("leave")
+  expect(cutOf(zoomPair, zoomable, unheard, left)[1]?.frame).toBeUndefined()
+})
+
+test("a place the studio cannot align stays open with no answer, not marked aligned", () => {
+  expect(placesOf(jumpy(), heads, unheard, NO_EDITS).map((place) => place.answer)).toEqual([undefined])
 })

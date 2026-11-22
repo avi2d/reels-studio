@@ -17,7 +17,7 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/shared/joins.ts` | The places to check at joins and the cuts at answered places, used by the page |
 | `src/shared/face.ts` | The face setting of the reel, off or light, used by the server and the page |
 | `src/shared/retouch.ts` | The state of the skin and eye trial and the time a minute of video takes, used by the server and the page |
-| `src/shared/inserts.ts` | Where each insert stands in the cut, its shape, and what the page and the build show of it |
+| `src/shared/inserts.ts` | Where each insert stands in the cut, its shape, and what the page and the build show of it: a picture, a clip or a PDF page |
 | `src/shared/zones.ts` | The pixels of the frame each player covers and the box where text stays visible |
 | `src/shared/subtitles.ts` | When each spoken word of the cut shows as a one-word subtitle |
 | `src/shared/captions.ts` | The key thoughts of `texts.json` in the cut, and the subtitle file libass draws |
@@ -30,7 +30,7 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/shared/library.ts` | The formats of an uploaded video, of a video offered to a reel from the shared list or another folder, and of a pick, used by the server and the page |
 | `src/shared/page.ts` | The addresses of the home, uploaded videos and project pages, used by the server and the page |
 | `tools/transcribe/` | The speech recognizer, a Python script that uv runs |
-| `tools/pdf/` | The PDF reader that renders the first pages and takes out the text, a Python script that uv runs |
+| `tools/pdf/` | The PDF reader that renders the first pages and takes out the text, and renders one page with the place of each letter for an insert, Python scripts that uv runs |
 | `tools/gaze/` | The measure of where the speaker looks and the skin and eye trial, Python scripts that uv runs |
 | `tools/fonts/` | The script that makes Reels Accent from Playfair Display Italic, with fontTools |
 | `deploy/reels-studio.service` | The systemd user unit that keeps the studio running |
