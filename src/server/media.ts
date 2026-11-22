@@ -137,7 +137,13 @@ const reelTask = <E, R>(reels: Reels, dir: string, build: Build<E, R>) =>
     yield* build(dir, cut, (done) => setReel(reels, dir, { state: "running", done }))
   }).pipe(Effect.onExit((exit) => Exit.isFailure(exit) && !Exit.hasInterrupts(exit) ? setReel(reels, dir, { state: "failed" }) : forgetReel(reels, dir)))
 
-const step = Effect.fnUntraced(function*(failures: Failures, work: Ref.Ref<Work>) {
+type Tried = Ref.Ref<ReadonlyMap<string, string>>
+
+// The task reads the cut again when it starts, which can be a later cut than the one the poll queued.
+const checkSoundOf = (tried: Tried) => (dir: string, cut: Cut, onDone: (share: number) => Effect.Effect<void>) =>
+  Ref.update(tried, (map) => new Map([...map, [dir, soundKeyOf(partsOf(cut.clips))]])).pipe(Effect.andThen(checkSound(dir, cut, onDone)))
+
+const step = Effect.fnUntraced(function*(failures: Failures, tried: Tried, work: Ref.Ref<Work>) {
   const { closed, closedJobs } = yield* Ref.get(work)
   const jobs = yield* openJobs(closed, closedJobs)
   const unheard = yield* nextUnheard(failures.unheard, jobs)
@@ -145,7 +151,7 @@ const step = Effect.fnUntraced(function*(failures: Failures, work: Ref.Ref<Work>
   const reel = yield* nextReel(failures.reels, closed)
   if (reel !== undefined) return yield* attempt(work, { dir: reel, name: "the reel" }, reelTask(failures.reels, reel, buildReel), () => Effect.void)
   const sound = yield* nextReel(failures.sounds, closed)
-  if (sound !== undefined) return yield* attempt(work, { dir: sound, name: "the sound check" }, reelTask(failures.sounds, sound, checkSound), () => Effect.void)
+  if (sound !== undefined) return yield* attempt(work, { dir: sound, name: "the sound check" }, reelTask(failures.sounds, sound, checkSoundOf(tried)), () => Effect.void)
   const trial = yield* nextReel(failures.trials, closed)
   if (trial !== undefined) return yield* attempt(work, { dir: trial, name: "the retouch trial" }, reelTask(failures.trials, trial, (dir, cut, onDone) => runTrial(dir, cut.clips, onDone)), () => Effect.void)
   const stale = yield* nextStale(failures.stale, jobs)
@@ -207,7 +213,7 @@ const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, r
 }
 
 // A cut is checked once: a failed check waits for the next change of the cut, not for the next poll.
-const soundHandler = (folder: (id: string) => Effect.Effect<string, ApiError>, sounds: Reels, tried: Ref.Ref<ReadonlyMap<string, string>>, context: Context.Context<Needs>) =>
+const soundHandler = (folder: (id: string) => Effect.Effect<string, ApiError>, sounds: Reels, tried: Tried, context: Context.Context<Needs>) =>
   Effect.fn("Media.sound")(function*(id: string) {
     const dir = yield* folder(id)
     const cut = yield* readCut(dir, yield* sourceNames(dir))
@@ -217,7 +223,6 @@ const soundHandler = (folder: (id: string) => Effect.Effect<string, ApiError>, s
     const heard = view.heard?.fresh === true
     const busy = job.state === "waiting" || job.state === "running"
     if (cut.clips.length === 0 || heard || busy || (yield* Ref.get(tried)).get(dir) === key) return view
-    yield* Ref.update(tried, (map) => new Map([...map, [dir, key]]))
     yield* queueWaiting(sounds, dir)
     return { ...view, job: { state: "waiting" } } satisfies SoundCheck
   }, orBroken, Effect.provideContext(context))
@@ -294,11 +299,11 @@ export class Media extends Context.Service<Media, {
       const reels: Reels = yield* Ref.make<ReadonlyMap<string, ReelJob>>(new Map())
       const trials: Reels = yield* Ref.make<ReadonlyMap<string, ReelJob>>(new Map())
       const sounds: Reels = yield* Ref.make<ReadonlyMap<string, ReelJob>>(new Map())
-      const tried = yield* Ref.make<ReadonlyMap<string, string>>(new Map())
+      const tried: Tried = yield* Ref.make<ReadonlyMap<string, string>>(new Map())
       const work = yield* Ref.make<Work>({ closed: new Set(), closedJobs: new Set(), running: undefined })
 
       const guarded = Effect.gen(function*() {
-        const outcome = yield* Effect.exit(step({ unheard, unseen, stale, reels, trials, sounds }, work))
+        const outcome = yield* Effect.exit(step({ unheard, unseen, stale, reels, trials, sounds }, tried, work))
         if (Exit.isSuccess(outcome)) return
         yield* Effect.logError("the media worker failed", outcome.cause)
         yield* Effect.sleep("3 seconds")

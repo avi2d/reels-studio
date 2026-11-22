@@ -47,24 +47,44 @@ const graphOf = (): AudioGraph | undefined => {
 
 interface Levelling {
   readonly follow: (node: HTMLVideoElement) => void
+  readonly rest: (node: HTMLVideoElement) => void
+}
+
+interface Route {
+  readonly source: MediaElementAudioSourceNode
+  readonly gain: GainNode
+  connected: boolean
 }
 
 // An element's own volume stops at 1, and a quiet part needs tens of dB more, so the gain runs through Web Audio.
 const levellingOf = (levelAt: LevelAt): Levelling => {
-  const gains = new WeakMap<HTMLVideoElement, GainNode>()
+  const routes = new WeakMap<HTMLVideoElement, Route>()
+  // An element gets one source node for life, so a stopped element is unplugged rather than given a new one.
+  const routeOf = (node: HTMLVideoElement, graph: AudioGraph): Route => {
+    const known = routes.get(node)
+    if (known !== undefined) return known
+    const route: Route = { source: graph.context.createMediaElementSource(node), gain: new GainNode(graph.context), connected: false }
+    route.gain.connect(graph.limiter)
+    routes.set(node, route)
+    return route
+  }
   return {
     follow: (node) => {
       const video = node.dataset.video
       const graph = graphOf()
       if (video === undefined || graph === undefined) return
       if (graph.context.state !== "running") void graph.context.resume()
-      let gain = gains.get(node)
-      if (gain === undefined) {
-        gain = new GainNode(graph.context)
-        graph.context.createMediaElementSource(node).connect(gain).connect(graph.limiter)
-        gains.set(node, gain)
-      }
-      gain.gain.setTargetAtTime(10 ** (levelAt(video, node.currentTime) / 20), graph.context.currentTime, GAIN_SMOOTHING)
+      const route = routeOf(node, graph)
+      if (!route.connected) route.source.connect(route.gain)
+      route.connected = true
+      route.gain.gain.setTargetAtTime(10 ** (levelAt(video, node.currentTime) / 20), graph.context.currentTime, GAIN_SMOOTHING)
+    },
+    // A source node still connected to the shared, always running graph keeps its element alive after its view is gone.
+    rest: (node) => {
+      const route = routes.get(node)
+      if (route === undefined || !route.connected) return
+      route.source.disconnect()
+      route.connected = false
     }
   }
 }
@@ -168,6 +188,7 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
     for (const node of screen.nodes.values()) {
       node.pause()
       node.volume = 1
+      levelling.rest(node)
     }
     onChange(undefined)
   }

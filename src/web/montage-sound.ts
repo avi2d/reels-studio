@@ -50,19 +50,27 @@ const paint = (node: HTMLElement, line: SoundLine): void => {
 // The montage hears the gains the build will apply, so a quiet part plays at the level it gets in the built file.
 export const montageSound = (projectId: string): MontageSound => {
   const node = h("div", { class: "sound-line", role: "status", hidden: true })
-  const state: { parts: ReadonlyArray<PartGains>; timer: number } = { parts: [], timer: 0 }
+  const state: { parts: ReadonlyArray<PartGains>; timer: number; asked: number; checking: boolean } = { parts: [], timer: 0, asked: 0, checking: false }
+  const pollLater = (): void => {
+    globalThis.clearTimeout(state.timer)
+    if (state.checking && node.isConnected) state.timer = Number(globalThis.setTimeout(refresh, POLL_MS))
+  }
   const refresh = (): void => {
     globalThis.clearTimeout(state.timer)
+    state.asked += 1
+    const asked = state.asked
     Effect.runFork(Api.getSound(projectId).pipe(
       Effect.map((check) => {
+        if (asked !== state.asked) return
         state.parts = check.heard?.parts ?? []
         const line = soundLineOf(check)
+        state.checking = line.kind === "checking"
         const open = node.querySelector("details")?.open ?? false
         paint(node, line)
         if (open) node.querySelector("details")?.setAttribute("open", "")
-        if (line.kind === "checking" && node.isConnected) state.timer = Number(globalThis.setTimeout(refresh, POLL_MS))
+        pollLater()
       }),
-      Effect.catchTag("Failed", () => Effect.void)
+      Effect.catchTag("Failed", () => Effect.sync(() => { if (asked === state.asked) pollLater() }))
     ))
   }
   return { node, dbAt: (video, time) => previewDb(state.parts, video, time), refresh }
