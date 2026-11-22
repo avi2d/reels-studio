@@ -55,53 +55,42 @@ const readBlocks = Effect.fnUntraced(function*(dir: string) {
   return "unreadable" as const
 })
 
-export const readTimeline = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>, unseen: ReadonlyMap<string, GazeFailure>) {
-  const fs = yield* FileSystem.FileSystem
-  const transcripts = new Map<string, Transcript>()
-  const gazes = new Map<string, Gaze>()
-  const looks: Array<Look> = []
-  const faces: Array<VideoFaces> = []
-  for (const name of names) {
-    const place = places({ dir, name })
-    if (!(yield* fs.exists(place.transcript))) continue
-    transcripts.set(name, yield* readTranscript({ dir, name }))
-    const written = yield* fs.exists(place.gaze)
-    let measured: Gaze | undefined
-    if (written) {
-      const decoded = yield* Effect.result(readGaze({ dir, name }))
-      if (Result.isSuccess(decoded)) {
-        measured = decoded.success
-        gazes.set(name, measured)
-        faces.push(...facesOf(name, measured))
-      } else {
-        yield* Effect.logError("the gaze is unreadable", place.gaze, decoded.failure)
-      }
-    }
-    looks.push(lookOf(name, measured, written, unseen.get(place.source)))
-  }
-  const written = yield* readBlocks(dir)
-  if (written === "none" || written === "unreadable") return { looks, faces, timeline: { state: written } } satisfies TimelineView
-  return { looks, faces, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir) } } satisfies TimelineView
-})
-
 const facesOf = (name: string, measured: Gaze): ReadonlyArray<VideoFaces> => {
   if (measured.heads === undefined) return []
   const faces = { video: name, step: measured.step, gaze: measured.samples, heads: measured.heads }
   return [measured.aspect === undefined ? faces : { ...faces, aspect: measured.aspect }]
 }
 
-export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>) {
+const readHeard = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>) {
   const fs = yield* FileSystem.FileSystem
   const transcripts = new Map<string, Transcript>()
-  const faces: Array<VideoFaces> = []
+  const gazes = new Map<string, Gaze>()
+  const gazeWritten = new Set<string>()
   for (const name of names) {
     const place = places({ dir, name })
     if (!(yield* fs.exists(place.transcript))) continue
     transcripts.set(name, yield* readTranscript({ dir, name }))
     if (!(yield* fs.exists(place.gaze))) continue
-    const measured = yield* Effect.option(readGaze({ dir, name }))
-    if (Option.isSome(measured)) faces.push(...facesOf(name, measured.value))
+    gazeWritten.add(name)
+    const decoded = yield* Effect.result(readGaze({ dir, name }))
+    if (Result.isSuccess(decoded)) gazes.set(name, decoded.success)
+    else yield* Effect.logError("the gaze is unreadable", place.gaze, decoded.failure)
   }
+  const faces = [...gazes].flatMap(([name, measured]) => facesOf(name, measured))
+  return { transcripts, gazes, gazeWritten, faces }
+})
+
+export const readTimeline = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>, unseen: ReadonlyMap<string, GazeFailure>) {
+  const { transcripts, gazes, gazeWritten, faces } = yield* readHeard(dir, names)
+  const looks: ReadonlyArray<Look> = [...transcripts.keys()].map((name) =>
+    lookOf(name, gazes.get(name), gazeWritten.has(name), unseen.get(places({ dir, name }).source)))
+  const written = yield* readBlocks(dir)
+  if (written === "none" || written === "unreadable") return { looks, faces, timeline: { state: written } } satisfies TimelineView
+  return { looks, faces, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir) } } satisfies TimelineView
+})
+
+export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>) {
+  const { transcripts, faces } = yield* readHeard(dir, names)
   const written = yield* readBlocks(dir)
   if (written === "none" || written === "unreadable") return []
   const { blocks } = soundBlocks(written, transcripts, new Map())
