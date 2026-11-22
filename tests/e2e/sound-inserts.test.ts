@@ -4,6 +4,7 @@ import { BunServices } from "@effect/platform-bun"
 import { Effect } from "effect"
 import { checkSound, readSoundCheck } from "../../src/server/sound-check.ts"
 import { Settings } from "../../src/server/settings.ts"
+import { NO_CAPTIONS } from "../../src/shared/captions.ts"
 import type { Cut } from "../../src/server/timeline-files.ts"
 
 const ffmpeg = async (args: ReadonlyArray<string>): Promise<void> => {
@@ -31,8 +32,9 @@ test("a heard clip changes the measured soundtrack instead of checking the voice
     const hear = async (sound: boolean) => {
       const cut = {
         clips: [{ block: "voice", video: "voice.wav", start: 0, end: 4 }],
-        inserts: [{ id: "clip", start: 1, end: 4, visual: { kind: "clip", file: "clip.mp4", start: 0, sound } }]
-      } satisfies Pick<Cut, "clips" | "inserts">
+        inserts: [{ id: "clip", start: 1, end: 4, visual: { kind: "clip", file: "clip.mp4", start: 0, sound } }],
+        captions: NO_CAPTIONS
+      } satisfies Cut
       return await Effect.runPromise(Effect.gen(function*() {
         yield* checkSound(dir, cut, () => Effect.void)
         return yield* readSoundCheck(dir, cut, { state: "idle" })

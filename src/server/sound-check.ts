@@ -30,7 +30,7 @@ const soundPlaces = (dir: string): { readonly record: string; readonly work: str
 })
 
 // The parts carry the sound the build cuts from the originals, and levelSound is the build's own levelling, so the verdict is the built file's.
-const hearCut = Effect.fnUntraced(function*(dir: string, cut: Pick<Cut, "clips" | "inserts">, onDone: (share: number) => Effect.Effect<void>) {
+const hearCut = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (share: number) => Effect.Effect<void>) {
   const fs = yield* FileSystem.FileSystem
   const settings = yield* Settings
   const { record, work } = soundPlaces(dir)
@@ -50,7 +50,7 @@ const hearCut = Effect.fnUntraced(function*(dir: string, cut: Pick<Cut, "clips" 
   yield* fs.rename(`${work}/sound.json`, record)
 })
 
-export const checkSound = Effect.fn("Sound.check")(function*(dir: string, cut: Pick<Cut, "clips" | "inserts">, onDone: (share: number) => Effect.Effect<void>) {
+export const checkSound = Effect.fn("Sound.check")(function*(dir: string, cut: Cut, onDone: (share: number) => Effect.Effect<void>) {
   if (cut.clips.length === 0) return
   const fs = yield* FileSystem.FileSystem
   const cleanup = fs.remove(soundPlaces(dir).work, { recursive: true, force: true }).pipe(
@@ -59,7 +59,7 @@ export const checkSound = Effect.fn("Sound.check")(function*(dir: string, cut: P
   yield* hearCut(dir, cut, onDone).pipe(Effect.ensuring(cleanup))
 })
 
-export const readSoundCheck = Effect.fnUntraced(function*(dir: string, cut: Pick<Cut, "clips" | "inserts">, job: ReelJob) {
+export const readSoundCheck = Effect.fnUntraced(function*(dir: string, cut: Cut, job: ReelJob) {
   if (cut.clips.length === 0) return { job: { state: "idle" } } satisfies SoundCheck
   const fs = yield* FileSystem.FileSystem
   const { record } = soundPlaces(dir)

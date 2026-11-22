@@ -7,12 +7,13 @@ import { curveOf, gainsOf, levelArgs, partGainsOf, type PartLevel } from "./leve
 import {
   joinList, lastFrameOf, partArgs, partsOf, passagesOf, pictureArgs, progressSeconds, sameParts, secondsOf, type Part, type Span
 } from "./media-commands.ts"
-import { clipSoundArgs, insertArgs, type InsertLayer } from "./insert-commands.ts"
+import { clipSoundArgs, type InsertLayer } from "./insert-commands.ts"
 import { insertLayerOf } from "./insert-layers.ts"
 import { sampledAt } from "./loudness-meter.ts"
 import { joinArgs, type Streams } from "./sound-commands.ts"
 import { hasCaptions, type Captions } from "../shared/captions.ts"
 import { placeCaptions } from "./captions.ts"
+import { finishArgs } from "./finish-commands.ts"
 import { isHdrVideo, measureLoudness, measurePart, places, shortTermLoudness, tool } from "./media-jobs.ts"
 import { readFace, retouchVideo } from "./face.ts"
 import { Settings } from "./settings.ts"
@@ -314,7 +315,7 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
   const frames = parts.reduce((sum, part) => sum + part.frames, 0)
   yield* Effect.forEach(chain.steps, (step) => step.kind === "face"
     ? retouchStep(place.work, step, frames, (share) => onDone(partsShare + SOUND_SHARE + faceShare * share))
-    : tool("ffmpeg", insertArgs(step.from, pictures, captions, settings.encoder, step.to), settings.heavy, (line) => {
+    : tool("ffmpeg", finishArgs(step.from, pictures, captions, settings.encoder, step.to), settings.heavy, (line) => {
       const seconds = progressSeconds(line)
       return seconds === undefined ? Effect.void : onDone(1 - insertsShare + insertsShare * Math.min(1, seconds / total))
     }), { discard: true })

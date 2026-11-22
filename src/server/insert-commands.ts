@@ -61,22 +61,20 @@ const insertFilter = (layer: InsertLayer, index: number): { readonly layer: stri
   }
 }
 
-// The captions go after the last overlay, so a picture never covers a word.
-const pictureGraph = (layers: ReadonlyArray<InsertLayer>, captions: string | undefined): string => {
-  const last = `${captions === undefined ? "" : `,${captions}`},format=yuv420p[out]`
-  if (layers.length === 0) return `[0:v]null${last}`
-  return layers.map((one, index) => {
+export const overlayGraph = (layers: ReadonlyArray<InsertLayer>, tail: string): string =>
+  layers.map((one, index) => {
     const { layer, x, y } = insertFilter(one, index)
     const under = index === 0 ? "[0:v]" : `[v${index}]`
     const over = `${under}[p${index}]overlay=${x}:${y}:eof_action=pass:enable='between(t,${one.start.toFixed(4)},${one.end.toFixed(4)})'`
-    return `${layer};${over}${index === layers.length - 1 ? last : `[v${index + 1}]`}`
+    return `${layer};${over}${index === layers.length - 1 ? tail : `[v${index + 1}]`}`
   }).join(";")
-}
+
+const pictureGraph = (layers: ReadonlyArray<InsertLayer>): string => overlayGraph(layers, ",format=yuv420p[out]")
 
 const clipInput = (layer: ClipLayer): ReadonlyArray<string> =>
   ["-ss", layer.from.toFixed(3), "-t", (layer.end - layer.start).toFixed(3), "-i", layer.file]
 
-const inputOf = (layer: InsertLayer): ReadonlyArray<string> => layer.kind === "clip" ? clipInput(layer) : ["-i", layer.file]
+export const inputOf = (layer: InsertLayer): ReadonlyArray<string> => layer.kind === "clip" ? clipInput(layer) : ["-i", layer.file]
 
 export const clipSoundArgs = (voice: string, layers: ReadonlyArray<InsertLayer>, output: string, streams: Streams): ReadonlyArray<string> | undefined => {
   const heard = layers.flatMap((layer) => layer.kind === "clip" && layer.sound ? [layer] : [])
@@ -102,10 +100,10 @@ const LAST_FRAME_BACK = 0.5
 export const clipFrom = (start: number, duration: number | undefined): number =>
   duration === undefined ? start : Math.min(start, Math.max(0, duration - LAST_FRAME_BACK))
 
-export const insertArgs = (reel: string, layers: ReadonlyArray<InsertLayer>, captions: string | undefined, encoder: string, output: string): ReadonlyArray<string> => [
+export const insertArgs = (reel: string, layers: ReadonlyArray<InsertLayer>, encoder: string, output: string): ReadonlyArray<string> => [
   "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y", "-i", reel,
   ...layers.flatMap(inputOf),
-  "-filter_complex", pictureGraph(layers, captions), "-map", "[out]", "-map", "0:a:0",
+  "-filter_complex", pictureGraph(layers), "-map", "[out]", "-map", "0:a:0",
   "-c:v", encoder, "-profile:v", "high", "-b:v", "10M", "-maxrate", "12M", "-bufsize", "24M", "-g", String(REEL_RATE * 2),
   "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
   "-c:a", "copy", "-map_metadata", "-1", "-movflags", "+faststart", "-f", "mp4", output
