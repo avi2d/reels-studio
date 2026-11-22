@@ -1,7 +1,7 @@
 import { Cause, Context, Deferred, Effect, Exit, FileSystem, Layer, Option, Ref } from "effect"
 import type { Offer, Pick, UploadedVideo } from "../shared/library.ts"
 import type { VideoView } from "../shared/plan.ts"
-import type { ReelJob, ReelView } from "../shared/reel.ts"
+import type { PictureSide, ReelJob, ReelView } from "../shared/reel.ts"
 import type { RetouchPicture, RetouchView } from "../shared/retouch.ts"
 import { type Clip, type Edits, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
 import { ApiError, badRequest, notFound } from "./api-error.ts"
@@ -11,7 +11,7 @@ import { keyOf, listenAgain, makeShelves, orBroken, videosIn, type Failures, typ
 import { Projects } from "./projects.ts"
 import { sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
-import { buildReel, readReel, reelVideoAt } from "./reel.ts"
+import { buildReel, readReel, reelPictureAt, reelVideoAt } from "./reel.ts"
 import { readTrial, runTrial, trialPicture } from "./retouch.ts"
 import { readCut, readTimeline } from "./timeline-files.ts"
 
@@ -187,13 +187,25 @@ const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, r
     return target
   }, orBroken, Effect.provideContext(context))
 
+  const reelPicture = Effect.fn("Media.reelPicture")(function*(id: string, picture: Picture) {
+    const target = yield* reelPictureAt(yield* folder(id), picture.made, picture.join, picture.side)
+    if (target === undefined) return yield* notFound("Такой картинки нет")
+    return target
+  }, orBroken, Effect.provideContext(context))
+
   const cancelReel = Effect.fn("Media.cancelReel")(function*(id: string) {
     const dir = yield* folder(id)
     yield* stopReel(work, reels, dir)
     return yield* reelOf(dir)
   }, orBroken, Effect.provideContext(context))
 
-  return { reel, buildReel: queueReel, cancelReel, reelFile }
+  return { reel, buildReel: queueReel, cancelReel, reelFile, reelPicture }
+}
+
+export interface Picture {
+  readonly made: string
+  readonly join: number
+  readonly side: PictureSide
 }
 
 const trialHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, trials: Reels, context: Context.Context<Needs>) => {
@@ -246,6 +258,7 @@ export class Media extends Context.Service<Media, {
   readonly trial: (id: string) => Effect.Effect<RetouchView, ApiError>
   readonly startTrial: (id: string) => Effect.Effect<RetouchView, ApiError>
   readonly trialFile: (id: string, name: RetouchPicture) => Effect.Effect<string, ApiError>
+  readonly reelPicture: (id: string, picture: Picture) => Effect.Effect<string, ApiError>
   readonly withoutWork: <A, E, R>(dir: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }>()("reels-studio/Media") {
   static readonly layer = Layer.effect(
@@ -330,11 +343,11 @@ export class Media extends Context.Service<Media, {
 
       const { exchangeEdits, mergeEdits } = yield* makeExchange(projects, context)
 
-      const { reel, buildReel: queueReel, cancelReel, reelFile } = reelHandlers(projects.folder, reels, work, context)
+      const { reel, buildReel: queueReel, cancelReel, reelFile, reelPicture } = reelHandlers(projects.folder, reels, work, context)
 
       const { trial, startTrial, trialFile } = trialHandlers(projects.folder, trials, context)
 
-      return Media.of({ videos, preview, retry, library, reuse, uploaded, retryUploaded, uploadedPreview, removeUploaded, timeline, exchangeEdits, mergeEdits, reel, buildReel: queueReel, cancelReel, reelFile, trial, startTrial, trialFile, withoutWork })
+      return Media.of({ videos, preview, retry, library, reuse, uploaded, retryUploaded, uploadedPreview, removeUploaded, timeline, exchangeEdits, mergeEdits, reel, buildReel: queueReel, cancelReel, reelFile, reelPicture, trial, startTrial, trialFile, withoutWork })
     })
   )
 }

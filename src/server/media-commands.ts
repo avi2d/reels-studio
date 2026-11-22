@@ -1,4 +1,5 @@
 import type { Transcript } from "../shared/plan.ts"
+import type { Rgb } from "../shared/reel.ts"
 import { cameraShare, FADE, type Clip, type Gaze } from "../shared/timeline.ts"
 
 const HDR_TRANSFERS = new Set(["arib-std-b67", "smpte2084"])
@@ -61,18 +62,31 @@ export const sameParts = (left: ReadonlyArray<Part>, right: ReadonlyArray<Part>)
 
 const REEL_VIDEO = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1"
 
+export const TO_RGB = "scale=in_color_matrix=bt709:in_range=tv:out_range=pc"
+
+const gainFilter = (gain: Rgb): string =>
+  `${TO_RGB},format=gbrpf32le,colorchannelmixer=rr=${gain.r.toFixed(4)}:gg=${gain.g.toFixed(4)}:bb=${gain.b.toFixed(4)},scale=in_range=pc:out_color_matrix=bt709:out_range=tv,format=yuv420p`
+
+export interface Look {
+  readonly hdr: boolean
+  readonly gain: Rgb | undefined
+}
+
+const lookFilter = (look: Look): string =>
+  [look.hdr ? TO_SDR : "format=yuv420p", ...(look.gain === undefined ? [] : [gainFilter(look.gain)]), REEL_VIDEO].join(",")
+
 const fadesOf = (seconds: number): string => {
   const fade = Math.min(FADE, seconds / 2)
   return `afade=t=in:d=${fade},afade=t=out:st=${(seconds - fade).toFixed(4)}:d=${fade}`
 }
 
-export const partArgs = (source: string, part: Part, hdr: boolean, encoder: string, output: string): ReadonlyArray<string> => {
+export const partArgs = (source: string, part: Part, look: Look, encoder: string, output: string): ReadonlyArray<string> => {
   const seconds = part.frames / REEL_RATE
   return [
     "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y",
     "-ss", part.start.toFixed(4), "-i", source,
     "-map", "0:v:0", "-map", "0:a:0", "-frames:v", String(part.frames), "-t", seconds.toFixed(6),
-    "-vf", `fps=${REEL_RATE},${hdr ? TO_SDR : "format=yuv420p"},${REEL_VIDEO}`, "-af", fadesOf(seconds),
+    "-vf", `fps=${REEL_RATE},${lookFilter(look)}`, "-af", fadesOf(seconds),
     "-c:v", encoder, "-profile:v", "high", "-b:v", "10M", "-maxrate", "12M", "-bufsize", "24M", "-g", String(REEL_RATE * 2),
     "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
     "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2", "-map_metadata", "-1", "-f", "mov", output
@@ -102,6 +116,21 @@ export const compareArgs = (before: string, after: string, encoder: string, outp
   "-filter_complex", "[0:v][1:v]hstack=inputs=2,format=yuv420p[v]", "-map", "[v]", "-map", "0:a:0",
   "-c:v", encoder, "-b:v", "16M", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
   "-c:a", "copy", "-movflags", "+faststart", "-f", "mp4", output
+]
+
+export interface Shot {
+  readonly source: string
+  readonly time: number
+  readonly look: Look
+}
+
+export const lastFrameOf = (part: Part): number => part.start + (part.frames - 1) / REEL_RATE
+
+export const pictureArgs = (left: Shot, right: Shot, output: string): ReadonlyArray<string> => [
+  "-hide_banner", "-loglevel", "error", "-y",
+  "-ss", left.time.toFixed(4), "-i", left.source, "-ss", right.time.toFixed(4), "-i", right.source,
+  "-filter_complex", `[0:v]${lookFilter(left.look)},scale=540:960[left];[1:v]${lookFilter(right.look)},scale=540:960[right];[left][right]hstack=inputs=2`,
+  "-frames:v", "1", "-q:v", "3", output
 ]
 
 export const joinList = (names: ReadonlyArray<string>): string =>

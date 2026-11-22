@@ -34,7 +34,7 @@ const encodeTrialRun = Effect.fnUntraced(function*(dir: string, clips: ReadonlyA
   yield* fs.remove(place.work, { recursive: true, force: true })
   yield* fs.makeDirectory(place.work, { recursive: true })
   const before = `${place.work}/before.mp4`
-  yield* renderParts(dir, parts, place.work, before, (share) => onDone(share * RENDER_SHARE))
+  yield* renderParts(dir, parts, [], place.work, before, (share) => onDone(share * RENDER_SHARE))
   const looker = `${settings.root}/tools/gaze`
   yield* tool("uv", retouchArgs(looker, before, place.work, settings.encoder), settings.heavy, (line) => {
     const done = retouchedFrames(line)

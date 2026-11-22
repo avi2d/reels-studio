@@ -90,6 +90,18 @@ A bar shows how much of the reel is encoded.
 The build waits while the computer hears another video, because the studio runs one heavy job at a time.
 The originals stay untouched.
 
+## Skin colour across videos
+
+Before it encodes, the build measures the skin colour of each video in the cut, on the home computer and without the chat model.
+It reads 15 frames with a face from the preview, spread over the video.
+In each frame it takes a box of cheeks and nose under the eyes from the gaze samples.
+The skin colour is the median red, green and blue of the pixels of all 15 boxes.
+The first video of the cut in upload order keeps its colour.
+Each later video gets a gain per channel that brings its skin colour to the first, between 0.8 and 1.25.
+A video with no face in its gaze samples keeps its colour.
+For each pair of videos, the build saves two pictures of their first join, before and after the gain.
+The «Готовый ролик» stage shows them side by side under the file.
+
 The stage plays the built file and offers «Скачать».
 On an iPhone, save the downloaded file to «Фото», and the Instagram reel screen finds it there.
 After a change of the cut, the stage says the file no longer matches the cut, and «Собрать заново» builds it again.
@@ -170,7 +182,8 @@ Each video folder holds these next to `plan.json`:
 | `blocks.json` | The blocks and their takes, written by the chat model |
 | `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses and the answers to the places to check |
 | `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
-| `reel/reel.json` | The build time, the video file it published and the parts it holds, so the stage can tell whether the cut changed since |
+| `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
+| `reel/reel.json` | The build time, the video file it published, the parts it holds, so the stage can tell whether the cut changed since, and the skin colour and gain of each video |
 | `retouch/trial.json` | The time of the last skin and eye trial, the seconds it retouched and the seconds that took |
 | `retouch/before.jpg`, `retouch/after.jpg` | The face close-up of the trial before and after |
 | `retouch/compare.mp4` | The 20 s of the trial with the original on the left and the retouch on the right |

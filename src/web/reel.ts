@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import type { ReelView } from "../shared/reel.ts"
+import type { ColourView, PictureSide, ReelView } from "../shared/reel.ts"
 import * as Api from "./api.ts"
 import { button } from "./controls.ts"
 import { h } from "./dom.ts"
@@ -15,6 +15,25 @@ const FAILED = "Ролик не собрался. Подробности в жу
 const NOT_SAVED = "Монтаж ещё не сохранился. Проверьте Wi-Fi: студия сохраняет его сама."
 const STALE = "Монтаж изменился после сборки. Соберите ролик заново, чтобы файл совпал с монтажом."
 const SAVE_HINT = "На айфоне откройте скачанный файл и выберите «Сохранить видео»: ролик появится в «Фото», и Instagram его найдёт."
+
+const MATCHED = "Студия измерила цвет кожи в каждом видео ролика и подогнала остальные видео к первому. На каждой картинке слева последний кадр одного видео, справа первый кадр следующего."
+const NO_FACE = "Студия не нашла лицо хотя бы в одном видео, и цвет этого видео остался как есть."
+
+export const colourNote = (colour: ColourView): string | undefined => {
+  if (colour.matched > 0) return colour.unmeasured > 0 ? `${MATCHED} ${NO_FACE}` : MATCHED
+  return colour.unmeasured > 0 ? NO_FACE : undefined
+}
+
+const SIDES: ReadonlyArray<readonly [PictureSide, string]> = [["before", "До"], ["after", "После"]]
+
+const colourPictures = (projectId: string, made: string, joins: number): ReadonlyArray<HTMLElement> =>
+  Array.from({ length: joins }, (_, index) => {
+    const join = index + 1
+    const figures = SIDES.map(([side, label]) => h("figure", {},
+      h("img", { src: Api.reelPictureUrl(projectId, made, join, side), alt: `Склейка ${label.toLowerCase()} подгонки цвета`, loading: "lazy", width: "1080", height: "960" }),
+      h("figcaption", {}, label)))
+    return h("div", { class: "colour-join" }, ...(joins > 1 ? [h("h3", {}, `Склейка ${join}`)] : []), h("div", { class: "colour-pair" }, ...figures))
+  })
 
 export const statusOf = (view: ReelView): string => {
   const { job } = view
@@ -57,6 +76,7 @@ interface ReelUi {
   readonly file: HTMLDivElement
   readonly make: ReturnType<typeof button>
   readonly cancel: ReturnType<typeof button>
+  readonly colour: HTMLElement
   readonly node: HTMLDivElement
 }
 
@@ -94,7 +114,20 @@ const show = (pane: Pane, view: ReelView): void => {
     ui.facts.textContent = `Длина ${formatLength(view.file.seconds)} · ${formatSize(view.file.size)} · собран ${madeAt(view.file.made)}`
     ui.stale.hidden = state.busy || (view.file.fresh && !state.dirty)
   }
+  showColour(pane, view)
   hooks.note({ note: "", done: view.file?.fresh === true && !state.dirty })
+}
+
+const showColour = (pane: Pane, view: ReelView): void => {
+  const { colour } = pane.ui
+  const shown = view.file?.colour
+  const note = shown === undefined ? undefined : colourNote(shown)
+  const key = view.file === undefined || note === undefined ? "" : view.file.made
+  if (colour.dataset["made"] === key) return
+  colour.dataset["made"] = key
+  colour.hidden = key === ""
+  if (view.file === undefined || shown === undefined || note === undefined) return colour.replaceChildren()
+  colour.replaceChildren(h("h2", {}, "Цвет кожи"), h("p", { class: "muted" }, note), ...colourPictures(pane.projectId, view.file.made, shown.joins))
 }
 
 const refresh = (pane: Pane): void => {
@@ -152,8 +185,9 @@ export const reelPane = (projectId: string, hooks: ReelHooks): {
   const make = button("primary", {}, "Собрать ролик")
   const cancel = button("quiet", { hidden: true }, "Остановить сборку")
   const actions = h("div", { class: "row" }, make, cancel)
-  const node = h("div", { class: "pane" }, h("section", { class: "card reel-card" }, h("h2", {}, "Готовый ролик"), h("p", { class: "muted" }, ABOUT), actions, status, bar, stale, problem), file)
-  const pane: Pane = { projectId, hooks, state, ui: { status, bar, problem, player, facts, stale, save, file, make, cancel, node } }
+  const colour = h("section", { class: "card colour-card", hidden: true })
+  const node = h("div", { class: "pane" }, h("section", { class: "card reel-card" }, h("h2", {}, "Готовый ролик"), h("p", { class: "muted" }, ABOUT), actions, status, bar, stale, problem), file, colour)
+  const pane: Pane = { projectId, hooks, state, ui: { status, bar, problem, player, facts, stale, save, file, make, cancel, colour, node } }
   player.addEventListener("play", hooks.playing)
 
   const edited = (): void => {
