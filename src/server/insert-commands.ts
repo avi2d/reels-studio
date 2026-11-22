@@ -1,4 +1,5 @@
 import { INSERT_DRIFT, INSERT_FADE, type Shape } from "../shared/inserts.ts"
+import { FRAME } from "../shared/zones.ts"
 import { even, REEL_RATE, TO_SDR } from "./media-commands.ts"
 import type { Streams } from "./sound-commands.ts"
 
@@ -17,7 +18,6 @@ export type InsertLayer =
 
 type ClipLayer = InsertLayer & { readonly kind: "clip" }
 
-const FRAME = { width: 1080, height: 1920 }
 const CARD_BOX = { left: 65, top: 269, width: 950, height: 979 }
 const CARD_BORDER = 12
 
@@ -61,18 +61,20 @@ const insertFilter = (layer: InsertLayer, index: number): { readonly layer: stri
   }
 }
 
-const pictureGraph = (layers: ReadonlyArray<InsertLayer>): string =>
+export const overlayGraph = (layers: ReadonlyArray<InsertLayer>, tail: string): string =>
   layers.map((one, index) => {
     const { layer, x, y } = insertFilter(one, index)
     const under = index === 0 ? "[0:v]" : `[v${index}]`
     const over = `${under}[p${index}]overlay=${x}:${y}:eof_action=pass:enable='between(t,${one.start.toFixed(4)},${one.end.toFixed(4)})'`
-    return `${layer};${over}${index === layers.length - 1 ? ",format=yuv420p[out]" : `[v${index + 1}]`}`
+    return `${layer};${over}${index === layers.length - 1 ? tail : `[v${index + 1}]`}`
   }).join(";")
+
+const pictureGraph = (layers: ReadonlyArray<InsertLayer>): string => overlayGraph(layers, ",format=yuv420p[out]")
 
 const clipInput = (layer: ClipLayer): ReadonlyArray<string> =>
   ["-ss", layer.from.toFixed(3), "-t", (layer.end - layer.start).toFixed(3), "-i", layer.file]
 
-const inputOf = (layer: InsertLayer): ReadonlyArray<string> => layer.kind === "clip" ? clipInput(layer) : ["-i", layer.file]
+export const inputOf = (layer: InsertLayer): ReadonlyArray<string> => layer.kind === "clip" ? clipInput(layer) : ["-i", layer.file]
 
 export const clipSoundArgs = (voice: string, layers: ReadonlyArray<InsertLayer>, output: string, streams: Streams): ReadonlyArray<string> | undefined => {
   const heard = layers.flatMap((layer) => layer.kind === "clip" && layer.sound ? [layer] : [])

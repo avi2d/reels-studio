@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { BunFileSystem } from "@effect/platform-bun"
 import { Effect } from "effect"
 import { readSoundCheck, soundKeyOf } from "../../src/server/sound-check.ts"
+import { NO_CAPTIONS } from "../../src/shared/captions.ts"
 import { sameParts } from "../../src/server/media-commands.ts"
 import type { ReelJob } from "../../src/shared/reel.ts"
 import type { Clip } from "../../src/shared/timeline.ts"
@@ -29,7 +30,7 @@ const withRecord = async (run: (dir: string) => Promise<void>): Promise<void> =>
 }
 
 const read = (dir: string, clips: ReadonlyArray<Clip>, job: ReelJob = { state: "idle" }, inserts: ReadonlyArray<Shown> = []) =>
-  Effect.runPromise(readSoundCheck(dir, { clips, inserts }, job).pipe(Effect.provide(BunFileSystem.layer)))
+  Effect.runPromise(readSoundCheck(dir, { clips, inserts, captions: NO_CAPTIONS }, job).pipe(Effect.provide(BunFileSystem.layer)))
 
 test("sound queue keys ignore every crop axis without making built video crops equivalent", () => {
   const original = record.parts
