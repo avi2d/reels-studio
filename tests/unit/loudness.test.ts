@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
-import { curveOf, momentsOf, passagesOf, readingOf } from "../../src/server/media-commands.ts"
-import { judgeSound } from "../../src/shared/reel.ts"
+import { curveOf, momentsOf, passagesOf, readingOf, sampledAt } from "../../src/server/media-commands.ts"
+import { judgeSound, jumpsOf } from "../../src/shared/reel.ts"
 
 const part = (frames: number) => ({ video: "a.mov", start: 0, frames })
 
@@ -88,4 +88,26 @@ test("the defect reel at -12 LUFS with a 22.7 LU range is never judged good", ()
 
 test("a reel above 0 dBTP is judged bad, because its peaks clip", () => {
   expect(judgeSound({ lufs: -14, lra: 5, truePeak: 0.2 }).level).toBe("bad")
+})
+
+test("a sample takes the last moment at or before its time, never a later one, and silence reads as the -70 floor", () => {
+  const moments = [
+    { time: 0, lufs: -120 },
+    { time: 0.4, lufs: -30 },
+    { time: 0.9, lufs: -20 },
+    { time: 1.5, lufs: -14 }
+  ]
+  expect(sampledAt(moments, 0.5, 1.5)).toEqual([-70, -30, -20, -14])
+})
+
+test("a run more than 3 LU from the target is one jump, and a silent sample is never part of one", () => {
+  const after = [-14, -14, -20, -20, -14, -70, -20, -14]
+  expect(jumpsOf(after)).toEqual([
+    { from: 1, to: 2 },
+    { from: 3, to: 3.5 }
+  ])
+})
+
+test("a jump that runs to the end of the reel ends at the reel's length, not one sample short", () => {
+  expect(jumpsOf([-14, -20])).toEqual([{ from: 0.5, to: 1 }])
 })

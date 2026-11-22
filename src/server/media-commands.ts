@@ -1,5 +1,5 @@
 import type { Transcript } from "../shared/plan.ts"
-import { LOUDNESS_TARGET } from "../shared/reel.ts"
+import { LOUDNESS_TARGET, SILENCE_LUFS } from "../shared/reel.ts"
 import { cameraShare, FADE, type Clip, type Gaze } from "../shared/timeline.ts"
 
 const HDR_TRANSFERS = new Set(["arib-std-b67", "smpte2084"])
@@ -162,7 +162,6 @@ export const gazeText = (video: string, transcript: Transcript, gaze: Gaze): str
 }
 
 // The reference meter is ebur128 (EBU Tech 3341). loudnorm reads about 0.9 LU low on the same audio, so it is not used to report.
-const SILENCE_LUFS = -70
 const CURVE_FLOOR_LUFS = -60
 const CURVE_MIN_DB = -20
 const CURVE_MAX_DB = 40
@@ -220,6 +219,19 @@ export const momentsOf = (text: string): ReadonlyArray<Moment> => {
     if (value !== null && time !== undefined) moments.push({ time, lufs: finiteOr(value[1] ?? "", SILENCE_LUFS) })
   }
   return moments
+}
+
+// Each sample takes the last moment at or before its time, so a sample never reads ahead of the audio.
+export const sampledAt = (moments: ReadonlyArray<Moment>, step: number, seconds: number): ReadonlyArray<number> => {
+  const count = Math.floor(seconds / step) + 1
+  const values: Array<number> = []
+  let index = 0
+  for (let sample = 0; sample < count; sample++) {
+    const at = sample * step
+    while (index + 1 < moments.length && (moments[index + 1]?.time ?? Infinity) <= at) index++
+    values.push(Math.max(SILENCE_LUFS, moments[index]?.lufs ?? SILENCE_LUFS))
+  }
+  return values
 }
 
 const gainOf = (lufs: number, offset: number): number => {
