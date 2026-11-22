@@ -234,6 +234,35 @@ export const sampledAt = (moments: ReadonlyArray<Moment>, step: number, seconds:
   return values
 }
 
+const MOMENTARY_SECONDS = 0.4
+// Readings near a join still mix both parts up to this far past it.
+const JOIN_MARGIN = 0.2
+const TIME_EPSILON = 1e-6
+
+// A reading covers the 0.4 s that end at its time, so the gain for audio starting at t is the reading at t + 0.4.
+// Readings near a join mix both parts, so each part's gain is held from its clean reading and the change ends at the join, before the new part's fade-in.
+export const gainMomentsOf = (moments: ReadonlyArray<Moment>, joins: ReadonlyArray<number>): ReadonlyArray<Moment> => {
+  const shifted = moments
+    .map(({ time, lufs }) => ({ time: time - MOMENTARY_SECONDS, lufs }))
+    .filter(({ time }) => time >= -TIME_EPSILON)
+  return joins.reduce((levels, join) => {
+    const before = shifted.filter((moment) => moment.time <= join - MOMENTARY_SECONDS - JOIN_MARGIN + TIME_EPSILON).at(-1)
+    const after = shifted.find((moment) => moment.time >= join + JOIN_MARGIN - TIME_EPSILON)
+    if (before === undefined || after === undefined) return levels
+    return levels.map((moment) => {
+      const inWindow = moment.time > before.time + TIME_EPSILON && moment.time < after.time - TIME_EPSILON
+      if (!inWindow) return moment
+      if (moment.time <= join - 2 * FADE) return { time: moment.time, lufs: before.lufs }
+      if (moment.time >= join) return { time: moment.time, lufs: after.lufs }
+      const share = (moment.time - (join - 2 * FADE)) / (2 * FADE)
+      return { time: moment.time, lufs: before.lufs + share * (after.lufs - before.lufs) }
+    })
+  }, shifted)
+}
+
+export const joinsOf = (parts: ReadonlyArray<Part>): ReadonlyArray<number> =>
+  parts.slice(1).map((_, index) => secondsOf(parts.slice(0, index + 1)))
+
 const gainOf = (lufs: number, offset: number): number => {
   const gain = lufs <= CURVE_FLOOR_LUFS ? 0 : Math.min(CURVE_MAX_DB, Math.max(CURVE_MIN_DB, LOUDNESS_TARGET - lufs))
   return gain + offset

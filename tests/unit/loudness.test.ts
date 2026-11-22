@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { curveOf, momentsOf, passagesOf, readingOf, sampledAt } from "../../src/server/media-commands.ts"
+import { curveOf, momentsOf, gainMomentsOf, passagesOf, readingOf, sampledAt } from "../../src/server/media-commands.ts"
 import { judgeSound, jumpsOf } from "../../src/shared/reel.ts"
 
 const part = (frames: number) => ({ video: "a.mov", start: 0, frames })
@@ -110,4 +110,20 @@ test("a run more than 3 LU from the target is one jump, and a silent sample is n
 
 test("a jump that runs to the end of the reel ends at the reel's length, not one sample short", () => {
   expect(jumpsOf([-14, -20])).toEqual([{ from: 0.5, to: 1 }])
+})
+
+test("a gain reading covers the 0.4 s before its time, so each part holds its level and the change runs across the join's fade", () => {
+  const moments = [
+    { time: 0.8, lufs: -14 },
+    { time: 0.9, lufs: -14 },
+    { time: 1, lufs: -14 },
+    { time: 1.1, lufs: -14 },
+    { time: 1.2, lufs: -14 },
+    { time: 1.3, lufs: -14 },
+    { time: 1.4, lufs: -20 },
+    { time: 1.5, lufs: -20 },
+    { time: 1.6, lufs: -20 }
+  ]
+  const levelled = gainMomentsOf(moments, [1])
+  expect(levelled.map((moment) => Math.round(moment.lufs * 100) / 100)).toEqual([-14, -14, -14, -14, -14, -15, -20, -20, -20])
 })

@@ -1,7 +1,7 @@
 import { DateTime, Effect, FileSystem, Option, Schema } from "effect"
 import type { Clip } from "../shared/timeline.ts"
 import { LOUDNESS_TARGET, Loudness, Passage, Series, SERIES_STEP, Sound, type ReelView } from "../shared/reel.ts"
-import { curveOf, joinArgs, joinList, levelArgs, partArgs, partsOf, passagesOf, progressSeconds, sameParts, sampledAt, secondsOf, type Moment, type Span } from "./media-commands.ts"
+import { curveOf, joinArgs, joinList, gainMomentsOf, joinsOf, levelArgs, partArgs, partsOf, passagesOf, progressSeconds, sameParts, sampledAt, secondsOf, type Moment, type Span } from "./media-commands.ts"
 import { isHdrVideo, measureLoudness, momentaryLoudness, places, tool } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
 
@@ -127,8 +127,9 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray
   yield* concatParts(place.work, rendered.map((part) => part.name), `${place.work}/joined.mp4`)
   const heard = yield* measureLoudness(`${place.work}/joined.mp4`)
   const moments = yield* momentaryLoudness(`${place.work}/joined.mp4`, `${place.work}/moments.txt`)
-  const trial = yield* levelReel(place.work, moments, 0, `${place.work}/trial.mp4`)
-  const changed = yield* levelReel(place.work, moments, LOUDNESS_TARGET - trial.lufs, `${place.work}/reel.mp4`)
+  const levelled = gainMomentsOf(moments, joinsOf(parts))
+  const trial = yield* levelReel(place.work, levelled, 0, `${place.work}/trial.mp4`)
+  const changed = yield* levelReel(place.work, levelled, LOUDNESS_TARGET - trial.lufs, `${place.work}/reel.mp4`)
   const changedMoments = yield* momentaryLoudness(`${place.work}/reel.mp4`, `${place.work}/moments-after.txt`)
   const passages = yield* measurePassages(place.work, passagesOf(parts, rendered.map((part) => part.lufs)))
   const made = DateTime.formatIso(yield* DateTime.now)
