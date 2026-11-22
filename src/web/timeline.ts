@@ -11,7 +11,7 @@ import { icon } from "./controls.ts"
 import { insertView } from "./insert-view.ts"
 import { h } from "./dom.ts"
 import { formatLength } from "./format.ts"
-import { montage, type Playing } from "./montage.ts"
+import { montage, type LevelAt, type Playing } from "./montage.ts"
 import {
   drawReady, frameOf, GO, notesOf, partsOf, refocus, STOP, textOf,
   type Actions, type Frame, type Hooks, type Loaded, type Panels, type Parts
@@ -299,14 +299,14 @@ const hearOn = (
   play(clips)
 }
 
-export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels: Panels; readonly refresh: () => void; readonly stop: () => void; readonly flush: () => Promise<boolean>; readonly busy: () => boolean } => {
+export const timelineCard = (projectId: string, hooks: Hooks, levelAt: LevelAt): { readonly panels: Panels; readonly refresh: () => void; readonly stop: () => void; readonly flush: () => Promise<boolean>; readonly busy: () => boolean } => {
   const parts = partsOf()
   const ui = frameOf(parts)
   const state: State =
     { loaded: undefined, edits: NO_EDITS, acked: NO_EDITS, changes: 0, history: [], undone: [], selected: undefined, open: undefined, base: undefined, playing: undefined, shown: [], overlay: [], drawn: "", content: "", pending: undefined }
   const overlay = insertView((picture) => Api.coverUrl(projectId, picture))
   const view = display(parts, state, overlay.paint)
-  const player = montage(projectId, view.markPlaying)
+  const player = montage(projectId, view.markPlaying, levelAt)
   ui.frame.prepend(player.node, overlay.node)
   const saving = saver(projectId, ui.problem, () => state.edits, () => state.acked, (sent, merged) => {
     state.acked = merged
