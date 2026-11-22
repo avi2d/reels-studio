@@ -87,9 +87,11 @@ The file holds the chosen takes in row order, without removed pauses, with the s
 It is 1080 by 1920 at 30 frames a second, H.264 High with AAC sound in an MP4.
 An iPhone HDR original is turned into ordinary BT.709 colours, so the reel does not look washed out in Instagram.
 The studio cuts each clip to whole frames, encodes the clips one by one through `REELS_HEAVY` with `REELS_ENCODER`, then joins them without encoding again.
-The studio measures each part on its own and gives it one gain that brings it to -14 LUFS, so the gaps and word endings inside a part are not lifted.
+The studio measures each part on its own and gives it one gain that brings it to -14 LUFS.
+So the gaps and word endings inside a part are not lifted.
 A part shorter than 1.2 s is measured played over until it fills 1.2 s, because ebur128 reads nothing under one 0.4 s block.
-The gain moves from one part's value to the next only inside the two 0.06 s fades at their join, where the sound is near silence.
+The gain moves from one part's value to the next only inside the two 0.06 s fades at their join.
+The sound there is near silence.
 One more constant gain over the whole reel hits -14 LUFS, and a limiter keeps the true peak under -1.5 dBTP.
 When the cut shows inserts, one more pass lays the pictures over the levelled file and copies its sound as it is.
 The joined file before levelling stays beside the reel as `before-<stamp>.mp4`.
