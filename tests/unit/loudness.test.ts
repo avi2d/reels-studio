@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import { curveOf, momentsOf, gainMomentsOf, passagesOf, readingOf, sampledAt } from "../../src/server/media-commands.ts"
+import { curveOf, gainsOf } from "../../src/server/level-curve.ts"
+import { momentsOf, passagesOf, readingOf, sampledAt } from "../../src/server/media-commands.ts"
 import { judgeSound, jumpsOf } from "../../src/shared/reel.ts"
 
 const part = (frames: number) => ({ video: "a.mov", start: 0, frames })
@@ -71,17 +72,17 @@ test("a silent part is never the quiet passage", () => {
 })
 
 test("a moment 37.8 dB under the -14 LUFS target is lifted by 37.8 dB, not clamped at 20 dB", () => {
-  const curve = curveOf([{ time: 1, lufs: -51.8 }], 0)
+  const curve = curveOf(gainsOf([{ time: 1, lufs: -51.8 }], [{ from: 0, to: 2, lufs: -51.8 }], 0))
   expect(Number(curve.split(" ").at(-1))).toBeCloseTo(10 ** (37.8 / 20), 4)
 })
 
 test("a moment at the silence floor is left at unity gain, not boosted", () => {
-  const curve = curveOf([{ time: 1, lufs: -70 }], 0)
+  const curve = curveOf(gainsOf([{ time: 1, lufs: -70 }], [{ from: 0, to: 2, lufs: -70 }], 0))
   expect(Number(curve.split(" ").at(-1))).toBe(1)
 })
 
 test("a silent moment stays at unity gain when the whole reel is shifted toward the target, not shifted with it", () => {
-  const curve = curveOf([{ time: 1, lufs: -70 }], 3)
+  const curve = curveOf(gainsOf([{ time: 1, lufs: -70 }], [{ from: 0, to: 2, lufs: -70 }], 3))
   expect(Number(curve.split(" ").at(-1))).toBe(1)
 })
 
@@ -129,8 +130,8 @@ test("a gain reading covers the 0.4 s before its time, so each part holds its le
     { time: 1.5, lufs: -20 },
     { time: 1.6, lufs: -20 }
   ]
-  const levelled = gainMomentsOf(moments, [{ from: 0, to: 1, lufs: -14 }, { from: 1, to: 1.6, lufs: -20 }])
-  expect(levelled.map((moment) => Math.round(moment.lufs * 100) / 100)).toEqual([-14, -14, -14, -14, -14, -15, -20, -20, -20])
+  const gains = gainsOf(moments, [{ from: 0, to: 1, lufs: -14 }, { from: 1, to: 1.6, lufs: -20 }], 0)
+  expect(gains.map((gain) => Math.round(gain.db * 100) / 100)).toEqual([0, 0, 0, 0, 0, 1, 6, 6, 6])
 })
 
 const powerMean = (levels: ReadonlyArray<number>): number =>
@@ -144,7 +145,15 @@ test("a half-second part between two longer ones holds its own level, not one mi
     const window = Array.from({ length: 40 }, (_sample, step) => levelAt(time - 0.4 + (step + 0.5) * 0.01))
     return { time, lufs: powerMean(window) }
   })
-  const held = gainMomentsOf(moments, parts).filter((moment) => moment.time >= 3 - 1e-6 && moment.time < 3.38)
+  const held = gainsOf(moments, parts, 0).filter((gain) => gain.time >= 3 - 1e-6 && gain.time < 3.38)
   expect(held.length).toBeGreaterThan(0)
-  for (const moment of held) expect(moment.lufs).toBeCloseTo(-30, 6)
+  for (const gain of held) expect(gain.db).toBeCloseTo(16, 6)
+})
+
+test("a word under one 0.4 s block, which ebur128 reads as -70, is lifted with its equally loud neighbours, not left at unity or pushed toward the 40 dB clamp", () => {
+  const parts = [{ from: 0, to: 3, lufs: -30 }, { from: 3, to: 3.267, lufs: -70 }, { from: 3.267, to: 6.267, lufs: -30 }]
+  const moments = Array.from({ length: 59 }, (_, index) => ({ time: (index + 4) / 10, lufs: -30 }))
+  const gains = gainsOf(moments, parts, 0)
+  expect(gains.length).toBe(59)
+  for (const gain of gains) expect(gain.db).toBeCloseTo(16, 6)
 })

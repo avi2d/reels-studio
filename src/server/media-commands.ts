@@ -1,5 +1,5 @@
 import type { Transcript } from "../shared/plan.ts"
-import { LOUDNESS_TARGET, SILENCE_LUFS } from "../shared/reel.ts"
+import { SILENCE_LUFS } from "../shared/reel.ts"
 import { INSERT_DRIFT, INSERT_FADE, type Shape } from "../shared/inserts.ts"
 import { cameraShare, FADE, type Clip, type Frame, type Gaze } from "../shared/timeline.ts"
 
@@ -254,12 +254,6 @@ export const gazeText = (video: string, transcript: Transcript, gaze: Gaze): str
 }
 
 // The reference meter is ebur128 (EBU Tech 3341). loudnorm reads about 0.9 LU low on the same audio, so it is not used to report.
-const CURVE_FLOOR_LUFS = -60
-const CURVE_MIN_DB = -20
-const CURVE_MAX_DB = 40
-// The true peak runs above the sample peak, so the sample ceiling sits 1 dB under the -1.5 dBTP target.
-const LIMIT_LINEAR = 0.75
-
 type Segment = { readonly start: number; readonly seconds: number }
 
 export const measureArgs = (source: string, segment?: Segment): ReadonlyArray<string> => [
@@ -325,55 +319,6 @@ export const sampledAt = (moments: ReadonlyArray<Moment>, step: number, seconds:
   }
   return values
 }
-
-const MOMENTARY_SECONDS = 0.4
-// Readings near a join still mix both parts up to this far past it.
-const JOIN_MARGIN = 0.2
-const TIME_EPSILON = 1e-6
-
-export interface PartLevel { readonly from: number; readonly to: number; readonly lufs: number }
-
-// A reading covers the 0.4 s that end at its time, so the gain for audio starting at t is the reading at t + 0.4.
-// Readings near a join mix both parts, so each part's gain is held from its own clean readings and the change ends at the join, before the new part's fade-in.
-// A part too short for a clean reading is held at its whole reading.
-export const gainMomentsOf = (moments: ReadonlyArray<Moment>, parts: ReadonlyArray<PartLevel>): ReadonlyArray<Moment> => {
-  const shifted = moments
-    .map(({ time, lufs }) => ({ time: time - MOMENTARY_SECONDS, lufs }))
-    .filter(({ time }) => time >= -TIME_EPSILON)
-  const last = parts.length - 1
-  const clean = parts.map((part, index) => shifted.filter(({ time }) =>
-    (index === 0 || time >= part.from + JOIN_MARGIN - TIME_EPSILON) && (index === last || time <= part.to - MOMENTARY_SECONDS - JOIN_MARGIN + TIME_EPSILON)))
-  const opening = (index: number): number => clean[index]?.[0]?.lufs ?? parts[index]?.lufs ?? SILENCE_LUFS
-  const closing = (index: number): number => clean[index]?.at(-1)?.lufs ?? parts[index]?.lufs ?? SILENCE_LUFS
-  return shifted.map((moment) => {
-    const index = parts.findLastIndex((part) => part.from <= moment.time + TIME_EPSILON)
-    const part = parts[index]
-    if (part === undefined) return moment
-    const rampFrom = part.to - 2 * FADE
-    if (index < last && moment.time > rampFrom) {
-      const share = (moment.time - rampFrom) / (2 * FADE)
-      return { time: moment.time, lufs: closing(index) + share * (opening(index + 1) - closing(index)) }
-    }
-    const [first, final] = [clean[index]?.[0], clean[index]?.at(-1)]
-    if (first === undefined || final === undefined) return { time: moment.time, lufs: part.lufs }
-    if (index > 0 && moment.time < first.time - TIME_EPSILON) return { time: moment.time, lufs: first.lufs }
-    if (index < last && moment.time > final.time + TIME_EPSILON) return { time: moment.time, lufs: final.lufs }
-    return moment
-  })
-}
-
-const gainOf = (lufs: number, offset: number): number =>
-  lufs <= CURVE_FLOOR_LUFS ? 0 : Math.min(CURVE_MAX_DB, Math.max(CURVE_MIN_DB, LOUDNESS_TARGET - lufs)) + offset
-
-export const curveOf = (moments: ReadonlyArray<Moment>, offset: number): string =>
-  moments.map(({ time, lufs }) => `${time.toFixed(1)} volume volume ${(10 ** (gainOf(lufs, offset) / 20)).toFixed(6)}`).join(";")
-
-export const levelArgs = (source: string, curve: string, output: string): ReadonlyArray<string> => [
-  "-hide_banner", "-loglevel", "error", "-y", "-i", source,
-  "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy",
-  "-af", `asendcmd=f=${curve},volume=1,alimiter=limit=${LIMIT_LINEAR}:attack=5:release=50:level=disabled,aresample=48000`,
-  "-c:a", "aac", "-b:a", "192k", "-map_metadata", "-1", "-movflags", "+faststart", "-f", "mp4", output
-]
 
 export interface Span {
   readonly name: "quiet" | "loud"

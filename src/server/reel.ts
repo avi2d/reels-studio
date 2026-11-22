@@ -3,8 +3,9 @@ import { shapeOf, type Shown } from "../shared/inserts.ts"
 import { Frame } from "../shared/timeline.ts"
 import { Levelling, LOUDNESS_TARGET, SERIES_STEP, type ReelView } from "../shared/reel.ts"
 import { pictureProbeArgs } from "./attachment-notes.ts"
+import { curveOf, gainsOf, levelArgs, type PartLevel } from "./level-curve.ts"
 import {
-  curveOf, gainMomentsOf, insertArgs, joinArgs, joinList, levelArgs, partArgs, partsOf, passagesOf, progressSeconds, sameParts, sampledAt, secondsOf, type InsertPicture, type Moment, type Part, type PartLevel, type Span
+  insertArgs, joinArgs, joinList, partArgs, partsOf, passagesOf, progressSeconds, sameParts, sampledAt, secondsOf, type InsertPicture, type Moment, type Part, type Span
 } from "./media-commands.ts"
 import { isHdrVideo, measureLoudness, momentaryLoudness, places, tool } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
@@ -108,11 +109,11 @@ const measurePassages = Effect.fnUntraced(function*(work: string, levelled: stri
 })
 
 // One gain curve over the whole reel, not per part, so quiet and loud passages share one target.
-const levelReel = Effect.fnUntraced(function*(work: string, moments: ReadonlyArray<Moment>, offset: number, output: string) {
+const levelReel = Effect.fnUntraced(function*(work: string, moments: ReadonlyArray<Moment>, parts: ReadonlyArray<PartLevel>, offset: number, output: string) {
   const fs = yield* FileSystem.FileSystem
   const settings = yield* Settings
   const curve = `${work}/curve.txt`
-  yield* fs.writeFileString(curve, curveOf(moments, offset))
+  yield* fs.writeFileString(curve, curveOf(gainsOf(moments, parts, offset)))
   yield* tool("ffmpeg", levelArgs(`${work}/joined.mp4`, curve, output), settings.heavy)
   return yield* measureLoudness(output)
 })
@@ -142,10 +143,9 @@ const levelSound = Effect.fnUntraced(function*(work: string, parts: ReadonlyArra
   const heard = yield* measureLoudness(`${work}/joined.mp4`)
   const moments = yield* momentaryLoudness(`${work}/joined.mp4`, `${work}/moments.txt`)
   yield* soundDone(1)
-  const levelled = gainMomentsOf(moments, rendered)
-  const trial = yield* levelReel(work, levelled, 0, `${work}/trial.mp4`)
+  const trial = yield* levelReel(work, moments, rendered, 0, `${work}/trial.mp4`)
   yield* soundDone(2)
-  const changed = yield* levelReel(work, levelled, LOUDNESS_TARGET - trial.lufs, levelledFile)
+  const changed = yield* levelReel(work, moments, rendered, LOUDNESS_TARGET - trial.lufs, levelledFile)
   yield* soundDone(3)
   const changedMoments = yield* momentaryLoudness(levelledFile, `${work}/moments-after.txt`)
   yield* soundDone(4)
