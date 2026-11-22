@@ -2,7 +2,7 @@ import { Data, Effect, FileSystem, Option, Predicate, Schema, Stream, type Platf
 import { ChildProcess } from "effect/process"
 import { Plan, Transcript } from "../shared/plan.ts"
 import { Gaze, type GazeFailure } from "../shared/timeline.ts"
-import { gazeText, isHdr, KEY_FRAME_EVERY, LoudnessReport, levelOf, measureArgs, prepareArgs, probeArgs, recognizerArgs, refreshArgs, transcriptText } from "./media-commands.ts"
+import { envelopeArgs, gazeText, isHdr, KEY_FRAME_EVERY, measureArgs, momentsOf, prepareArgs, probeArgs, readingOf, recognizerArgs, refreshArgs, transcriptText } from "./media-commands.ts"
 import { Settings } from "./settings.ts"
 
 export class ToolFailed extends Data.TaggedError("ToolFailed")<{ readonly command: string; readonly code: number; readonly output: string; readonly message: string }> {}
@@ -89,19 +89,22 @@ export const tool = Effect.fnUntraced(function*(
   return (yield* run(command, args, prefix, onLine)).stdout
 })
 
-const decodeReport = Schema.decodeUnknownOption(Schema.fromJsonString(LoudnessReport))
-
-// loudnorm's report is the last JSON object on stderr.
 export const measureLoudness = Effect.fnUntraced(function*(file: string, segment?: { readonly start: number; readonly seconds: number }) {
   const settings = yield* Settings
   const { stderr } = yield* run("ffmpeg", measureArgs(file, segment), settings.heavy)
-  const json = /\{[^{}]*"input_i"[^{}]*\}/.exec(stderr)?.[0]
-  const report = json === undefined ? Option.none() : decodeReport(json)
-  if (Option.isNone(report)) {
+  const reading = readingOf(stderr)
+  if (reading === undefined) {
     const tail = stderr.slice(-2000)
-    return yield* new ToolFailed({ command: "ffmpeg", code: 0, output: tail, message: `ffmpeg gave no loudness report for ${file}: ${tail}` })
+    return yield* new ToolFailed({ command: "ffmpeg", code: 0, output: tail, message: `ffmpeg gave no loudness summary for ${file}: ${tail}` })
   }
-  return levelOf(report.value)
+  return reading
+})
+
+export const momentaryLoudness = Effect.fnUntraced(function*(file: string, metadata: string) {
+  const settings = yield* Settings
+  const fs = yield* FileSystem.FileSystem
+  yield* run("ffmpeg", envelopeArgs(file, metadata), settings.heavy)
+  return momentsOf(yield* fs.readFileString(metadata))
 })
 
 export const isHdrVideo = Effect.fnUntraced(function*(source: string) {

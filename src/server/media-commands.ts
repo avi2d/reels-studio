@@ -1,4 +1,3 @@
-import { Schema } from "effect"
 import type { Transcript } from "../shared/plan.ts"
 import { LOUDNESS_TARGET } from "../shared/reel.ts"
 import { cameraShare, FADE, type Clip, type Gaze } from "../shared/timeline.ts"
@@ -162,55 +161,81 @@ export const gazeText = (video: string, transcript: Transcript, gaze: Gaze): str
   ].join("\n") + "\n"
 }
 
+// The reference meter is ebur128 (EBU Tech 3341). loudnorm reads about 0.9 LU low on the same audio, so it is not used to report.
 const SILENCE_LUFS = -70
-const LOUDNESS = `I=${LOUDNESS_TARGET}:TP=-1.5:LRA=11`
+const CURVE_FLOOR_LUFS = -60
+const CURVE_MIN_DB = -20
+const CURVE_MAX_DB = 40
+// The true peak runs above the sample peak, so the sample ceiling sits 1 dB under the -1.5 dBTP target.
+const LIMIT_LINEAR = 0.75
 
-export const measureArgs = (source: string, segment?: { readonly start: number; readonly seconds: number }): ReadonlyArray<string> => [
+type Segment = { readonly start: number; readonly seconds: number }
+
+export const measureArgs = (source: string, segment?: Segment): ReadonlyArray<string> => [
   "-hide_banner", "-nostats",
   ...(segment === undefined ? [] : ["-ss", segment.start.toFixed(4), "-t", segment.seconds.toFixed(6)]),
-  "-i", source, "-map", "0:a:0", "-af", `loudnorm=${LOUDNESS}:print_format=json`, "-f", "null", "-"
+  "-i", source, "-map", "0:a:0", "-af", "ebur128=peak=true", "-f", "null", "-"
 ]
 
-export const LoudnessReport = Schema.Struct({
-  input_i: Schema.String,
-  input_tp: Schema.String,
-  input_lra: Schema.String,
-  input_thresh: Schema.String,
-  target_offset: Schema.String
-})
-
-interface Measure {
+export interface Reading {
   readonly lufs: number
-  readonly tp: number
   readonly lra: number
-  readonly thresh: number
-  readonly offset: number
+  readonly truePeak: number
 }
 
-// Silence measures at the gate floor, so it gets no gain.
-export interface Level {
+const NUMBER = "(-?\\d+(?:\\.\\d+)?|-inf)"
+const summaryPattern = new RegExp(`Integrated loudness:\\s+I:\\s+${NUMBER} LUFS[\\s\\S]*?LRA:\\s+${NUMBER} LU[\\s\\S]*?True peak:\\s+Peak:\\s+${NUMBER} dBFS`)
+
+const finiteOr = (text: string, fallback: number): number => {
+  const value = Number(text)
+  return Number.isFinite(value) ? value : fallback
+}
+
+export const readingOf = (stderr: string): Reading | undefined => {
+  const match = summaryPattern.exec(stderr.slice(stderr.lastIndexOf("Summary:")))
+  if (match === null) return undefined
+  return { lufs: finiteOr(match[1] ?? "", SILENCE_LUFS), lra: finiteOr(match[2] ?? "", 0), truePeak: finiteOr(match[3] ?? "", SILENCE_LUFS) }
+}
+
+export const envelopeArgs = (source: string, metadata: string): ReadonlyArray<string> => [
+  "-hide_banner", "-nostats", "-i", source, "-map", "0:a:0",
+  "-af", `ebur128=metadata=1,ametadata=mode=print:key=lavfi.r128.M:file=${metadata}`, "-f", "null", "-"
+]
+
+export interface Moment {
+  readonly time: number
   readonly lufs: number
-  readonly measured: Measure | undefined
 }
 
-export const levelOf = (report: typeof LoudnessReport.Type): Level => {
-  const lufs = Number(report.input_i)
-  if (!Number.isFinite(lufs)) return { lufs: SILENCE_LUFS, measured: undefined }
-  return {
-    lufs,
-    measured: { lufs, tp: Number(report.input_tp), lra: Number(report.input_lra), thresh: Number(report.input_thresh), offset: Number(report.target_offset) }
+export const momentsOf = (text: string): ReadonlyArray<Moment> => {
+  const moments: Array<Moment> = []
+  let time: number | undefined
+  for (const line of text.split("\n")) {
+    const stamp = /pts_time:(\S+)/.exec(line)
+    if (stamp !== null) {
+      time = Number(stamp[1])
+      continue
+    }
+    const value = /^lavfi\.r128\.M=(\S+)$/.exec(line.trim())
+    if (value !== null && time !== undefined) moments.push({ time, lufs: finiteOr(value[1] ?? "", SILENCE_LUFS) })
   }
+  return moments
 }
 
-export const normalizeArgs = (source: string, level: Level, output: string): ReadonlyArray<string> => {
-  const m = level.measured
-  const gain = m === undefined ? [] : [`loudnorm=${LOUDNESS}:measured_I=${m.lufs}:measured_TP=${m.tp}:measured_LRA=${m.lra}:measured_thresh=${m.thresh}:offset=${m.offset}:linear=true`]
-  return [
-    "-hide_banner", "-loglevel", "error", "-y", "-i", source,
-    "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy", "-af", [...gain, "aresample=48000"].join(","),
-    "-c:a", "aac", "-b:a", "192k", "-map_metadata", "-1", "-movflags", "+faststart", "-f", "mp4", output
-  ]
+const gainOf = (lufs: number, offset: number): number => {
+  const gain = lufs <= CURVE_FLOOR_LUFS ? 0 : Math.min(CURVE_MAX_DB, Math.max(CURVE_MIN_DB, LOUDNESS_TARGET - lufs))
+  return gain + offset
 }
+
+export const curveOf = (moments: ReadonlyArray<Moment>, offset: number): string =>
+  moments.map(({ time, lufs }) => `${time.toFixed(1)} volume volume ${(10 ** (gainOf(lufs, offset) / 20)).toFixed(6)}`).join(";")
+
+export const levelArgs = (source: string, curve: string, output: string): ReadonlyArray<string> => [
+  "-hide_banner", "-loglevel", "error", "-y", "-i", source,
+  "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy",
+  "-af", `asendcmd=f=${curve},volume=1,alimiter=limit=${LIMIT_LINEAR}:attack=5:release=50:level=disabled,aresample=48000`,
+  "-c:a", "aac", "-b:a", "192k", "-map_metadata", "-1", "-movflags", "+faststart", "-f", "mp4", output
+]
 
 export interface Span {
   readonly name: "quiet" | "loud"
@@ -220,10 +245,10 @@ export interface Span {
 
 const PASSAGE_FRAMES = REEL_RATE
 
-export const passagesOf = (parts: ReadonlyArray<Part>, levels: ReadonlyArray<Level>): ReadonlyArray<Span> => {
+export const passagesOf = (parts: ReadonlyArray<Part>, lufs: ReadonlyArray<number>): ReadonlyArray<Span> => {
   const eligible = parts.flatMap((part, index) => {
-    const level = levels[index]
-    return part.frames >= PASSAGE_FRAMES && level?.measured !== undefined ? [{ index, lufs: level.lufs }] : []
+    const level = lufs[index]
+    return part.frames >= PASSAGE_FRAMES && level !== undefined && level > SILENCE_LUFS ? [{ index, lufs: level }] : []
   })
   if (eligible.length < 2) return []
   const quiet = eligible.reduce((best, item) => item.lufs < best.lufs ? item : best)

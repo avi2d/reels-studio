@@ -1,8 +1,8 @@
 import { DateTime, Effect, FileSystem, Option, Schema } from "effect"
 import type { Clip } from "../shared/timeline.ts"
-import { Loudness, Passage, type ReelView } from "../shared/reel.ts"
-import { joinArgs, joinList, normalizeArgs, partArgs, partsOf, passagesOf, progressSeconds, sameParts, secondsOf, type Level, type Span } from "./media-commands.ts"
-import { isHdrVideo, measureLoudness, places, tool } from "./media-jobs.ts"
+import { LOUDNESS_TARGET, Loudness, Passage, Sound, type ReelView } from "../shared/reel.ts"
+import { curveOf, joinArgs, joinList, levelArgs, partArgs, partsOf, passagesOf, progressSeconds, sameParts, secondsOf, type Moment, type Span } from "./media-commands.ts"
+import { isHdrVideo, measureLoudness, momentaryLoudness, places, tool } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
 
 const Record = Schema.Struct({
@@ -11,6 +11,7 @@ const Record = Schema.Struct({
   before: Schema.String,
   parts: Schema.Array(Schema.Struct({ video: Schema.String, start: Schema.Finite, frames: Schema.Int })),
   loudness: Loudness,
+  sound: Sound,
   passages: Schema.Array(Passage)
 })
 const RecordFile = Schema.fromJsonString(Record)
@@ -72,17 +73,14 @@ const measurePassages = Effect.fnUntraced(function*(work: string, spans: Readonl
   }))
 })
 
-interface Rendered {
-  readonly name: string
-  readonly level: Level
-}
-
-// A single gain over the joined reel leaves quiet parts far under loud ones.
-const evenPart = Effect.fnUntraced(function*(work: string, part: Rendered) {
+// One gain curve over the whole reel, not per part, so quiet and loud passages share one target.
+const levelReel = Effect.fnUntraced(function*(work: string, moments: ReadonlyArray<Moment>, offset: number, output: string) {
+  const fs = yield* FileSystem.FileSystem
   const settings = yield* Settings
-  const name = `even-${part.name}`
-  yield* tool("ffmpeg", normalizeArgs(`${work}/${part.name}`, part.level, `${work}/${name}`), settings.heavy)
-  return name
+  const curve = `${work}/curve.txt`
+  yield* fs.writeFileString(curve, curveOf(moments, offset))
+  yield* tool("ffmpeg", levelArgs(`${work}/joined.mp4`, curve, output), settings.heavy)
+  return yield* measureLoudness(output)
 })
 
 const concatParts = Effect.fnUntraced(function*(work: string, names: ReadonlyArray<string>, output: string) {
@@ -112,7 +110,7 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray
   yield* fs.makeDirectory(place.work, { recursive: true })
   yield* sweepReel(dir)
   const hdr = new Map<string, boolean>()
-  const rendered: Array<Rendered> = []
+  const rendered: Array<{ readonly name: string; readonly lufs: number }> = []
   for (const part of parts) {
     const source = places({ dir, name: part.video }).source
     const tone = hdr.get(part.video) ?? (yield* isHdrVideo(source))
@@ -123,14 +121,14 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray
       const seconds = progressSeconds(line)
       return seconds === undefined ? Effect.void : onDone(Math.min(1, (before + seconds) / total))
     })
-    rendered.push({ name, level: yield* measureLoudness(`${place.work}/${name}`) })
+    rendered.push({ name, lufs: (yield* measureLoudness(`${place.work}/${name}`)).lufs })
   }
   yield* concatParts(place.work, rendered.map((part) => part.name), `${place.work}/joined.mp4`)
   const heard = yield* measureLoudness(`${place.work}/joined.mp4`)
-  const evened = yield* Effect.forEach(rendered, (part) => evenPart(place.work, part))
-  yield* concatParts(place.work, evened, `${place.work}/reel.mp4`)
-  const changed = yield* measureLoudness(`${place.work}/reel.mp4`)
-  const passages = yield* measurePassages(place.work, passagesOf(parts, rendered.map((part) => part.level)))
+  const moments = yield* momentaryLoudness(`${place.work}/joined.mp4`, `${place.work}/moments.txt`)
+  const trial = yield* levelReel(place.work, moments, 0, `${place.work}/trial.mp4`)
+  const changed = yield* levelReel(place.work, moments, LOUDNESS_TARGET - trial.lufs, `${place.work}/reel.mp4`)
+  const passages = yield* measurePassages(place.work, passagesOf(parts, rendered.map((part) => part.lufs)))
   const made = DateTime.formatIso(yield* DateTime.now)
   const record = {
     made,
@@ -138,6 +136,7 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray
     before: beforeOf(made),
     parts,
     loudness: { before: heard.lufs, after: changed.lufs },
+    sound: { lufs: changed.lufs, lra: changed.lra, truePeak: changed.truePeak },
     passages
   }
   yield* publish(dir, record)
@@ -170,6 +169,7 @@ export const readReel = Effect.fnUntraced(function*(dir: string, clips: Readonly
     size,
     fresh: sameParts(record.parts, parts),
     loudness: record.loudness,
+    sound: record.sound,
     passages: record.passages
   }
   return { job, cut, file } satisfies ReelView

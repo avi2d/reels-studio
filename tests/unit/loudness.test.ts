@@ -1,38 +1,91 @@
 import { expect, test } from "bun:test"
-import { levelOf, normalizeArgs, passagesOf, type Level } from "../../src/server/media-commands.ts"
-
-const report = (input_i: string) => ({ input_i, input_tp: "-3.10", input_lra: "6.40", input_thresh: "-34.00", target_offset: "0.32" })
-
-const level = (lufs: number): Level => ({ lufs, measured: { lufs, tp: -3, lra: 6, thresh: -34, offset: 0 } })
-const silent: Level = { lufs: -70, measured: undefined }
+import { curveOf, momentsOf, passagesOf, readingOf } from "../../src/server/media-commands.ts"
+import { judgeSound } from "../../src/shared/reel.ts"
 
 const part = (frames: number) => ({ video: "a.mov", start: 0, frames })
 
-test("a part with no measurable loudness reads as the -70 LUFS gate floor, so it gets no gain", () => {
-  expect(levelOf(report("-inf"))).toEqual({ lufs: -70, measured: undefined })
+// The summary block is what ffmpeg 6 prints for ebur128=peak=true on a file measured at -14.2 LUFS.
+const summary = `[Parsed_ebur128_0 @ 0x7ec134004300] Summary:
+
+  Integrated loudness:
+    I:         -14.2 LUFS
+    Threshold: -24.2 LUFS
+
+  Loudness range:
+    LRA:         1.3 LU
+    Threshold: -34.1 LUFS
+    LRA low:   -14.7 LUFS
+    LRA high:  -13.5 LUFS
+
+  True peak:
+    Peak:       -1.7 dBFS
+`
+
+test("the ffmpeg summary is read as its integrated, range and true peak values", () => {
+  expect(readingOf(summary)).toEqual({ lufs: -14.2, lra: 1.3, truePeak: -1.7 })
 })
 
-test("a quiet part is normalised by its own measured loudness to the -14 LUFS target, not kept under a loud part", () => {
-  const args = normalizeArgs("quiet.mov", levelOf(report("-51.85")), "even.mov")
-  const filter = args[args.indexOf("-af") + 1] ?? ""
-  expect(filter).toContain("I=-14")
-  expect(filter).toContain("measured_I=-51.85")
-  expect(filter).toContain("linear=true")
+test("output with no summary block is not read as silence", () => {
+  expect(readingOf("size=N/A time=00:00:18.01")).toBeUndefined()
 })
 
-test("the quiet and the loud passage are the quietest and the loudest parts, each at its own seconds in the reel", () => {
-  const spans = passagesOf([part(30), part(60), part(45)], [level(-30), level(-10), level(-50)])
-  expect(spans).toEqual([{ name: "quiet", from: 3, to: 4.5 }, { name: "loud", from: 1, to: 3 }])
+test("a silent measurement reads as the -70 LUFS gate floor, not as a loud value", () => {
+  const silent = summary.replace("-14.2 LUFS", "-inf LUFS").replace("1.3 LU", "0.0 LU").replace("-1.7 dBFS", "-inf dBFS")
+  expect(readingOf(silent)).toEqual({ lufs: -70, lra: 0, truePeak: -70 })
 })
 
-test("a silent part is never the quiet passage", () => {
-  const spans = passagesOf([part(60), part(60), part(60)], [silent, level(-30), level(-10)])
-  expect(spans).toEqual([{ name: "quiet", from: 2, to: 4 }, { name: "loud", from: 4, to: 6 }])
+test("each momentary value is read at its own timestamp, not the one before it", () => {
+  const metadata = [
+    "frame:0    pts:0       pts_time:0",
+    "lavfi.r128.M=-120.691",
+    "frame:1    pts:4800    pts_time:0.1",
+    "lavfi.r128.M=-43.739"
+  ].join("\n")
+  expect(momentsOf(metadata)).toEqual([
+    { time: 0, lufs: -120.691 },
+    { time: 0.1, lufs: -43.739 }
+  ])
 })
 
 test("a part under one second is never a passage, even when it is the quietest", () => {
-  const spans = passagesOf([part(20), part(30), part(60)], [level(-60), level(-30), level(-10)])
+  const spans = passagesOf([part(20), part(30), part(60)], [-60, -30, -10])
   expect(spans[0]?.name).toBe("quiet")
   expect(spans[0]?.from).toBeCloseTo(20 / 30)
   expect(spans[0]?.to).toBeCloseTo(50 / 30)
+})
+
+test("the quiet and the loud passage are the quietest and the loudest parts, each at its own seconds", () => {
+  const spans = passagesOf([part(30), part(60), part(45)], [-30, -10, -50])
+  expect(spans).toEqual([
+    { name: "quiet", from: 3, to: 4.5 },
+    { name: "loud", from: 1, to: 3 }
+  ])
+})
+
+test("a silent part is never the quiet passage", () => {
+  const spans = passagesOf([part(60), part(60), part(60)], [-70, -30, -10])
+  expect(spans).toEqual([
+    { name: "quiet", from: 2, to: 4 },
+    { name: "loud", from: 4, to: 6 }
+  ])
+})
+
+test("a moment 37.8 dB under the -14 LUFS target is lifted by 37.8 dB, not clamped at 20 dB", () => {
+  const curve = curveOf([{ time: 1, lufs: -51.8 }], 0)
+  expect(Number(curve.split(" ").at(-1))).toBeCloseTo(10 ** (37.8 / 20), 4)
+})
+
+test("a moment at the silence floor is left at unity gain, not boosted", () => {
+  const curve = curveOf([{ time: 1, lufs: -70 }], 0)
+  expect(Number(curve.split(" ").at(-1))).toBe(1)
+})
+
+test("the defect reel at -12 LUFS with a 22.7 LU range is never judged good", () => {
+  const verdict = judgeSound({ lufs: -12, lra: 22.7, truePeak: -2 })
+  expect(verdict.level).not.toBe("good")
+  expect(verdict.issues).toContain("uneven")
+})
+
+test("a reel above 0 dBTP is judged bad, because its peaks clip", () => {
+  expect(judgeSound({ lufs: -14, lra: 5, truePeak: 0.2 }).level).toBe("bad")
 })
