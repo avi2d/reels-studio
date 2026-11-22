@@ -1,7 +1,7 @@
 import { Data, DateTime, Effect, FileSystem, Option, Schema } from "effect"
 import { shapeOf, type Shown } from "../shared/inserts.ts"
 import type { ReelView } from "../shared/reel.ts"
-import { fileProbeArgs } from "./attachment-notes.ts"
+import { pictureProbeArgs } from "./attachment-notes.ts"
 import {
   insertArgs, joinArgs, joinList, partArgs, partsOf, progressSeconds, sameParts, secondsOf, type InsertPicture
 } from "./media-commands.ts"
@@ -23,7 +23,10 @@ const decodeRecord = Schema.decodeUnknownOption(RecordFile)
 const encodeRecord = Schema.encodeEffect(RecordFile)
 
 const PictureProbe = Schema.fromJsonString(Schema.Struct({
-  streams: Schema.Array(Schema.Struct({ width: Schema.optionalKey(Schema.Finite), height: Schema.optionalKey(Schema.Finite) }))
+  streams: Schema.Array(Schema.Struct({ width: Schema.optionalKey(Schema.Finite), height: Schema.optionalKey(Schema.Finite) })),
+  frames: Schema.optionalKey(Schema.Array(Schema.Struct({
+    side_data_list: Schema.optionalKey(Schema.Array(Schema.Struct({ rotation: Schema.optionalKey(Schema.Finite) })))
+  })))
 }))
 const decodePictureProbe = Schema.decodeUnknownEffect(PictureProbe)
 
@@ -37,9 +40,14 @@ class PictureUnreadable extends Data.TaggedError("PictureUnreadable")<{ readonly
 
 const pictureOf = Effect.fnUntraced(function*(dir: string, insert: Shown) {
   const file = `${dir}/attached/${insert.picture}`
-  const stream = (yield* decodePictureProbe(yield* tool("ffprobe", fileProbeArgs(file), []))).streams.find((one) => one.width !== undefined)
+  const probe = yield* decodePictureProbe(yield* tool("ffprobe", pictureProbeArgs(file), []))
+  const stream = probe.streams.find((one) => one.width !== undefined)
   if (stream?.width === undefined || stream.height === undefined) return yield* new PictureUnreadable({ picture: insert.picture })
-  return { file, shape: shapeOf(stream.width, stream.height), width: stream.width, height: stream.height, start: insert.start, end: insert.end } satisfies InsertPicture
+  const rotation = probe.frames?.[0]?.side_data_list?.find((one) => one.rotation !== undefined)?.rotation
+  const upright = rotation !== undefined && Math.abs(rotation % 180) === 90
+  const width = upright ? stream.height : stream.width
+  const height = upright ? stream.width : stream.height
+  return { file, shape: shapeOf(width, height), width, height, start: insert.start, end: insert.end } satisfies InsertPicture
 })
 
 const reelPlaces = (dir: string): { readonly record: string; readonly work: string; readonly video: (name: string) => string } => ({
