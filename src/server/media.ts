@@ -3,7 +3,7 @@ import type { Offer, Pick, UploadedVideo } from "../shared/library.ts"
 import type { VideoView } from "../shared/plan.ts"
 import type { PictureSide, ReelJob, ReelView } from "../shared/reel.ts"
 import type { RetouchPicture, RetouchView } from "../shared/retouch.ts"
-import { type Clip, type Edits, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
+import { type Edits, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
 import { ApiError, badRequest, notFound } from "./api-error.ts"
 import { makeExchange, type Needs } from "./media-exchange.ts"
 import { GazeFailed, listen, look, places, previewIsFresh, readGaze, refreshPreview, type Job } from "./media-jobs.ts"
@@ -13,7 +13,7 @@ import { sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
 import { buildReel, readReel, reelPictureAt, reelVideoAt } from "./reel.ts"
 import { readTrial, runTrial, trialPicture } from "./retouch.ts"
-import { readCut, readTimeline } from "./timeline-files.ts"
+import { readCut, readTimeline, type Cut } from "./timeline-files.ts"
 
 interface Running {
   readonly dir: string
@@ -126,13 +126,13 @@ const nextReel = Effect.fnUntraced(function*(reels: Reels, closed: ReadonlySet<s
 const startReel = (reels: Reels, dir: string): Effect.Effect<boolean> =>
   Ref.modify(reels, (map) => map.get(dir)?.state === "waiting" ? [true, new Map([...map, [dir, { state: "running", done: 0 }]])] : [false, map])
 
-type Build<E, R> = (dir: string, clips: ReadonlyArray<Clip>, onDone: (share: number) => Effect.Effect<void>) => Effect.Effect<void, E, R>
+type Build<E, R> = (dir: string, cut: Cut, onDone: (share: number) => Effect.Effect<void>) => Effect.Effect<void, E, R>
 
 const reelTask = <E, R>(reels: Reels, dir: string, build: Build<E, R>) =>
   Effect.gen(function*() {
     if (!(yield* startReel(reels, dir))) return
-    const clips = yield* readCut(dir, yield* sourceNames(dir))
-    yield* build(dir, clips, (done) => setReel(reels, dir, { state: "running", done }))
+    const cut = yield* readCut(dir, yield* sourceNames(dir))
+    yield* build(dir, cut, (done) => setReel(reels, dir, { state: "running", done }))
   }).pipe(Effect.onExit((exit) => Exit.isFailure(exit) && !Exit.hasInterrupts(exit) ? setReel(reels, dir, { state: "failed" }) : forgetReel(reels, dir)))
 
 const step = Effect.fnUntraced(function*(failures: Failures, work: Ref.Ref<Work>) {
@@ -143,7 +143,7 @@ const step = Effect.fnUntraced(function*(failures: Failures, work: Ref.Ref<Work>
   const reel = yield* nextReel(failures.reels, closed)
   if (reel !== undefined) return yield* attempt(work, { dir: reel, name: "the reel" }, reelTask(failures.reels, reel, buildReel), () => Effect.void)
   const trial = yield* nextReel(failures.trials, closed)
-  if (trial !== undefined) return yield* attempt(work, { dir: trial, name: "the retouch trial" }, reelTask(failures.trials, trial, runTrial), () => Effect.void)
+  if (trial !== undefined) return yield* attempt(work, { dir: trial, name: "the retouch trial" }, reelTask(failures.trials, trial, (dir, cut, onDone) => runTrial(dir, cut.clips, onDone)), () => Effect.void)
   const stale = yield* nextStale(failures.stale, jobs)
   if (stale !== undefined) return yield* attempt(work, stale, refreshPreview(stale), () => markFailed(failures.stale, stale))
   const unseen = yield* nextUnseen(failures.unseen, jobs)
@@ -175,7 +175,7 @@ const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, r
     const dir = yield* folder(id)
     const job = (yield* Ref.get(reels)).get(dir)
     if (job?.state === "waiting" || job?.state === "running") return yield* reelOf(dir)
-    const clips = yield* readCut(dir, yield* sourceNames(dir))
+    const { clips } = yield* readCut(dir, yield* sourceNames(dir))
     if (clips.length === 0) return yield* badRequest("В монтаже нет ни одного блока. Сначала соберите блоки.")
     yield* queueWaiting(reels, dir)
     return yield* reelOf(dir)
@@ -211,7 +211,7 @@ export interface Picture {
 const trialHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, trials: Reels, context: Context.Context<Needs>) => {
   const trialOf = Effect.fnUntraced(function*(dir: string) {
     const job = (yield* Ref.get(trials)).get(dir) ?? { state: "idle" }
-    return yield* readTrial(dir, yield* readCut(dir, yield* sourceNames(dir)), job)
+    return yield* readTrial(dir, (yield* readCut(dir, yield* sourceNames(dir))).clips, job)
   })
 
   const trial = Effect.fn("Media.trial")(function*(id: string) {
@@ -220,7 +220,7 @@ const trialHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, 
 
   const startTrial = Effect.fn("Media.startTrial")(function*(id: string) {
     const dir = yield* folder(id)
-    const clips = yield* readCut(dir, yield* sourceNames(dir))
+    const { clips } = yield* readCut(dir, yield* sourceNames(dir))
     if (clips.length === 0) return yield* badRequest("В монтаже нет ни одного блока. Сначала соберите блоки.")
     yield* queueWaiting(trials, dir)
     return yield* trialOf(dir)

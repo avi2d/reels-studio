@@ -2,11 +2,14 @@ import { AROUND_JOIN_SECONDS, openPlaces, type Join, type Place } from "../share
 import type { JoinAnswer, Placed } from "../shared/timeline.ts"
 import { button, spoken } from "./controls.ts"
 import { h } from "./dom.ts"
+import { pictureChooser } from "./timeline-inserts.ts"
 
 export interface PlaceActions {
   readonly hearJoin: (join: Join) => void
   readonly hearUnaligned: (join: Join) => void
   readonly answer: (join: Join, answer: JoinAnswer) => void
+  readonly cover: (join: Join, picture: string) => void
+  readonly pictureUrl: (picture: string) => string
 }
 
 export interface PlaceCoverage {
@@ -34,6 +37,11 @@ const ANSWERS: ReadonlyArray<readonly [JoinAnswer, AnswerText]> = [
   ["leave", { label: "Оставить как есть", does: "Склейка остаётся такой, как сейчас.", done: "склейка остаётся" }]
 ]
 
+const COVER = {
+  label: "Закрыть картинкой",
+  does: "Вашу картинку видно секунду до склейки и полторы после, а голос продолжается."
+}
+
 const seconds = (value: number): string => `${value.toFixed(1).replace(".", ",")} с`
 
 const percent = (scale: number): string => `${Math.round((scale - 1) * 100)} %`
@@ -44,8 +52,11 @@ const doneText = ({ answer, trim, align }: Place, text: AnswerText): string => {
   return text.done
 }
 
-const doneOf = (place: Place): ReadonlyArray<string> =>
-  ANSWERS.flatMap(([one, text]) => one !== place.answer ? [] : [doneText(place, text)])
+const doneOf = (place: Place): ReadonlyArray<string> => {
+  const { answered } = place
+  if (answered?.answer === "cover") return [`закрыта картинкой «${answered.picture}»`]
+  return ANSWERS.flatMap(([one, text]) => one !== place.answer ? [] : [doneText(place, text)])
+}
 
 const alignNote = ({ align, answer }: Place): string => {
   if (answer !== undefined) return ""
@@ -81,10 +92,12 @@ const whereOf = (join: Join, placed: ReadonlyArray<Placed>): string => {
 
 const edgeKey = (join: Join): string => `${join.end.video}:${join.end.end}:${join.start.video}:${join.start.start}`
 
-const placeItem = (place: Place, number: number, placed: ReadonlyArray<Placed>, actions: PlaceActions): HTMLElement => {
+const placeItem = (place: Place, number: number, placed: ReadonlyArray<Placed>, pictures: ReadonlyArray<string>, actions: PlaceActions): HTMLElement => {
   const where = whereOf(place.join, placed)
   const key = edgeKey(place.join)
-  return h("li", { class: place.answer === undefined ? "pause-row place" : "pause-row place answered" },
+  const answer = place.answer
+  const cover = place.answered?.answer === "cover" ? place.answered.picture : undefined
+  return h("li", { class: answer === undefined ? "pause-row place" : "pause-row place answered" },
     h("span", { class: "where" },
       h("b", {}, `Склейка ${number}`),
       h("span", {}, [where, ...doneOf(place)].join(" · ")),
@@ -95,19 +108,23 @@ const placeItem = (place: Place, number: number, placed: ReadonlyArray<Placed>, 
         "data-key": `hear-join:${key}`,
         click: () => { actions.hearJoin(place.join) }
       }, ...spoken("Посмотреть", `Посмотреть склейку ${number}, ${where}`)),
-      ...(place.answer === "zoom"
+      ...(answer === "zoom"
         ? [button("normal", {
           title: "Те же секунды без выравнивания",
           "data-key": `hear-unaligned:${key}`,
           click: () => { actions.hearUnaligned(place.join) }
         }, ...spoken("Как было", `Посмотреть склейку ${number} без выравнивания`))]
         : []),
-      ...offered(place).map(([answer, { label, does }]) => button(place.answer === answer ? "primary" : "quiet", {
+      ...offered(place).map(([one, { label, does }]) => button(answer === one ? "primary" : "quiet", {
         title: does,
-        "data-key": `answer-join:${answer}:${key}`,
-        "aria-pressed": String(place.answer === answer),
-        click: () => { actions.answer(place.join, answer) }
-      }, ...spoken(label, `${label}: склейка ${number}`)))))
+        "data-key": `answer-join:${one}:${key}`,
+        "aria-pressed": String(answer === one),
+        click: () => { actions.answer(place.join, one) }
+      }, ...spoken(label, `${label}: склейка ${number}`))),
+      ...(pictures.length === 0 ? [] : [pictureChooser(
+        { ...COVER, name: `${COVER.label}: склейка ${number}` },
+        `cover-join:${key}`, pictures, { picture: cover, chosen: cover !== undefined }, actions.pictureUrl,
+        (picture) => { actions.cover(place.join, picture) })])))
 }
 
 const countOf = (places: ReadonlyArray<Place>, coverage: PlaceCoverage): string => {
@@ -123,11 +140,14 @@ const countOf = (places: ReadonlyArray<Place>, coverage: PlaceCoverage): string 
   return `${done}${waiting}${failed}`
 }
 
-export const placeList = (places: ReadonlyArray<Place>, placed: ReadonlyArray<Placed>, coverage: PlaceCoverage, actions: PlaceActions): HTMLElement =>
+export const placeList = (
+  places: ReadonlyArray<Place>, placed: ReadonlyArray<Placed>, coverage: PlaceCoverage, pictures: ReadonlyArray<string>, actions: PlaceActions
+): HTMLElement =>
   h("div", { class: "detail places-detail", "data-scroll-key": "places" },
     h("h3", {}, "Места для проверки"),
     h("p", { class: "did" }, `На этих склейках голова заметно сдвигается. Посмотрите каждую: студия покажет ${String(AROUND_JOIN_SECONDS).replace(".", ",")} с до склейки и столько же после, так, как склейка будет в ролике.`),
-    h("ul", { class: "answers-said" }, ...ANSWERS.map(([, { label, does }]) => h("li", {}, h("b", {}, `«${label}».`), ` ${does}`))),
+    h("ul", { class: "answers-said" }, ...[...ANSWERS.map(([, text]) => text), ...(pictures.length === 0 ? [] : [COVER])]
+      .map(({ label, does }) => h("li", {}, h("b", {}, `«${label}».`), ` ${does}`))),
     ...(coverage.waiting ? [h("p", { class: "muted", role: "status" }, "Студия ещё измеряет, где голова в кадре. Места появятся, когда она закончит.")] : []),
     h("p", { class: "muted", role: "status" }, countOf(places, coverage)),
-    h("ol", { class: "place-list" }, ...places.map((place, index) => placeItem(place, index + 1, placed, actions))))
+    h("ol", { class: "place-list" }, ...places.map((place, index) => placeItem(place, index + 1, placed, pictures, actions))))

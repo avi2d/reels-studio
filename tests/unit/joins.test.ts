@@ -58,7 +58,7 @@ test("an answer closes its place, and a second answer replaces the first instead
   expect(openPlaces(placesOf(jumpy(), heads, unheard, left))).toBe(0)
   const trim = withAnswer(left, place.join, "trim")
   expect(trim.joins).toEqual([{ end: { video: "a", at: 2 }, start: { video: "b", at: 1 }, answer: "trim" }])
-  expect(placesOf(jumpy(), heads, unheard, trim).map((one) => one.answer)).toEqual(["trim"])
+  expect(placesOf(jumpy(), heads, unheard, trim).map((one) => one.answered?.answer)).toEqual(["trim"])
 })
 
 type Look = VideoFaces["gaze"][number]
@@ -141,5 +141,5 @@ test("the seconds around a join reach back across an earlier cut instead of stop
 
 test("a timeline saved before joins took answers keeps its removed pauses instead of reading as no edits", () => {
   const old = JSON.stringify({ order: [], deleted: [], chosen: [], pauses: [{ video: "a", after: 3 }] })
-  expect(Schema.decodeSync(Schema.fromJsonString(Edits))(old)).toEqual({ order: [], deleted: [], chosen: [], pauses: [{ video: "a", after: 3 }], joins: [] })
+  expect(Schema.decodeSync(Schema.fromJsonString(Edits))(old)).toEqual({ order: [], deleted: [], chosen: [], pauses: [{ video: "a", after: 3 }], joins: [], inserts: [] })
 })
