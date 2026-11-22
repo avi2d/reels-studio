@@ -83,6 +83,13 @@ const soundGraph = (layers: ReadonlyArray<InsertLayer>): string | undefined => {
 const inputOf = (layer: InsertLayer): ReadonlyArray<string> =>
   layer.kind === "clip" ? ["-ss", layer.from.toFixed(3), "-t", (layer.end - layer.start).toFixed(3), "-i", layer.file] : ["-i", layer.file]
 
+// A seek at or past the clip's last frame gives no frame, and tpad then has none to hold.
+// The step back is wider than a frame of any usual rate, and wider than the seek's rounding to milliseconds.
+const LAST_FRAME_BACK = 0.5
+
+export const clipFrom = (start: number, duration: number | undefined): number =>
+  duration === undefined ? start : Math.min(start, Math.max(0, duration - LAST_FRAME_BACK))
+
 export const insertArgs = (reel: string, layers: ReadonlyArray<InsertLayer>, encoder: string, output: string): ReadonlyArray<string> => {
   const sound = soundGraph(layers)
   return [

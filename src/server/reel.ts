@@ -7,7 +7,7 @@ import { curveOf, gainsOf, levelArgs, type PartLevel } from "./level-curve.ts"
 import {
   isHdr, joinArgs, joinList, lastFrameOf, partArgs, partsOf, passagesOf, pictureArgs, progressSeconds, sameParts, sampledAt, secondsOf, type Moment, type Part, type Span
 } from "./media-commands.ts"
-import { insertArgs, type InsertLayer } from "./insert-commands.ts"
+import { clipFrom, insertArgs, type InsertLayer } from "./insert-commands.ts"
 import { markedPage } from "./insert-files.ts"
 import { isHdrVideo, measureLoudness, momentaryLoudness, places, tool } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
@@ -50,12 +50,13 @@ const ClipProbe = Schema.fromJsonString(Schema.Struct({
     codec_type: Schema.optionalKey(Schema.String),
     color_transfer: Schema.optionalKey(Schema.String),
     side_data_list: Schema.optionalKey(Rotations)
-  }))
+  })),
+  format: Schema.optionalKey(Schema.Struct({ duration: Schema.optionalKey(Schema.String) }))
 }))
 const decodeClipProbe = Schema.decodeUnknownEffect(ClipProbe)
 
 const clipProbeArgs = (file: string): ReadonlyArray<string> =>
-  ["-v", "error", "-show_entries", "stream=codec_type,width,height,color_transfer:stream_side_data=rotation", "-of", "json", file]
+  ["-v", "error", "-show_entries", "stream=codec_type,width,height,color_transfer:stream_side_data=rotation:format=duration", "-of", "json", file]
 
 const recorded = (inserts: ReadonlyArray<Shown>): ReadonlyArray<ShownInsert> =>
   inserts.map((one) => ({ picture: visualKey(one.visual), start: Number(one.start.toFixed(4)), end: Number(one.end.toFixed(4)) }))
@@ -84,9 +85,10 @@ const clipOf = Effect.fnUntraced(function*(file: string, visual: Visual & { read
   const stream = probe.streams.find((one) => one.codec_type === "video") ?? {}
   const { width, height } = yield* shownSize(stream, stream.side_data_list, file)
   const sound = visual.sound && probe.streams.some((one) => one.codec_type === "audio")
+  const duration = Number(probe.format?.duration ?? Number.NaN)
   return {
     kind: "clip", file, shape: shapeOf(width, height), width, height, start: insert.start, end: insert.end,
-    from: visual.start, hdr: isHdr(stream.color_transfer), sound
+    from: clipFrom(visual.start, Number.isFinite(duration) ? duration : undefined), hdr: isHdr(stream.color_transfer), sound
   } satisfies InsertLayer
 })
 

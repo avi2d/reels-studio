@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { insertArgs, type InsertLayer } from "../../src/server/insert-commands.ts"
+import { clipFrom, insertArgs, type InsertLayer } from "../../src/server/insert-commands.ts"
 
 const clip = (sound: boolean): InsertLayer =>
   ({ kind: "clip", file: "walk.mov", shape: "fill", width: 1080, height: 1920, start: 4, end: 7, from: 2, hdr: false, sound })
@@ -20,6 +20,16 @@ test("a clip insert with its sound turned on mixes that sound in from the phrase
   expect(graph).toContain("adelay=4000:all=1")
   expect(graph).toContain("[0:a][s0]amix=inputs=2")
   expect(args.slice(args.lastIndexOf("-map"), args.lastIndexOf("-map") + 2)).toEqual(["-map", "[aout]"])
+})
+
+test("a clip planned to start past its own end starts on its last frame, not on a seek that gives no frame at all", () => {
+  const from = clipFrom(20, 8)
+  expect(from).toBeLessThan(8 - 1 / 24)
+  expect(from).toBeGreaterThan(7)
+})
+
+test("a clip planned to start inside its length keeps the planned moment, not one moved toward the end", () => {
+  expect(clipFrom(2, 8)).toBe(2)
 })
 
 test("a clip insert plays from the moment the plan names and lasts only its phrase, not from the clip's first second to its end", () => {
