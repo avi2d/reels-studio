@@ -3,11 +3,15 @@ import type WaSelect from "@awesome.me/webawesome/dist/components/select/select.
 import type WaSwitch from "@awesome.me/webawesome/dist/components/switch/switch.js"
 import { iconButton } from "./controls.ts"
 import { h } from "./dom.ts"
-import { PLATFORMS, ZONES, type Platform } from "../shared/zones.ts"
+import { FRAME, PLATFORMS, ZONES, type Platform } from "../shared/zones.ts"
+
+const across = (pixels: number): string => `${(pixels / FRAME.width * 100).toFixed(2)}%`
+const down = (pixels: number): string => `${(pixels / FRAME.height * 100).toFixed(2)}%`
 
 export const styleOf = (platform: Platform): string => {
   const { top, bottom, left, right, buttons } = ZONES[platform].bands
-  return `--top: ${top}%; --bottom: ${bottom}%; --left: ${left}%; --right: ${right}%; --buttons-width: ${buttons.width}%; --buttons-from: ${buttons.from}%`
+  const column = buttons ?? { left: FRAME.width - right, top }
+  return `--top: ${down(top)}; --bottom: ${down(bottom)}; --left: ${across(left)}; --right: ${across(right)}; --buttons-left: ${across(column.left)}; --buttons-top: ${down(column.top)}`
 }
 
 export interface Margins {

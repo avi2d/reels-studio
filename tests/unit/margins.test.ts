@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { styleOf } from "../../src/web/margins.ts"
-import { fitsArea, PLATFORMS, textAreaOf, ZONES } from "../../src/shared/zones.ts"
+import { fitsArea, FRAME, PLATFORMS, textAreaOf, ZONES } from "../../src/shared/zones.ts"
 
 const GTA_HEADLINE = { left: 93, top: 120, right: 711, bottom: 311 }
 const GTA_SUBTITLE = { left: 473, top: 1629, right: 603, bottom: 1669 }
@@ -30,15 +30,23 @@ test("a word inside the box that reaches under the button column does not fit", 
   expect(fitsArea({ left: 700, top: 900, right: 960, bottom: 950 }, area)).toBe(true)
 })
 
-test("the bands reach the overlay with the top share as --top, not swapped with the bottom share", () => {
-  expect(styleOf("Instagram")).toBe("--top: 6%; --bottom: 12%; --left: 6%; --right: 6%; --buttons-width: 13%; --buttons-from: 55%")
+test("the bands reach the overlay as shares of their own side, the top over the height and the left over the width, not swapped", () => {
+  expect(styleOf("TikTok")).toBe("--top: 12.50%; --bottom: 34.38%; --left: 11.11%; --right: 11.11%; --buttons-left: 72.22%; --buttons-top: 43.75%")
+})
+
+test("the YouTube Shorts box is Google's 288 top, 672 bottom, 48 left and 192 right, not the old guessed 10% and 20%", () => {
+  expect(textAreaOf("YouTube Shorts")).toEqual({ box: { left: 48, top: 288, right: 888, bottom: 1248 }, buttons: undefined })
+})
+
+test("the TikTok box is TikTok's 160 top, 440 bottom and 80 sides of 720 by 1280, scaled by 1.5, with the 120 wide button column from 720 above the bottom", () => {
+  expect(textAreaOf("TikTok")).toEqual({ box: { left: 120, top: 240, right: 960, bottom: 1260 }, buttons: { left: 780, top: 840, right: 960, bottom: 1260 } })
 })
 
 test("no player's bands cover the whole picture", () => {
   for (const platform of PLATFORMS) {
     const { top, bottom, left, right, buttons } = ZONES[platform].bands
-    expect(top + bottom).toBeLessThan(100)
-    expect(left + right).toBeLessThan(100)
-    expect(left + buttons.width).toBeLessThan(100)
+    expect(top + bottom).toBeLessThan(FRAME.height)
+    expect(left + right).toBeLessThan(FRAME.width)
+    expect(buttons === undefined || buttons.left > left).toBe(true)
   }
 })

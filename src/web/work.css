@@ -41,7 +41,7 @@
 .zone-bottom { bottom: 0; left: 0; right: 0; height: var(--bottom); }
 .zone-left { top: var(--top); bottom: var(--bottom); left: 0; width: var(--left); }
 .zone-right { top: var(--top); bottom: var(--bottom); right: 0; width: var(--right); }
-.zone-buttons { top: var(--buttons-from); bottom: var(--bottom); right: var(--right); width: calc(var(--buttons-width) - var(--right)); }
+.zone-buttons { top: var(--buttons-top); bottom: var(--bottom); left: var(--buttons-left); right: var(--right); }
 
 .transport { display: grid; grid-template-columns: auto minmax(0, 1fr) repeat(3, auto); align-items: center; gap: 8px; }
 .clock { grid-area: 1 / 1; min-width: 5.5em; color: var(--wa-color-text-quiet); }

@@ -1,9 +1,9 @@
 ---
 name: reels-safe-area
-description: The parts of a 1080 by 1920 Reels frame that the Instagram player covers, and the box where text stays visible. Use when placing any text or a face in the frame, when checking a plan, and when the person asks why a text cannot go higher or lower.
+description: The parts of a 1080 by 1920 frame that the Instagram, YouTube Shorts and TikTok players cover, and the box where text stays visible. Use when placing any text or a face in the frame, when checking a plan, and when the person asks why a text cannot go higher or lower.
 ---
 
-# Player zones of Instagram Reels
+# Player zones
 
 The frame is 1080 by 1920 pixels.
 The player covers a strip at the top, the name and the caption at the bottom, and a column of buttons on the right.
@@ -34,6 +34,31 @@ Meta publishes no numbers for an ordinary reel, so these come from measuring the
 
 Use this box only when the person says the reel goes to ads.
 On the page it is the platform «Instagram, реклама».
+
+## YouTube Shorts
+
+| Part | Pixels | Source |
+| --- | --- | --- |
+| Top | 288 | [Google Ads Help, safe zones for vertical video ads on YouTube](https://support.google.com/google-ads/answer/9128498) |
+| Bottom | 672 | the same |
+| Left | 48 | the same |
+| Right, the whole height | 192 | the same |
+
+The box for text starts at the point 48, 288 and ends at x 888 and y 1248.
+
+## TikTok
+
+| Part | Pixels | Source |
+| --- | --- | --- |
+| Top | 240 | [TikTok Ads Manager, In-Feed ads, the In-Feed Standard safe zone file](https://ads.tiktok.com/resources/help/article/tiktok-auction-in-feed-ads) |
+| Bottom | 660 | the same |
+| Left and right | 120 each | the same |
+| Button column | x 780 to 960, y 840 to 1260 | the same |
+
+The file draws a 720 by 1280 frame, and these are its numbers times 1.5.
+The box for text starts at the point 120, 240 and ends at x 960 and y 1260.
+
+Google and TikTok publish these boxes for ads and none for ordinary videos, so the studio takes them for every video on those players.
 
 ## The rule
 
