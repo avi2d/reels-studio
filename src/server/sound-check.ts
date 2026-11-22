@@ -2,8 +2,8 @@ import { Effect, FileSystem, Option, Schema } from "effect"
 import { Levelling, PartGains, type ReelJob, type SoundCheck } from "../shared/reel.ts"
 import { partsOf, secondsOf, type Part } from "./media-commands.ts"
 import { soundPartArgs } from "./sound-commands.ts"
-import { measureLoudness, places, tool } from "./media-jobs.ts"
-import { levelSound, PartRecord, SOUND_STEPS, type Rendered } from "./reel.ts"
+import { places, tool } from "./media-jobs.ts"
+import { levelSound, partFileOf, PartRecord, renderedOf, SOUND_STEPS, type Rendered } from "./reel.ts"
 import { Settings } from "./settings.ts"
 import type { Cut } from "./timeline-files.ts"
 
@@ -32,10 +32,9 @@ const hearCut = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (shar
   yield* fs.makeDirectory(work, { recursive: true })
   const rendered: Array<Rendered> = []
   for (const [index, part] of parts.entries()) {
-    const name = `part-${String(index + 1).padStart(3, "0")}.wav`
+    const name = partFileOf(index, "wav")
     yield* tool("ffmpeg", soundPartArgs(places({ dir, name: part.video }).source, part, `${work}/${name}`), settings.heavy)
-    const lufs = (yield* measureLoudness(`${work}/${name}`)).lufs
-    rendered.push({ ...part, name, from: secondsOf(parts.slice(0, index)), to: secondsOf(parts.slice(0, index + 1)), lufs })
+    rendered.push(yield* renderedOf(work, parts, index, part, name))
     yield* onDone(PARTS_SHARE * (index + 1) / parts.length)
   }
   const heard = yield* levelSound(work, rendered, `${work}/levelled.mp4`, "sound", (step) => onDone(PARTS_SHARE + (1 - PARTS_SHARE) * step / SOUND_STEPS))

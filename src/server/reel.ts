@@ -175,7 +175,7 @@ export const renderParts = Effect.fnUntraced(function*(dir: string, parts: Reado
   for (const part of parts) {
     const { source, look } = yield* lookOf(dir, part.video, colours, hdr)
     const before = secondsOf(parts.slice(0, names.length))
-    const name = `part-${String(names.length + 1).padStart(3, "0")}.mov`
+    const name = partFileOf(names.length, "mov")
     yield* tool("ffmpeg", partArgs(source, part, look, settings.encoder, `${work}/${name}`), settings.heavy, (line) => {
       const seconds = progressSeconds(line)
       return seconds === undefined ? Effect.void : onDone(Math.min(1, (before + seconds) / total))
@@ -224,6 +224,13 @@ const publish = Effect.fnUntraced(function*(dir: string, record: typeof Record.T
 
 export type Rendered = Part & PartLevel & { readonly name: string }
 
+export const partFileOf = (index: number, extension: "mov" | "wav"): string => `part-${String(index + 1).padStart(3, "0")}.${extension}`
+
+export const renderedOf = Effect.fnUntraced(function*(work: string, parts: ReadonlyArray<Part>, index: number, part: Part, name: string) {
+  const lufs = (yield* measureLoudness(`${work}/${name}`)).lufs
+  return { ...part, name, from: secondsOf(parts.slice(0, index)), to: secondsOf(parts.slice(0, index + 1)), lufs } satisfies Rendered
+})
+
 export const SOUND_STEPS = 5
 
 export const levelSound = Effect.fnUntraced(function*(
@@ -271,8 +278,7 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
   yield* renderParts(dir, parts, colours, place.work, `${place.work}/joined.mp4`, (share) => onDone(share * partsShare))
   const rendered: Array<Rendered> = []
   for (const [index, part] of parts.entries()) {
-    const name = `part-${String(index + 1).padStart(3, "0")}.mov`
-    rendered.push({ ...part, name, from: secondsOf(parts.slice(0, index)), to: secondsOf(parts.slice(0, index + 1)), lufs: (yield* measureLoudness(`${place.work}/${name}`)).lufs })
+    rendered.push(yield* renderedOf(place.work, parts, index, part, partFileOf(index, "mov")))
   }
   const levelledFile = pictures.length === 0 ? `${place.work}/reel.mp4` : `${place.work}/levelled.mp4`
   const { levelling } = yield* levelSound(place.work, rendered, levelledFile, "picture-and-sound", (step) => onDone(partsShare + SOUND_SHARE * step / SOUND_STEPS))

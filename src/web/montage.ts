@@ -118,7 +118,7 @@ interface Screen {
 
 interface ScreenEvents {
   readonly ready: (node: HTMLVideoElement) => void
-  readonly failed: (video: string) => void
+  readonly failed: (node: HTMLVideoElement) => void
 }
 
 // One element per source video: swapping the src of a single element blanks it to black until the new file loads.
@@ -163,7 +163,7 @@ const screenOf = (projectId: string, events: ScreenEvents): Screen => {
         nodes.delete(name)
         video.remove()
         if (screen.shown === video) screen.shown = undefined
-        events.failed(name)
+        events.failed(video)
       })
       video.src = Api.previewUrl(projectId, name)
       nodes.set(name, video)
@@ -194,7 +194,10 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
   }
   const screen = screenOf(projectId, {
     ready: (node) => { if (state.awaited === node && state.clips.length === 0) reveal(node) },
-    failed: (video) => { if (state.clips.some((clip) => clip.video === video)) stop() }
+    failed: (node) => {
+      levelling.rest(node)
+      if (state.clips.some((clip) => clip.video === node.dataset.video)) stop()
+    }
   })
   const { nodeOf, seek } = screen
   const start = (node: HTMLVideoElement): void => { startOn(node, levelling, stop) }

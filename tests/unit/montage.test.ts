@@ -10,16 +10,24 @@ class FakeAudioNode {
     this.next = target
     return target
   }
+  disconnect(): void {
+    this.next = undefined
+  }
 }
 
 class FakeAudioContext {
   static readonly instances: Array<FakeAudioContext> = []
+  static readonly sources: Array<FakeAudioNode> = []
   state = "running"
   currentTime = 0
   resumes = 0
   readonly destination = new FakeAudioNode()
   constructor() { FakeAudioContext.instances.push(this) }
-  createMediaElementSource(): FakeAudioNode { return new FakeAudioNode() }
+  createMediaElementSource(): FakeAudioNode {
+    const source = new FakeAudioNode()
+    FakeAudioContext.sources.push(source)
+    return source
+  }
   resume(): Promise<void> {
     this.resumes += 1
     this.state = "running"
@@ -168,14 +176,27 @@ test("replaying a cached source resumes suspended and interrupted audio instead 
 test("removing a playing montage pauses its videos instead of retaining active detached sources", () => {
   const { player, videos, tick } = setup()
   player.play([clip("a", 0)])
+  const source = FakeAudioContext.sources.at(-1)
   const video = videos()[0]
-  if (video === undefined) throw new Error("No video was created")
+  if (video === undefined || source === undefined) throw new Error("No routed video was created")
+  expect(source.next).toBeDefined()
   video.readyState = 2
   tick()
   expect(video.paused).toBe(false)
   player.node.remove()
   tick()
   expect(video.paused).toBe(true)
+  expect(source.next).toBeUndefined()
+})
+
+test("a preview that fails mid-montage unplugs its source instead of leaving it on the shared graph", () => {
+  const { player, failShown } = setup()
+  player.play([clip("a", 0)])
+  const source = FakeAudioContext.sources.at(-1)
+  if (source === undefined) throw new Error("No source was routed")
+  expect(source.next).toBeDefined()
+  failShown()
+  expect(source.next).toBeUndefined()
 })
 
 test("a preview that fails while shown loads again on the next show", () => {
