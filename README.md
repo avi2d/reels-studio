@@ -35,8 +35,18 @@ To start the studio:
 The log prints `Listening on http://0.0.0.0:8765`.
 The page shows the videos as tiles with covers and a button that starts the next one.
 
-The studio answers only addresses of a private network and has no password.
-Do not forward its port to the internet.
+The studio answers the home network and the owner's Mac through the `local-apps` gateway.
+The gateway must listen only on that Mac's loopback address.
+The studio has no public address or password.
+Do not forward the studio or gateway port to the internet.
+
+## Share a demo
+
+On the computer running the demo:
+
+1. Start the demo on a free port and note the server process ID.
+1. Run `local-apps register <name> --port <port> --pid <server pid>`.
+1. Give the owner the printed address and the path to the demo.
 
 ## Change the settings
 

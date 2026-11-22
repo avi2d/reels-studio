@@ -1,5 +1,7 @@
-import { LOUDNESS_TARGET } from "../shared/reel.ts"
+import { LOUDNESS_TARGET, type Gain, type PartGains } from "../shared/reel.ts"
 import { FADE } from "../shared/timeline.ts"
+import type { Part } from "./media-commands.ts"
+import { streamMaps, type Streams } from "./sound-commands.ts"
 
 const CURVE_FLOOR_LUFS = -60
 const CURVE_MIN_DB = -20
@@ -10,13 +12,9 @@ const LIMIT_LINEAR = 0.75
 const FRAME_SAMPLES = 160
 const SAMPLE_RATE = 48000
 const STEP_SECONDS = FRAME_SAMPLES / SAMPLE_RATE
+const TIME_EPSILON = 1e-6
 
 export interface PartLevel { readonly from: number; readonly to: number; readonly lufs: number }
-
-export interface Gain {
-  readonly time: number
-  readonly db: number
-}
 
 const partGainOf = (lufs: number, offset: number): number =>
   lufs <= CURVE_FLOOR_LUFS ? 0 : Math.min(CURVE_MAX_DB, Math.max(CURVE_MIN_DB, LOUDNESS_TARGET - lufs)) + offset
@@ -42,9 +40,23 @@ export const gainsOf = (parts: ReadonlyArray<PartLevel>, offset: number): Readon
 export const curveOf = (gains: ReadonlyArray<Gain>): string =>
   gains.map(({ time, db }) => `${time.toFixed(4)} volume volume ${(10 ** (db / 20)).toFixed(6)}`).join(";")
 
-export const levelArgs = (source: string, curve: string, output: string): ReadonlyArray<string> => [
+// Each part takes the gain in force when it starts, so its first moment is never left without a gain.
+export const partGainsOf = (gains: ReadonlyArray<Gain>, parts: ReadonlyArray<Part & PartLevel>): ReadonlyArray<PartGains> =>
+  parts.map((part) => {
+    const opening = gains.findLast(({ time }) => time <= part.from + TIME_EPSILON) ?? gains[0]
+    const inside = gains.filter(({ time }) => time > part.from + TIME_EPSILON && time < part.to - TIME_EPSILON)
+    const toSource = (time: number): number => Number((part.start + time - part.from).toFixed(4))
+    return {
+      video: part.video,
+      from: part.start,
+      to: toSource(part.to),
+      gains: [...(opening === undefined ? [] : [{ time: part.start, db: opening.db }]), ...inside.map(({ time, db }) => ({ time: toSource(time), db }))]
+    }
+  })
+
+export const levelArgs = (source: string, curve: string, output: string, streams: Streams): ReadonlyArray<string> => [
   "-hide_banner", "-loglevel", "error", "-y", "-i", source,
-  "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy",
+  ...streamMaps(streams),
   "-af", `aresample=${SAMPLE_RATE},asetnsamples=n=${FRAME_SAMPLES}:p=0,asendcmd=f=${curve},volume=1,alimiter=limit=${LIMIT_LINEAR}:attack=5:release=50:level=disabled`,
   "-c:a", "aac", "-b:a", "192k", "-map_metadata", "-1", "-movflags", "+faststart", "-f", "mp4", output
 ]

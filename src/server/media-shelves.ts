@@ -25,6 +25,7 @@ export interface Failures {
   readonly stale: Unheard
   readonly reels: Reels
   readonly trials: Reels
+  readonly sounds: Reels
 }
 
 const view = Effect.fnUntraced(function*(unheard: Unheard, job: Job) {
