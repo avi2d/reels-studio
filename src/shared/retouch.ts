@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { Face } from "./face.ts"
 import { ReelJob } from "./reel.ts"
 
 export const TRIAL_SECONDS = 20
@@ -9,6 +10,7 @@ export type RetouchPicture = typeof RetouchPicture.Type
 export const RetouchView = Schema.Struct({
   job: ReelJob,
   cut: Schema.Finite,
+  face: Face,
   trial: Schema.optionalKey(Schema.Struct({ made: Schema.String, seconds: Schema.Finite, took: Schema.Finite }))
 })
 export type RetouchView = typeof RetouchView.Type

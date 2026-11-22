@@ -2,6 +2,7 @@ import { Cause, Context, Deferred, Effect, Exit, FileSystem, Layer, Option, Ref 
 import type { Offer, Pick, UploadedVideo } from "../shared/library.ts"
 import type { VideoView } from "../shared/plan.ts"
 import type { PictureSide, ReelJob, ReelView } from "../shared/reel.ts"
+import type { Face } from "../shared/face.ts"
 import type { RetouchPicture, RetouchView } from "../shared/retouch.ts"
 import { type Edits, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
 import { ApiError, badRequest, notFound } from "./api-error.ts"
@@ -12,7 +13,8 @@ import { Projects } from "./projects.ts"
 import { sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
 import { buildReel, readReel, reelPictureAt, reelVideoAt, type ReelVersion } from "./reel.ts"
-import { readTrial, runTrial, trialPicture } from "./retouch.ts"
+import { writeFace } from "./face.ts"
+import { lastTrial, readTrial, runTrial, trialPicture } from "./retouch.ts"
 import { readCut, readTimeline, type Cut } from "./timeline-files.ts"
 
 interface Running {
@@ -232,11 +234,17 @@ const trialHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, 
     return target
   }, orBroken, Effect.provideContext(context))
 
-  return { trial, startTrial, trialFile }
+  const setFace = Effect.fn("Media.setFace")(function*(id: string, face: Face) {
+    const dir = yield* folder(id)
+    if (face === "light" && (yield* lastTrial(dir)) === undefined) return yield* badRequest(NO_TRIAL_YET)
+    yield* writeFace(dir, face)
+    return yield* trialOf(dir)
+  }, orBroken, Effect.provideContext(context))
+
+  return { trial, startTrial, trialFile, setFace }
 }
 
-
-
+const NO_TRIAL_YET = "Сначала сделайте пробу и сравните лицо до и после."
 
 export class Media extends Context.Service<Media, {
   readonly videos: (id: string) => Effect.Effect<ReadonlyArray<VideoView>, ApiError>
@@ -258,6 +266,7 @@ export class Media extends Context.Service<Media, {
   readonly trial: (id: string) => Effect.Effect<RetouchView, ApiError>
   readonly startTrial: (id: string) => Effect.Effect<RetouchView, ApiError>
   readonly trialFile: (id: string, name: RetouchPicture) => Effect.Effect<string, ApiError>
+  readonly setFace: (id: string, face: Face) => Effect.Effect<RetouchView, ApiError>
   readonly reelPicture: (id: string, picture: Picture) => Effect.Effect<string, ApiError>
   readonly withoutWork: <A, E, R>(dir: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }>()("reels-studio/Media") {
@@ -345,9 +354,9 @@ export class Media extends Context.Service<Media, {
 
       const { reel, buildReel: queueReel, cancelReel, reelFile, reelPicture } = reelHandlers(projects.folder, reels, work, context)
 
-      const { trial, startTrial, trialFile } = trialHandlers(projects.folder, trials, context)
+      const { trial, startTrial, trialFile, setFace } = trialHandlers(projects.folder, trials, context)
 
-      return Media.of({ videos, preview, retry, library, reuse, uploaded, retryUploaded, uploadedPreview, removeUploaded, timeline, exchangeEdits, mergeEdits, reel, buildReel: queueReel, cancelReel, reelFile, reelPicture, trial, startTrial, trialFile, withoutWork })
+      return Media.of({ videos, preview, retry, library, reuse, uploaded, retryUploaded, uploadedPreview, removeUploaded, timeline, exchangeEdits, mergeEdits, reel, buildReel: queueReel, cancelReel, reelFile, reelPicture, trial, startTrial, trialFile, setFace, withoutWork })
     })
   )
 }

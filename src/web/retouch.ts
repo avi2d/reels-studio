@@ -1,4 +1,5 @@
 import { Effect } from "effect"
+import type { Face } from "../shared/face.ts"
 import { minuteTakes, TRIAL_SECONDS, type RetouchView } from "../shared/retouch.ts"
 import * as Api from "./api.ts"
 import { button } from "./controls.ts"
@@ -7,9 +8,15 @@ import { h } from "./dom.ts"
 const POLL_MS = 1000
 const IDLE_MS = 5000
 
-const ABOUT = `Студия возьмёт первые ${TRIAL_SECONDS} секунд ролика и только на лице выровняет тон кожи и осветлит белки глаз. Новых кадров она не рисует, исходные видео не меняются. Сборка ролика пробу не запускает.`
+const ABOUT = `Студия возьмёт первые ${TRIAL_SECONDS} секунд ролика и только на лице выровняет тон кожи и осветлит белки глаз. Новых кадров она не рисует, исходные видео не меняются. Проба ролик не меняет: что будет в ролике, вы выбираете ниже.`
 const FAILED = "Проба не получилась. Подробности в журнале студии. Нажмите «Сделать пробу», чтобы попробовать ещё раз."
 const NO_CUT = "В монтаже нет ни одного блока. Соберите блоки, и пробу можно будет сделать."
+const FACE_OFF = "Лицо останется таким, как в исходных видео."
+const FACE_LIGHT = "Студия выровняет тон кожи и осветлит белки глаз во всём ролике, только на лице."
+const NEEDS_TRIAL = "Чтобы выбрать «Слегка выровнять», сначала сделайте пробу и сравните лицо до и после."
+const NEXT_BUILD = "Новый выбор попадёт в файл при следующей сборке на вкладке «Готовый ролик»."
+
+export const faceHint = (view: RetouchView): string => view.trial === undefined ? NEEDS_TRIAL : NEXT_BUILD
 
 export const spentText = (seconds: number): string => {
   const whole = Math.max(1, Math.round(seconds))
@@ -33,8 +40,27 @@ export const costText = (trial: { readonly seconds: number; readonly took: numbe
 const picture = (caption: string, image: HTMLImageElement): HTMLElement =>
   h("figure", { class: "trial-picture" }, image, h("figcaption", {}, caption))
 
+const faceChoice = (projectId: string, onPick: (face: Face) => void): { readonly node: HTMLElement; readonly show: (view: RetouchView) => void } => {
+  const pick = (face: Face): HTMLInputElement =>
+    h("input", { type: "radio", name: `face-${projectId}`, value: face, checked: face === "off", change: () => { onPick(face) } })
+  const off = pick("off")
+  const light = pick("light")
+  const option = (radio: HTMLInputElement, name: string, about: string): HTMLElement =>
+    h("label", { class: "choice" }, radio, h("span", {}, h("span", { class: "name" }, name), h("span", { class: "muted" }, about)))
+  const hint = h("p", { class: "muted" })
+  const node = h("fieldset", { class: "picker" }, h("legend", {}, "Лицо в готовом ролике"),
+    h("div", { class: "face-choices" }, option(off, "Не трогать", FACE_OFF), option(light, "Слегка выровнять", FACE_LIGHT)), hint)
+  const show = (view: RetouchView): void => {
+    off.checked = view.face === "off"
+    light.checked = view.face === "light"
+    light.disabled = view.trial === undefined && view.face === "off"
+    hint.textContent = faceHint(view)
+  }
+  return { node, show }
+}
+
 export const retouchCard = (projectId: string): { readonly node: HTMLElement; readonly refresh: () => void; readonly pause: () => void } => {
-  const state = { timer: 0, made: "", busy: false, counter: 0, applied: 0 }
+  const state = { timer: 0, made: "", busy: false, saving: false, counter: 0, applied: 0 }
   const status = h("p", { class: "muted", role: "status" })
   const bar = h("progress", { max: "1", value: "0", hidden: true })
   const problem = h("p", { class: "error", role: "alert" })
@@ -46,7 +72,8 @@ export const retouchCard = (projectId: string): { readonly node: HTMLElement; re
     h("div", { class: "trial-pair" }, picture("До", before), picture("После", after)),
     clip, h("p", { class: "muted" }, "В видео слева до, справа после."), cost)
   const start = button("normal", {}, "Сделать пробу")
-  const node = h("section", { class: "card reel-card" }, h("h2", {}, "Проба: ровная кожа и белки глаз"), h("p", { class: "muted" }, ABOUT), h("div", { class: "row" }, start), status, bar, problem, result)
+  const choice = faceChoice(projectId, (face) => { choose(face) })
+  const node = h("section", { class: "card reel-card" }, h("h2", {}, "Проба: ровная кожа и белки глаз"), h("p", { class: "muted" }, ABOUT), h("div", { class: "row" }, start), status, bar, problem, result, choice.node)
 
   const show = (view: RetouchView): void => {
     state.busy = view.job.state === "waiting" || view.job.state === "running"
@@ -57,6 +84,7 @@ export const retouchCard = (projectId: string): { readonly node: HTMLElement; re
     bar.value = view.job.state === "running" ? view.job.done : 0
     if (view.job.state === "failed") problem.textContent = FAILED
     else if (state.busy) problem.textContent = ""
+    if (!state.saving) choice.show(view)
     result.hidden = view.trial === undefined
     if (view.trial === undefined) return
     if (state.made !== view.trial.made) {
@@ -103,6 +131,24 @@ export const retouchCard = (projectId: string): { readonly node: HTMLElement; re
       }))
     ))
   })
+
+  const choose = (face: Face): void => {
+    state.saving = true
+    problem.textContent = ""
+    invalidate()
+    Effect.runFork(Api.setFace(projectId, face).pipe(
+      Effect.map((view) => {
+        state.saving = false
+        invalidate()
+        show(view)
+      }),
+      Effect.catchTag("Failed", (error) => Effect.sync(() => {
+        state.saving = false
+        problem.textContent = error.message
+        refresh()
+      }))
+    ))
+  }
 
   return { node, refresh, pause: () => { clip.pause() } }
 }

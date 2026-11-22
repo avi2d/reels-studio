@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
-import { compareArgs, firstSeconds, retouchedFrames } from "../../src/server/media-commands.ts"
-import { costText, spentText, trialStatus } from "../../src/web/retouch.ts"
+import { faceOf } from "../../src/server/face.ts"
+import { compareArgs, firstSeconds, retouchArgs, retouchedFrames } from "../../src/server/media-commands.ts"
+import { costText, faceHint, spentText, trialStatus } from "../../src/web/retouch.ts"
 
 test("the trial takes the first 20 seconds of the cut and shortens the part that crosses them, not the whole part", () => {
   const parts = [{ video: "a", start: 0, frames: 450 }, { video: "b", start: 3, frames: 450 }, { video: "c", start: 0, frames: 30 }]
@@ -36,8 +37,27 @@ test("54 seconds of work on 20 seconds of video come to 2 min 42 s a minute, not
 })
 
 test("the trial status names the queue, the share done and an empty cut, and says nothing when idle", () => {
-  expect(trialStatus({ job: { state: "waiting" }, cut: 30 })).toBe("Проба ждёт своей очереди: компьютер занят другой тяжёлой работой.")
-  expect(trialStatus({ job: { state: "running", done: 0.456 }, cut: 30 })).toBe("Студия делает пробу: 45%")
-  expect(trialStatus({ job: { state: "idle" }, cut: 0 })).toBe("В монтаже нет ни одного блока. Соберите блоки, и пробу можно будет сделать.")
-  expect(trialStatus({ job: { state: "idle" }, cut: 30 })).toBe("")
+  expect(trialStatus({ job: { state: "waiting" }, cut: 30, face: "off" })).toBe("Проба ждёт своей очереди: компьютер занят другой тяжёлой работой.")
+  expect(trialStatus({ job: { state: "running", done: 0.456 }, cut: 30, face: "off" })).toBe("Студия делает пробу: 45%")
+  expect(trialStatus({ job: { state: "idle" }, cut: 0, face: "off" })).toBe("В монтаже нет ни одного блока. Соберите блоки, и пробу можно будет сделать.")
+  expect(trialStatus({ job: { state: "idle" }, cut: 30, face: "off" })).toBe("")
+})
+
+test("a project with no face file or a broken one reads as off, so her face is never changed without her choice", () => {
+  expect(faceOf(undefined)).toBe("off")
+  expect(faceOf("not json")).toBe("off")
+  expect(faceOf(JSON.stringify({ face: "strong" }))).toBe("off")
+  expect(faceOf(JSON.stringify({ face: "light" }))).toBe("light")
+})
+
+test("the face choice asks for a trial first when there is none, not for a rebuild of a face she has not seen", () => {
+  expect(faceHint({ job: { state: "idle" }, cut: 30, face: "off" })).toBe("Чтобы выбрать «Слегка выровнять», сначала сделайте пробу и сравните лицо до и после.")
+  expect(faceHint({ job: { state: "idle" }, cut: 30, face: "off", trial: { made: "m", seconds: 20, took: 54 } })).toBe("Новый выбор попадёт в файл при следующей сборке на вкладке «Готовый ролик».")
+})
+
+test("the reel retouch writes no face close-ups, while the trial still asks for them", () => {
+  expect(retouchArgs("/g", { before: "/w/in.mp4", folder: "/w/face", closeUp: false }, "libx264")).toEqual(
+    ["run", "--project", "/g", "python", "/g/retouch.py", "--encoder", "libx264", "--no-close-up", "/w/in.mp4", "/w/face"])
+  expect(retouchArgs("/g", { before: "/w/in.mp4", folder: "/w/trial", closeUp: true }, "libx264")).toEqual(
+    ["run", "--project", "/g", "python", "/g/retouch.py", "--encoder", "libx264", "/w/in.mp4", "/w/trial"])
 })
