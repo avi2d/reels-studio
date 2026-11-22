@@ -1,8 +1,10 @@
 import { Effect, FileSystem, Layer, Option, Schema, Stream } from "effect"
 import { Pick } from "../shared/library.ts"
+import { RetouchPicture } from "../shared/retouch.ts"
+import { PictureSide } from "../shared/reel.ts"
 import { Edits, type TimelinePage } from "../shared/timeline.ts"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
-import { ApiError, badRequest } from "./api-error.ts"
+import { ApiError, badRequest, notFound } from "./api-error.ts"
 import { Attachments } from "./attachments.ts"
 import { Brief } from "./brief.ts"
 import { Chat } from "./chat.ts"
@@ -29,8 +31,20 @@ const json = (body: unknown, status = 200) => HttpServerResponse.jsonUnsafe(body
 const param = (name: string) =>
   Effect.map(HttpRouter.params, (params) => params[name] ?? "")
 
-const madeOf = (request: HttpServerRequest.HttpServerRequest): string =>
-  new URL(request.url, "http://localhost").searchParams.get("made") ?? ""
+const queryOf = (request: HttpServerRequest.HttpServerRequest, name: string): string =>
+  new URL(request.url, "http://localhost").searchParams.get(name) ?? ""
+
+const madeOf = (request: HttpServerRequest.HttpServerRequest): string => queryOf(request, "made")
+
+const decodeSide = Schema.decodeUnknownOption(PictureSide)
+
+const pictureOf = (request: HttpServerRequest.HttpServerRequest) => {
+  const join = Number(queryOf(request, "join"))
+  const side = Option.getOrUndefined(decodeSide(queryOf(request, "side")))
+  return Number.isInteger(join) && join >= 1 && side !== undefined
+    ? Effect.succeed({ made: madeOf(request), join, side })
+    : badRequest("Такой картинки нет")
+}
 
 const versionOf = (request: HttpServerRequest.HttpServerRequest): ReelVersion =>
   new URL(request.url, "http://localhost").searchParams.get("version") === "before" ? "before" : "after"
@@ -224,6 +238,11 @@ const reel = Layer.mergeAll(
     const target = yield* media.reelFile(yield* param("id"), madeOf(request), versionOf(request))
     return yield* sendFile(target, "video/mp4", request.headers["range"])
   }))),
+  HttpRouter.add("GET", "/api/projects/:id/reel/picture", (request) => reply(Effect.gen(function*() {
+    const media = yield* Media
+    const target = yield* media.reelPicture(yield* param("id"), yield* pictureOf(request))
+    return yield* sendFile(target, "image/jpeg", request.headers["range"])
+  }))),
   HttpRouter.add("GET", "/api/projects/:id/reel/download", (request) => reply(Effect.gen(function*() {
     const media = yield* Media
     const store = yield* Projects
@@ -231,6 +250,23 @@ const reel = Layer.mergeAll(
     const target = yield* media.reelFile(id, madeOf(request), "after")
     const { title } = yield* store.get(id)
     return yield* sendFile(target, "video/mp4", request.headers["range"], { "content-disposition": attachment(title) })
+  })))
+)
+
+const retouch = Layer.mergeAll(
+  HttpRouter.add("GET", "/api/projects/:id/retouch", reply(Effect.gen(function*() {
+    const media = yield* Media
+    return json(yield* media.trial(yield* param("id")))
+  }))),
+  HttpRouter.add("POST", "/api/projects/:id/retouch", reply(Effect.gen(function*() {
+    const media = yield* Media
+    return json(yield* media.startTrial(yield* param("id")), 202)
+  }))),
+  HttpRouter.add("GET", "/api/projects/:id/retouch/:name", (request) => reply(Effect.gen(function*() {
+    const media = yield* Media
+    const name = yield* Schema.decodeUnknownEffect(RetouchPicture)(yield* param("name")).pipe(Effect.mapError(() => notFound("Такого файла в пробе нет")))
+    const target = yield* media.trialFile(yield* param("id"), name)
+    return yield* sendFile(target, name.endsWith(".jpg") ? "image/jpeg" : "video/mp4", request.headers["range"])
   })))
 )
 
@@ -300,4 +336,4 @@ const homeOnly = HttpRouter.middleware(
   { global: true }
 )
 
-export const apiRoutes = Layer.mergeAll(projects, brief, chat, uploads, videos, reel, homeOnly)
+export const apiRoutes = Layer.mergeAll(projects, brief, chat, uploads, videos, reel, retouch, homeOnly)

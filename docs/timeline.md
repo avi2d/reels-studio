@@ -7,7 +7,7 @@ The page of one video folder shows the speech of every heard video as a row of b
 
 ## The working screen
 
-Four stages work: «Видео и задание», «Дубли и блоки», «Паузы и склейки» and «Готовый ролик».
+Five stages work: «Видео и задание», «Дубли и блоки», «Паузы и склейки», «Готовый ролик» and «Внешность».
 A bar at the top holds the way back, the title, the undo and redo buttons and the chat.
 The player stands next to the stage tabs, the row of blocks and the open stage.
 The row of blocks sits between the tabs and the open stage, with the text, the clip and the pauses of each block.
@@ -16,7 +16,8 @@ Click the stop icon on that button to stop playback.
 The chat opens as a drawer over the page.
 On a phone the player sits above the tabs.
 The take, pause and place lists scroll without moving the player or the tabs.
-On a phone the tabs read «Видео», «Дубли», «Паузы» and «Ролик», so all four fit on one line.
+On a phone the tabs read «Видео», «Дубли», «Паузы», «Ролик» and «Лицо».
+The open tab scrolls into view.
 
 ## Terms
 
@@ -96,6 +97,18 @@ A bar follows the parts, the levelling and the inserts.
 The build waits while the computer hears another video, because the studio runs one heavy job at a time.
 The originals stay untouched.
 
+## Skin colour across videos
+
+Before it encodes, the build measures the skin colour of each video in the cut, on the home computer and without the chat model.
+It reads up to 15 frames with a face from the preview, spread over the video.
+In each frame it takes a box of cheeks and nose under the eyes from the gaze samples.
+The skin colour is the median red, green and blue of the pixels of all boxes.
+The first video of the cut with a face, in cut order, keeps its colour.
+Each other video gets a gain per channel that brings its skin colour to that one, between 0.8 and 1.25.
+A video with no face in its gaze samples keeps its colour.
+For each joined pair of videos, the build saves two pictures of their first join, before and after the gain.
+The «Внешность» stage shows them side by side under the skin and eye trial.
+
 The stage plays the built file and offers «Скачать».
 The stage names the measured loudness of the built file with a plain verdict word.
 It says when the peaks stay clean.
@@ -107,6 +120,23 @@ The stage asks for a rebuild to level its sound.
 On an iPhone, save the downloaded file to «Фото», and the Instagram reel screen finds it there.
 After a change of the cut, the stage says the file no longer matches the cut, and «Собрать заново» builds it again.
 A server restart forgets a build in progress, and the person presses the button again.
+
+## The skin and eye trial
+
+The «Внешность» stage holds the edits to how the speaker looks.
+Its «Сделать пробу» tries a retouch on the first 20 s of the cut, on the home computer.
+The trial runs only when the person presses that button, and a reel build never runs it.
+The studio builds those 20 s the way it builds the reel, but without the skin colour gain, then `tools/gaze/retouch.py` reads them frame by frame.
+In each frame, the Face Landmarker model finds the face, and the retouch changes pixels only inside it.
+It evens the skin tone and lightens the eye whites, and it draws no new frame.
+Skin evening removes small tone steps between fine detail and broad shading, so pores, the nose and the cheekbones stay.
+Eye lightening lifts and whitens only the light pixels of each eye outside the iris.
+The stage shows a close-up of the face before and after.
+It also shows a clip with the original on the left and the retouch on the right.
+It also shows how long the retouch of the 20 s took and how long a minute of video would take.
+The trial waits in the same queue as the other heavy jobs, and a new trial replaces the last one.
+The close-up comes from the first frame with a face from 3 s on.
+Without such a frame the trial fails, and the last trial stays.
 
 ## Keys
 
@@ -201,6 +231,10 @@ Each video folder holds these next to `plan.json`:
 | `inserts.json` | The pictures to show over phrases, written by the chat model |
 | `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses and the answers to the places to check and to the inserts |
 | `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
+| `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
 | `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |
-| `reel/reel.json` | The build time, the video file it published, the parts, the inserts and the measured loudness it holds. The stage reads it to tell whether the cut changed since |
+| `reel/reel.json` | The build time, the video file it published, the parts, the inserts, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
+| `retouch/trial.json` | The time of the last skin and eye trial, the seconds it retouched and the seconds that took |
+| `retouch/before.jpg`, `retouch/after.jpg` | The face close-up of the trial before and after |
+| `retouch/compare.mp4` | The 20 s of the trial with the original on the left and the retouch on the right
 | `gathered.json` | The heard videos and the settled gaze the studio last asked the chat model to gather blocks from, with a failed mark, the hash of the `blocks.json` the failed attempt saw, and the hash of the `blocks.json` it last shortened pauses for |

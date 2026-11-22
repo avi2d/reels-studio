@@ -1,7 +1,7 @@
 import type { WaTabShowEvent } from "@awesome.me/webawesome/dist/events/tab-show.js"
 import { h } from "./dom.ts"
 
-const LIVE = [["brief", "Видео и задание", "Видео"], ["takes", "Дубли и блоки", "Дубли"], ["pauses", "Паузы и склейки", "Паузы"], ["file", "Готовый ролик", "Ролик"]] as const
+const LIVE = [["brief", "Видео и задание", "Видео"], ["takes", "Дубли и блоки", "Дубли"], ["pauses", "Паузы и склейки", "Паузы"], ["file", "Готовый ролик", "Ролик"], ["looks", "Внешность", "Лицо"]] as const
 export type StageId = typeof LIVE[number][0]
 
 const stageOf = (name: string): StageId | undefined => LIVE.find(([id]) => id === name)?.[0]
@@ -24,9 +24,10 @@ export const stageRail = (panes: Readonly<Record<StageId, HTMLElement>>, shared:
     const panel = h("wa-tab-panel", { name: id }, panes[id])
     return { id, tab, count, panel }
   })
-  const rail = h("wa-tab-group", { class: "stages", active: state.now, "without-scroll-controls": true },
+  const rail = h("wa-tab-group", { class: "stages", active: state.now },
     ...steps.map((step) => step.tab), shared, ...steps.map((step) => step.panel))
   const show = (): void => {
+    steps.find((step) => step.id === state.now)?.tab.scrollIntoView({ block: "nearest", inline: "nearest" })
     onOpen(state.now)
   }
   const open = (stage: StageId): void => {

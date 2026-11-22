@@ -13,6 +13,7 @@ import { shrinkWhenScrolledPast } from "./mini.ts"
 import { askToRemove } from "./remove.ts"
 import { run } from "./run.ts"
 import { reelPane } from "./reel.ts"
+import { retouchCard } from "./retouch.ts"
 import { stageRail, type StageId, type StageNote } from "./stages.ts"
 import { timelineCard, type Status } from "./timeline.ts"
 import { uploadedView } from "./uploaded.ts"
@@ -58,7 +59,7 @@ const pausesNote = ({ pauses, places }: Status): string => {
   return [removed, check].filter((part) => part !== "").join(" · ")
 }
 
-const stageNotes = ({ blocks, heard, pauses, places, placesComplete }: Status): Readonly<Record<Exclude<StageId, "file">, StageNote>> => ({
+const stageNotes = ({ blocks, heard, pauses, places, placesComplete }: Status): Readonly<Record<Exclude<StageId, "file" | "looks">, StageNote>> => ({
   brief: { note: countNote(heard), done: heard > 0 },
   takes: { note: countNote(blocks ?? 0), done: blocks !== undefined },
   pauses: {
@@ -90,7 +91,7 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
       },
       edited: () => { builtPane?.edited() },
       settled: (ok) => { builtPane?.settled(ok) },
-      active: () => activeStage.now !== "file"
+      active: () => activeStage.now !== "file" && activeStage.now !== "looks"
     })
     const built = reelPane(project.id, {
       note: (note) => { stages.note("file", note) },
@@ -99,12 +100,14 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
       pending: () => timeline.busy()
     })
     builtPane = built
+    const looks = retouchCard(project.id)
     const brief = briefCards(project.id, (message) => { chat.ask(message) }, () => { timeline.refresh() })
     const refresh = (): void => {
       videos.refresh()
       timeline.refresh()
       brief.refresh()
       built.refresh()
+      looks.refresh()
     }
     const chat = chatDrawer(project, messages, models, refresh)
     const remove = button("quiet", {
@@ -114,14 +117,19 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
     const back = iconButton("plain", "back", "Все ролики", { class: "back", href: HOME_PATH })
     const { panels } = timeline
     const stages = stageRail(
-      { brief: h("div", { class: "pane" }, videoCard(project, refresh), ...brief.nodes, videos.node, remove), takes: panels.takes, pauses: panels.pauses, file: built.node },
+      { brief: h("div", { class: "pane" }, videoCard(project, refresh), ...brief.nodes, videos.node, remove), takes: panels.takes, pauses: panels.pauses, file: built.node, looks: h("div", { class: "pane" }, looks.node, built.colour) },
       panels.tracks,
       (stage) => {
         activeStage.now = stage
         reel.dataset.stage = stage
-        if (stage !== "file") return built.pause()
+        if (stage !== "file") built.pause()
+        if (stage !== "looks") looks.pause()
+        if (stage !== "file" && stage !== "looks") return
         timeline.stop()
-        void timeline.flush().then(() => { built.refresh() })
+        void timeline.flush().then(() => {
+          built.refresh()
+          if (stage === "looks") looks.refresh()
+        })
       })
     reel.append(
       h("header", { class: "bar" },
