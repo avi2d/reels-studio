@@ -114,15 +114,24 @@ const saveEdit = async (page: Page, edit: () => Promise<void>): Promise<void> =>
   assert(saved.ok(), `The timeline did not save: ${saved.status()}`)
 }
 
-const buildBlocks = async (page: Page): Promise<void> => {
+const buildBlocks = async (page: Page, title: string): Promise<void> => {
   await uploadOnVideosPage(page)
-  await createProject(page, "Сборка ролика")
+  await createProject(page, title)
   await addFromList(page)
   await page.locator('wa-tab[panel="takes"]').click()
   await page.getByRole("button", { name: "Собрать блоки", exact: true }).click()
   await page.getByText("Блоки готовы.", { exact: true }).waitFor()
   await page.getByRole("button", { name: "Закрыть чат" }).click()
   await page.getByRole("heading", { name: "Блок 1. Начало", exact: true }).waitFor()
+}
+
+const summaryReads = async (page: Page, wanted: string): Promise<void> => {
+  try {
+    await page.getByText(wanted, { exact: true }).waitFor()
+  } catch (error) {
+    const shown = await page.getByText(/^Блоков: /u).allTextContents()
+    throw new Error(`The summary never read «${wanted}», it reads ${JSON.stringify(shown)}`, { cause: error })
+  }
 }
 
 const changeCut = async (page: Page): Promise<void> => {
@@ -133,7 +142,7 @@ const changeCut = async (page: Page): Promise<void> => {
   await saveEdit(page, () => timeline.getByRole("button", { name: /^Переместить блок «Конец»/u }).press("ArrowLeft"))
   await timeline.getByRole("button", { name: "Блок 1. Конец" }).waitFor()
   await page.locator('wa-tab[panel="pauses"]').click()
-  await page.getByText("Блоков: 2 · ролик 0:05 · пауз: 1 на 0:02", { exact: true }).waitFor()
+  await summaryReads(page, "Блоков: 2 · ролик 0:05 · пауз: 1 на 0:02")
   await saveEdit(page, () => page.getByRole("button", { name: /^Убрать паузу 1,5 с в блоке 2$/u }).click())
 }
 
@@ -159,12 +168,88 @@ const verifyPlayback = async (page: Page): Promise<void> => {
 const preview: ProductCheck = {
   name: "the built preview plays the saved block order and chosen take and skips the removed pause",
   run: async (page) => {
-    await buildBlocks(page)
+    await buildBlocks(page, "Сборка ролика")
     await changeCut(page)
     await page.reload()
-    await page.getByText("Блоков: 2 · ролик 0:04 · пауз нет", { exact: true }).waitFor()
+    await summaryReads(page, "Блоков: 2 · ролик 0:04 · пауз нет")
     await verifyPlayback(page)
     return { targets: ["saved cut duration", "reordered first block", "chosen take and pause seek"], found: [] }
+  }
+}
+
+type ScrollInput = "wheel" | "touch"
+
+const SCROLL_STEP = 200
+
+const swipeUp = async (page: Page, x: number, y: number): Promise<void> => {
+  const session = await page.context().newCDPSession(page)
+  await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] })
+  for (let step = 1; step <= 10; step += 1) {
+    await session.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: y - step * (SCROLL_STEP / 10) }] })
+  }
+  await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+  await session.detach()
+}
+
+const paneTop = (item: Element): number => item.closest(".pane")?.scrollTop ?? Number.NaN
+
+const scrollOverPlace = async (page: Page, input: ScrollInput): Promise<number> => {
+  await page.locator('wa-tab[panel="pauses"]').click()
+  const place = page.locator(".place-list > li").first()
+  await place.waitFor()
+  const room = await place.evaluate((item) => {
+    const pane = item.closest(".pane")
+    if (pane === null) return 0
+    pane.scrollTop += item.getBoundingClientRect().top - pane.getBoundingClientRect().top
+    return pane.scrollHeight - pane.clientHeight - pane.scrollTop
+  })
+  assert(room > 0, "The pauses pane must have room to scroll below the first place")
+  const from = await place.evaluate(paneTop)
+  const box = await place.boundingBox()
+  assert(box !== null, "The first place must be on screen")
+  if (input === "wheel") {
+    await page.mouse.move(box.x + 20, box.y + 20)
+    await page.mouse.wheel(0, SCROLL_STEP)
+  } else {
+    await swipeUp(page, box.x + 20, box.y + 20)
+  }
+  const settle = Date.now() + 2000
+  let moved = 0
+  while (moved <= 0 && Date.now() < settle) {
+    await page.waitForTimeout(100)
+    moved = (await place.evaluate(paneTop)) - from
+  }
+  return moved
+}
+
+const placesScroll: ProductCheck = {
+  name: "the places to check scroll under a wheel and a finger and start aligned, instead of swallowing the scroll",
+  run: async (page) => {
+    await buildBlocks(page, "Склейки для проверки")
+    await changeCut(page)
+    await page.getByRole("heading", { name: "Места для проверки", exact: true }).waitFor()
+    const align = page.getByRole("button", { name: /^Выровнять: склейка/u })
+    await align.and(page.getByRole("button", { pressed: true })).first().waitFor()
+    const alignable = await align.count()
+    assert(alignable > 0, "The cut must leave a place the studio can align")
+    assert.equal(await align.and(page.getByRole("button", { pressed: true })).count(), alignable, "Every place the studio can align must start with «Выровнять» on")
+    const address = page.url()
+    const browser = page.context().browser()
+    assert(browser !== null, "The browser checks must run in a browser that opens new contexts")
+    const sizes = [[1440, 600, "wheel"], [390, 844, "wheel"], [390, 844, "touch"]] as const
+    for (const [width, height, input] of sizes) {
+      const context = await browser.newContext({ viewport: { width, height }, hasTouch: input === "touch", isMobile: input === "touch" })
+      try {
+        const tab = await context.newPage()
+        tab.setDefaultTimeout(timeout)
+        await tab.goto(address)
+        const moved = await scrollOverPlace(tab, input)
+        assert(moved > 0, `A ${input} over the places at ${width}x${height} must scroll the pauses pane, it moved ${moved}px`)
+      } finally {
+        await context.close()
+      }
+    }
+    return { targets: ["«Выровнять» on by default", "wheel at 1440x600", "wheel at 390x844", "touch at 390x844"], found: [] }
   }
 }
 
@@ -223,4 +308,4 @@ const removal: ProductCheck = {
   }
 }
 
-export const checks = [directVideos, savedVideosLink, projectAndUpload, preview, attachment, removal] satisfies readonly ProductCheck[]
+export const checks = [directVideos, savedVideosLink, projectAndUpload, preview, placesScroll, attachment, removal] satisfies readonly ProductCheck[]

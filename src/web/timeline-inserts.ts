@@ -137,4 +137,4 @@ export const insertList = (data: InsertData, actions: InsertActions): ReadonlyAr
     h("p", { class: "did" }, "Пока звучит фраза, поверх видео стоит ваша картинка, видео или страница документа, а голос продолжается. Видео идёт без своего звука. На странице жёлтым отмечена строка, о которой вы говорите. Высокая вставка закрывает весь кадр, широкая встаёт карточкой над вами. Посмотрите каждую."),
     h("ul", { class: "answers-said" }, ...answersSaid(data).map(({ label, does }) => h("li", {}, h("b", {}, `«${label}».`), ` ${does}`))),
     ...statusOf(data, actions),
-    h("ol", { class: "place-list", "data-scroll-key": "inserts" }, ...data.places.map((place, index) => insertItem(place, index + 1, data, actions))))]
+    h("ol", { class: "place-list" }, ...data.places.map((place, index) => insertItem(place, index + 1, data, actions))))]

@@ -88,7 +88,7 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
         stages.note("takes", notes.takes)
         stages.note("pauses", notes.pauses)
         reel.classList.toggle("blank", status.blocks === undefined)
-        if (seen.first && status.blocks !== undefined) stages.open("takes")
+        if (seen.first && status.blocks !== undefined && stages.now() === "brief") stages.open("takes")
         seen.first = false
       },
       edited: () => { builtPane?.edited() },

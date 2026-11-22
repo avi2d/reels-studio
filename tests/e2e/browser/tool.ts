@@ -16,7 +16,14 @@ const transcript = {
   ]
 } satisfies Transcript
 
-const gaze = { step: 0.2, samples: Array.from({ length: 35 }, () => "hidden" as const) } satisfies Gaze
+const GAZE_SAMPLES = 35
+const gaze = {
+  step: 0.2,
+  samples: Array.from({ length: GAZE_SAMPLES }, () => "camera" as const),
+  // The drift keeps the head shift at the join above JUMP_STEP and the zoom that hides it within MAX_ZOOM.
+  heads: Array.from({ length: GAZE_SAMPLES }, (_, index) => ({ x: 0.5, y: 0.3 + 0.0015 * index, size: 0.25 })),
+  aspect: 9 / 16
+} satisfies Gaze
 
 const blocks = {
   blocks: [
