@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { aroundInsert, insertPlaces, lookAt, reelWithin, shiftedBy, shownInserts, withInsert, type InsertLook, type Shown } from "../shared/inserts.ts"
-import { AROUND_JOIN_SECONDS, aroundJoin, facesByVideo, trimmed, withAnswer, withCover } from "../shared/joins.ts"
+import { AROUND_JOIN_SECONDS, aroundJoin, cutOf, facesByVideo, withAnswer, withCover } from "../shared/joins.ts"
 import { lengthOf } from "../shared/plan.ts"
 import {
   assemble, clipsOf, mergeEdits, NO_EDITS, playedSpans, withChoice, withDeleted, withManualPauses, within,
@@ -46,7 +46,7 @@ const clipsFrom = (clips: ReadonlyArray<Clip>, block: string): ReadonlyArray<Cli
 export { takeServer, type Ticket }
 
 const reelOf = (loaded: Loaded, edits: Edits): ReadonlyArray<Clip> =>
-  trimmed(clipsOf(placedOf(loaded, edits)), facesByVideo(loaded.view.faces), loaded.transcripts, edits)
+  cutOf(clipsOf(placedOf(loaded, edits)), facesByVideo(loaded.view.faces), loaded.transcripts, edits)
 
 const shownOf = (loaded: Loaded, edits: Edits): ReadonlyArray<Shown> => {
   const reel = reelOf(loaded, edits)
@@ -171,8 +171,8 @@ const redraw = ({ hooks, parts, player, state, ui, view }: Desk, actions: Action
   parts.undo.disabled = state.history.length === 0
   parts.redo.disabled = state.undone.length === 0
   if (!isReady) parts.summary.textContent = ""
-  const first = open?.spans[0]
-  if (open !== undefined && first !== undefined) player.show({ ...first, video: open.take.video, block: open.block.id })
+  const first = open === undefined ? undefined : view.reelNow().find((clip) => clip.block === open.block.id)
+  if (first !== undefined) player.show(first)
   if (state.playing === undefined) view.showTag(open?.block.id)
   else view.paintPlaying()
   view.showClock()
@@ -245,6 +245,9 @@ const actionsOf = (
       const reel = view.reelNow()
       const from = Math.max(0, lengthOf(reel.slice(0, join.after)) - AROUND_JOIN_SECONDS)
       hear(aroundJoin(reel, join, AROUND_JOIN_SECONDS), shiftedBy(state.shown, from))
+    },
+    hearUnaligned: (join) => {
+      if (state.loaded !== undefined) hear(aroundJoin(reelOf(state.loaded, withAnswer(state.edits, join, "leave")), join, AROUND_JOIN_SECONDS), [])
     },
     answer: (join, answer) => { change(withAnswer(state.edits, join, answer)) },
     cover: (join, picture) => { change(withCover(state.edits, join, picture)) },

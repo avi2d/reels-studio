@@ -68,7 +68,7 @@ const nextUnseen = Effect.fnUntraced(function*(unseen: Unseen, jobs: ReadonlyArr
     if (!((yield* fs.exists(place.transcript)) && (yield* fs.exists(place.preview)))) return false
     if (!(yield* fs.exists(place.gaze))) return true
     const measured = yield* Effect.option(readGaze(job))
-    return Option.isSome(measured) && measured.value.heads === undefined
+    return Option.isSome(measured) && (measured.value.heads === undefined || measured.value.aspect === undefined)
   }))
   return jobs.find((_, index) => waiting[index] === true)
 })

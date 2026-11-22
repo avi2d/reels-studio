@@ -1,6 +1,6 @@
 import { lengthOf, type Transcript } from "../shared/plan.ts"
 import { insertPlaces, openInserts, shownInserts, type Shown } from "../shared/inserts.ts"
-import { facesByVideo, openPlaces, placesOf, trimmed } from "../shared/joins.ts"
+import { cutOf, facesByVideo, openPlaces, placesOf } from "../shared/joins.ts"
 import {
   arrange, assemble, chosenTake, clipsOf, playedPause, withManualPauses,
   type Clip, type Edits, type GazeFailure, type Placed, type PlannedInsert, type Take, type TimelinePage, type TimelineView
@@ -294,7 +294,7 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): DrawnRe
   const { edits, loaded, selected, timeline } = drawn
   const placed = assemble(timeline.blocks, edits, loaded.transcripts)
   const faces = facesByVideo(loaded.view.faces)
-  const reel = trimmed(clipsOf(placed), faces, loaded.transcripts, edits)
+  const reel = cutOf(clipsOf(placed), faces, loaded.transcripts, edits)
   const displayed = placed.map((one) => ({
     ...one,
     spans: reel.filter((clip) => clip.block === one.block.id).map((clip) => ({ start: clip.start, end: clip.end }))

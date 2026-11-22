@@ -42,7 +42,7 @@ class FakeEl {
 
 Object.assign(globalThis, { document: { createElement: (tag: string) => new FakeEl(tag) } })
 
-const actions = { hearJoin: (): void => {}, answer: (): void => {}, cover: (): void => {}, pictureUrl: (picture: string): string => picture }
+const actions = { hearJoin: (): void => {}, hearUnaligned: (): void => {}, answer: (): void => {}, cover: (): void => {}, pictureUrl: (picture: string): string => picture }
 
 const edge = (video: string, block: string, at: number): Clip => ({ video, block, start: at, end: at })
 
@@ -50,13 +50,13 @@ const place = (answer: JoinAnswer | undefined, cut: number) => ({
   join: { after: 1, end: edge("a", "x", 2), start: edge("b", "y", 0.5) },
   shift: 0.5,
   trim: { end: 1.9, start: 0.5, cut, spoken: undefined },
+  align: { kind: "unmeasured" as const },
+  answer,
   answered: answer === undefined ? undefined : { end: { video: "a", at: 2 }, start: { video: "b", at: 0.5 }, answer }
 })
 
 const statusOf = (root: HTMLElement): string =>
   [...root.querySelectorAll("p")].map((kid) => kid.textContent).join("\n")
-
-const listOf = (root: HTMLElement): HTMLElement | null => root.querySelector<HTMLElement>(".place-list")
 
 const complete: PlaceCoverage = { waiting: false, failed: [] }
 
@@ -84,9 +84,9 @@ test("a failed measurement is attached to the counts instead of replacing them",
   expect(statusOf(root)).toContain("неполная")
 })
 
-test("the places list carries a stable scroll key across redraws", () => {
-  const first = listOf(placeList([place(undefined, 0.4)], [], complete, [], actions))
-  const second = listOf(placeList([place(undefined, 0.4)], [], complete, [], actions))
-  expect(first?.dataset["scrollKey"]).toBe("places")
-  expect(second?.dataset["scrollKey"]).toBe(first?.dataset["scrollKey"])
+test("the places panel carries a stable scroll key across redraws", () => {
+  const first = placeList([place(undefined, 0.4)], [], complete, [], actions)
+  const second = placeList([place(undefined, 0.4)], [], complete, [], actions)
+  expect(first.dataset["scrollKey"]).toBe("places")
+  expect(second.dataset["scrollKey"]).toBe(first.dataset["scrollKey"])
 })

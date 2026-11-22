@@ -1,5 +1,6 @@
 import { Data, DateTime, Effect, FileSystem, Option, Schema } from "effect"
 import { shapeOf, type Shown } from "../shared/inserts.ts"
+import { Frame } from "../shared/timeline.ts"
 import type { ReelView } from "../shared/reel.ts"
 import { pictureProbeArgs } from "./attachment-notes.ts"
 import {
@@ -15,7 +16,7 @@ type ShownInsert = typeof ShownInsert.Type
 const Record = Schema.Struct({
   made: Schema.String,
   video: Schema.String,
-  parts: Schema.Array(Schema.Struct({ video: Schema.String, start: Schema.Finite, frames: Schema.Int })),
+  parts: Schema.Array(Schema.Struct({ video: Schema.String, start: Schema.Finite, frames: Schema.Int, frame: Schema.optionalKey(Frame) })),
   inserts: Schema.Array(ShownInsert).pipe(Schema.withDecodingDefaultKey(Effect.succeed([])))
 })
 const RecordFile = Schema.fromJsonString(Record)

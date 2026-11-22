@@ -1,6 +1,6 @@
 import type { Transcript } from "../shared/plan.ts"
 import { INSERT_DRIFT, INSERT_FADE, type Shape } from "../shared/inserts.ts"
-import { cameraShare, FADE, type Clip, type Gaze } from "../shared/timeline.ts"
+import { cameraShare, FADE, type Clip, type Frame, type Gaze } from "../shared/timeline.ts"
 
 const HDR_TRANSFERS = new Set(["arib-std-b67", "smpte2084"])
 
@@ -41,6 +41,7 @@ export interface Part {
   readonly video: string
   readonly start: number
   readonly frames: number
+  readonly frame?: Frame
 }
 
 // Each part lasts whole frames, so its sound and its picture end together and the joined reel does not drift.
@@ -48,7 +49,9 @@ export const partsOf = (clips: ReadonlyArray<Clip>): ReadonlyArray<Part> =>
   clips.flatMap((clip) => {
     const first = Math.round(clip.start * REEL_RATE)
     const frames = Math.round(clip.end * REEL_RATE) - first
-    return frames > 0 ? [{ video: clip.video, start: first / REEL_RATE, frames }] : []
+    if (frames <= 0) return []
+    const part = { video: clip.video, start: first / REEL_RATE, frames }
+    return [clip.frame === undefined ? part : { ...part, frame: clip.frame }]
   })
 
 export const onFrames = (clips: ReadonlyArray<Clip>): ReadonlyArray<Clip> =>
@@ -64,10 +67,31 @@ export const secondsOf = (parts: ReadonlyArray<Part>): number =>
 export const sameParts = (left: ReadonlyArray<Part>, right: ReadonlyArray<Part>): boolean =>
   left.length === right.length && left.every((part, index) => {
     const other = right[index]
-    return other !== undefined && other.video === part.video && other.start === part.start && other.frames === part.frames
+    return other !== undefined && other.video === part.video && other.start === part.start && other.frames === part.frames &&
+      sameFrame(other.frame, part.frame)
   })
 
-const REEL_VIDEO = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1"
+const sameFrame = (left: Frame | undefined, right: Frame | undefined): boolean =>
+  left === undefined || right === undefined
+    ? left === right
+    : left.scale === right.scale && left.left === right.left && left.top === right.top
+
+const REEL_WIDTH = 1080
+const REEL_HEIGHT = 1920
+
+const even = (value: number): number => Math.max(2, Math.ceil(value / 2) * 2)
+
+// One scale to the enlarged size and one crop, since cropping the 1080 by 1920 picture and scaling it again resamples twice.
+const reelVideo = (frame: Frame | undefined): string => {
+  if (frame === undefined) return `scale=${REEL_WIDTH}:${REEL_HEIGHT}:force_original_aspect_ratio=increase,crop=${REEL_WIDTH}:${REEL_HEIGHT},setsar=1`
+  const width = REEL_WIDTH * frame.scale
+  const height = REEL_HEIGHT * frame.scale
+  return [
+    `scale=${even(width)}:${even(height)}:force_original_aspect_ratio=increase`,
+    `crop=${REEL_WIDTH}:${REEL_HEIGHT}:(iw-${width.toFixed(2)})/2+${(frame.left * height).toFixed(2)}:(ih-${height.toFixed(2)})/2+${(frame.top * height).toFixed(2)}`,
+    "setsar=1"
+  ].join(",")
+}
 
 const fadesOf = (seconds: number): string => {
   const fade = Math.min(FADE, seconds / 2)
@@ -80,7 +104,7 @@ export const partArgs = (source: string, part: Part, hdr: boolean, encoder: stri
     "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y",
     "-ss", part.start.toFixed(4), "-i", source,
     "-map", "0:v:0", "-map", "0:a:0", "-frames:v", String(part.frames), "-t", seconds.toFixed(6),
-    "-vf", `fps=${REEL_RATE},${hdr ? TO_SDR : "format=yuv420p"},${REEL_VIDEO}`, "-af", fadesOf(seconds),
+    "-vf", `fps=${REEL_RATE},${hdr ? TO_SDR : "format=yuv420p"},${reelVideo(part.frame)}`, "-af", fadesOf(seconds),
     "-c:v", encoder, "-profile:v", "high", "-b:v", "10M", "-maxrate", "12M", "-bufsize", "24M", "-g", String(REEL_RATE * 2),
     "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
     "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2", "-map_metadata", "-1", "-f", "mov", output
@@ -99,8 +123,6 @@ export interface InsertPicture {
 const FRAME = { width: 1080, height: 1920 }
 const CARD_BOX = { left: 65, top: 269, width: 950, height: 979 }
 const CARD_BORDER = 12
-
-const even = (value: number): number => Math.max(2, 2 * Math.floor(value / 2))
 
 const cardSize = (width: number, height: number): { readonly width: number; readonly height: number } => {
   const room = { width: CARD_BOX.width - 2 * CARD_BORDER, height: CARD_BOX.height - 2 * CARD_BORDER }

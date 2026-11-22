@@ -15,10 +15,13 @@ const Step = Schema.Finite.check(Schema.isGreaterThan(0))
 const HeadSamples = Schema.Array(Schema.NullOr(Head))
 const GazeSamples = Schema.Array(Schema.Literals(["camera", "away", "hidden"]))
 
+const Aspect = Schema.Finite.check(Schema.isGreaterThan(0))
+
 export const Gaze = Schema.Struct({
   step: Step,
   samples: GazeSamples,
-  heads: Schema.optionalKey(HeadSamples)
+  heads: Schema.optionalKey(HeadSamples),
+  aspect: Schema.optionalKey(Aspect)
 })
 export type Gaze = typeof Gaze.Type
 
@@ -47,7 +50,7 @@ export type PauseRef = typeof PauseRef.Type
 
 const ClipEdge = Schema.Struct({ video: Schema.String, at: Schema.Finite })
 
-export const JoinAnswer = Schema.Literals(["trim", "leave"])
+export const JoinAnswer = Schema.Literals(["zoom", "trim", "leave"])
 export type JoinAnswer = typeof JoinAnswer.Type
 
 const joinEnds = { end: ClipEdge, start: ClipEdge }
@@ -90,7 +93,7 @@ const Look = Schema.Union([
   Schema.Struct({ video: Schema.String, state: Schema.Literal("failed"), reason: GazeFailure })
 ])
 
-export const VideoFaces = Schema.Struct({ video: Schema.String, step: Step, gaze: GazeSamples, heads: HeadSamples })
+export const VideoFaces = Schema.Struct({ video: Schema.String, step: Step, gaze: GazeSamples, heads: HeadSamples, aspect: Schema.optionalKey(Aspect) })
 export type VideoFaces = typeof VideoFaces.Type
 
 export const PlannedInsert = Schema.Struct({
@@ -250,9 +253,18 @@ export const within = <S extends Span>(spans: ReadonlyArray<S>, window: Span): R
     return end > start ? [{ ...span, start, end }] : []
   })
 
+// The part of the 9 by 16 picture the reel shows, enlarged by scale, in units of the picture height.
+export const Frame = Schema.Struct({
+  scale: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(1)),
+  left: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
+  top: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
+})
+export type Frame = typeof Frame.Type
+
 export interface Clip extends Span {
   readonly video: string
   readonly block: string
+  readonly frame?: Frame
 }
 
 export const clipsOf = (placed: ReadonlyArray<Placed>): ReadonlyArray<Clip> =>
