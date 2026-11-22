@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test"
 import { clipFrom, clipSoundArgs, insertArgs, type InsertLayer } from "../../src/server/insert-commands.ts"
 
-const clip = (sound: boolean): InsertLayer =>
-  ({ kind: "clip", file: "walk.mov", shape: "fill", width: 1080, height: 1920, start: 4, end: 7, from: 2, hdr: false, sound })
+const clip = (sound: boolean): Extract<InsertLayer, { readonly kind: "clip" }> =>
+  ({ kind: "clip", file: "walk.mov", shape: "fill", width: 1080, height: 1920, start: 4, end: 7, from: 2, lasts: 6, hdr: false, sound })
 
 const graphOf = (args: ReadonlyArray<string>): string => args[args.indexOf("-filter_complex") + 1] ?? ""
 
@@ -18,6 +18,12 @@ test("a clip insert with its sound turned on mixes that sound in from the phrase
   expect(graph).toContain("[0:a][s0]amix=inputs=2")
   expect(args.slice(args.lastIndexOf("-map"), args.lastIndexOf("-map") + 2)).toEqual(["-map", "[aout]"])
   expect(args.slice(args.indexOf("-c:v"), args.indexOf("-c:v") + 2)).toEqual(["-c:v", "copy"])
+})
+
+test("a heard clip shorter than its phrase fades its sound out where the clip ends, not at the phrase end after the sound has already stopped", () => {
+  const short: InsertLayer = { ...clip(true), start: 1, end: 5, from: 0, lasts: 2 }
+  const graph = graphOf(clipSoundArgs("voice.mp4", [short], "joined.mp4") ?? [])
+  expect(graph).toContain("afade=t=out:st=1.7000:d=0.3000")
 })
 
 for (const sound of [false, true]) {

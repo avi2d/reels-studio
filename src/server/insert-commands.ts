@@ -12,7 +12,7 @@ interface InsertPlacement {
 
 export type InsertLayer =
   | InsertPlacement & { readonly kind: "still" }
-  | InsertPlacement & { readonly kind: "clip"; readonly from: number; readonly hdr: boolean; readonly sound: boolean }
+  | InsertPlacement & { readonly kind: "clip"; readonly from: number; readonly lasts: number; readonly hdr: boolean; readonly sound: boolean }
 
 type ClipLayer = InsertLayer & { readonly kind: "clip" }
 
@@ -77,9 +77,9 @@ export const clipSoundArgs = (voice: string, layers: ReadonlyArray<InsertLayer>,
   const heard = layers.flatMap((layer) => layer.kind === "clip" && layer.sound ? [layer] : [])
   if (heard.length === 0) return undefined
   const lanes = heard.map((layer, lane) => {
-    const fade = fadeOf(layer)
-    const seconds = layer.end - layer.start
-    return `[${lane + 1}:a]aresample=48000,afade=t=in:st=0:d=${fade},afade=t=out:st=${(seconds - fade).toFixed(4)}:d=${fade},adelay=${Math.round(layer.start * 1000)}:all=1[s${lane}]`
+    const seconds = Math.min(layer.end - layer.start, layer.lasts)
+    const fade = Math.min(fadeOf(layer), seconds / 2)
+    return `[${lane + 1}:a]aresample=48000,afade=t=in:st=0:d=${fade.toFixed(4)},afade=t=out:st=${(seconds - fade).toFixed(4)}:d=${fade.toFixed(4)},adelay=${Math.round(layer.start * 1000)}:all=1[s${lane}]`
   })
   const mixed = `[0:a]${heard.map((_, lane) => `[s${lane}]`).join("")}amix=inputs=${heard.length + 1}:duration=first:normalize=0[aout]`
   return [
