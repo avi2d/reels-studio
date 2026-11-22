@@ -63,7 +63,7 @@ const readBlocks = Effect.fnUntraced(function*(dir: string) {
   return "unreadable" as const
 })
 
-const readAttached = Effect.fnUntraced(function*(dir: string) {
+export const readAttached = Effect.fnUntraced(function*(dir: string) {
   const fs = yield* FileSystem.FileSystem
   const folder = `${dir}/attached`
   if (!(yield* fs.exists(folder))) return []

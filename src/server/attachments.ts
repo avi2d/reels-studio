@@ -6,6 +6,7 @@ import { about, attachedLines, deliveryNote, fileProbeArgs, frameArgs, frameTime
 import { isHdr, recognizerArgs } from "./media-commands.ts"
 import { clipPreview, markedPage } from "./insert-files.ts"
 import { decodeTranscript, tool } from "./media-jobs.ts"
+import { readAttached } from "./timeline-files.ts"
 import { Projects } from "./projects.ts"
 import { Settings } from "./settings.ts"
 
@@ -179,13 +180,6 @@ const imagesOf = Effect.fnUntraced(function*(dir: string, name: string, look: Lo
   return { readable, unreadable }
 })
 
-const attachedNames = Effect.fnUntraced(function*(dir: string) {
-  const fs = yield* FileSystem.FileSystem
-  const folder = `${dir}/attached`
-  if (!(yield* fs.exists(folder))) return []
-  return (yield* fs.readDirectory(folder)).toSorted()
-})
-
 const UNAVAILABLE = "Файл недоступен. Попробуйте открыть страницу ещё раз."
 
 export class Attachments extends Context.Service<Attachments, {
@@ -217,7 +211,7 @@ export class Attachments extends Context.Service<Attachments, {
       }, Effect.provideContext(context))
 
       const listed = Effect.fn("Attachments.listed")(function*(dir: string, current: ReadonlyArray<Shown>) {
-        const names = yield* attachedNames(dir)
+        const names = yield* readAttached(dir)
         const sent = new Map(current.map((file) => [file.name, file.about]))
         const seen = yield* Effect.forEach(names, (name) => Effect.gen(function*() {
           const hit = sent.get(name)
@@ -233,7 +227,7 @@ export class Attachments extends Context.Service<Attachments, {
 
       const cover = Effect.fn("Attachments.cover")(function*(id: string, name: string) {
         const dir = yield* projects.folder(id)
-        if (!(yield* attachedNames(dir)).includes(name)) return yield* notFound("Такого файла в ролике нет")
+        if (!(yield* readAttached(dir)).includes(name)) return yield* notFound("Такого файла в ролике нет")
         const place = placeOf(dir, name)
         const first = (yield* savedLook(place))?.shown[0]
         if (first === undefined) return yield* notFound("У этого файла нет картинки")
@@ -242,7 +236,7 @@ export class Attachments extends Context.Service<Attachments, {
 
       const attachedOf = Effect.fnUntraced(function*(id: string, name: string, kind: FileKind) {
         const dir = yield* projects.folder(id)
-        if (!(yield* attachedNames(dir)).includes(name) || kindOfName(name) !== kind) return yield* notFound("Такого файла в ролике нет")
+        if (!(yield* readAttached(dir)).includes(name) || kindOfName(name) !== kind) return yield* notFound("Такого файла в ролике нет")
         return dir
       })
 
