@@ -132,17 +132,27 @@ A join whose sum is above 0.08 becomes a place to check in the «Паузы и �
 A join with no face on one side is not a place.
 The tab of that stage shows how many places are left unanswered.
 «Посмотреть» plays 1.5 s before the join and 1.5 s after it, as the reel plays it.
-Either answer takes the place off the count:
+Any answer takes the place off the count:
 
+- «Выровнять» enlarges the picture after the join so the eyes sit where they were before it.
 - «Обрезать» cuts the frames at the join where the eyes are off the camera.
 - «Оставить как есть» keeps the join as it is.
 
 The cut takes picture only over silence and never cuts into a word.
 Before the join it stops at the end of the last word, and after the join at the start of the next word.
 Each place says how many seconds it can cut, or names the word that keeps the eyes down.
-A place with nothing to cut offers only «Оставить как есть».
+A place with nothing to cut offers no «Обрезать».
+
+The zoom only enlarges and moves the picture inside its own edges, so no black band shows.
+It enlarges by at most 15 %, and a place that needs more offers no «Выровнять».
+A place whose eyes already sit on one line offers no «Выровнять».
+The zoom holds until the next join, so the picture does not jump back in the middle of a block.
+Once a join is aligned, «Как было» plays the same seconds without the zoom.
+The page shows the zoom at once, and the built reel crops the same window from the original.
+The zoom needs the frame shape of the measured video, which the gaze measure writes as `aspect`.
+Until a gaze file holds it, the place says the studio is still measuring.
 The answer is kept in `timeline.json` with the two ends of the join, so a change of the cut that moves the join opens it again.
-The studio re-measures by itself, in the background, a video whose gaze file holds no head positions.
+The studio re-measures by itself, in the background, a video whose gaze file holds no head positions or no `aspect`.
 This runs on the home computer and does not ask the chat model.
 
 ## Files
@@ -151,7 +161,7 @@ Each video folder holds these next to `plan.json`:
 
 | Path | What it holds |
 | --- | --- |
-| `gaze/<video>.json` | One sample per 0.2 s: `camera`, `away` or `hidden`, and where the eyes are and the face height, as shares of the frame height |
+| `gaze/<video>.json` | One sample per 0.2 s: `camera`, `away` or `hidden`, and where the eyes are and the face height, as shares of the frame height, and the frame shape as `aspect` |
 | `gaze/<video>.txt` | The share of looks into the camera for each stretch of speech, which the chat model reads |
 | `blocks.json` | The blocks and their takes, written by the chat model |
 | `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses and the answers to the places to check |
