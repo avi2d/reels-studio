@@ -104,6 +104,16 @@
 .colour-pair img { width: 100%; height: auto; border-radius: 12px; }
 .colour-pair figcaption { font-size: 13px; color: var(--wa-color-text-quiet); }
 @media (max-width: 520px) { .colour-pair { grid-template-columns: minmax(0, 1fr); } }
+.built .passages { display: grid; gap: 8px; }
+.built-facts > .loudness-chart { align-self: stretch; display: grid; gap: 6px; }
+.loudness-chart svg { display: block; width: 100%; height: auto; }
+.loudness-chart .line-before { fill: none; stroke: var(--wa-color-text-quiet); stroke-width: 1.5; }
+.loudness-chart .line-after { fill: none; stroke: var(--wa-color-brand-fill-loud); stroke-width: 2; }
+.loudness-chart .target { stroke: var(--wa-color-success-on-quiet); stroke-dasharray: 5 4; stroke-width: 1.2; }
+.loudness-chart .jump { fill: var(--wa-color-danger-fill-loud); opacity: 0.35; }
+.loudness-chart .axis { fill: var(--wa-color-text-quiet); font-size: 11px; }
+.built details.numbers summary { cursor: pointer; color: var(--wa-color-text-quiet); font-size: 13px; }
+.built .passage { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
 @media (max-width: 820px) {
   .reel { --bar: 52px; display: block; height: auto; padding: 0 0 calc(40px + env(safe-area-inset-bottom, 0px)); }

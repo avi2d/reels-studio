@@ -1,4 +1,5 @@
 import type { Transcript } from "../shared/plan.ts"
+import { SILENCE_LUFS } from "../shared/reel.ts"
 import { INSERT_DRIFT, INSERT_FADE, type Shape } from "../shared/inserts.ts"
 import type { Rgb } from "../shared/reel.ts"
 import { cameraShare, FADE, type Clip, type Frame, type Gaze } from "../shared/timeline.ts"
@@ -304,4 +305,94 @@ export const gazeText = (video: string, transcript: Transcript, gaze: Gaze): str
     "",
     ...lines
   ].join("\n") + "\n"
+}
+
+// The reference meter is ebur128 (EBU Tech 3341). loudnorm reads about 0.9 LU low on the same audio, so it is not used to report.
+type Segment = { readonly start: number; readonly seconds: number }
+
+export const measureArgs = (source: string, segment?: Segment): ReadonlyArray<string> => [
+  "-hide_banner", "-nostats",
+  ...(segment === undefined ? [] : ["-ss", segment.start.toFixed(4), "-t", segment.seconds.toFixed(6)]),
+  "-i", source, "-map", "0:a:0", "-af", "ebur128=peak=true", "-f", "null", "-"
+]
+
+export interface Reading {
+  readonly lufs: number
+  readonly lra: number
+  readonly truePeak: number
+}
+
+const NUMBER = "(-?\\d+(?:\\.\\d+)?|-inf)"
+const summaryPattern = new RegExp(`Integrated loudness:\\s+I:\\s+${NUMBER} LUFS[\\s\\S]*?LRA:\\s+${NUMBER} LU[\\s\\S]*?True peak:\\s+Peak:\\s+${NUMBER} dBFS`)
+
+const finiteOr = (text: string, fallback: number): number => {
+  const value = Number(text)
+  return Number.isFinite(value) ? value : fallback
+}
+
+export const readingOf = (stderr: string): Reading | undefined => {
+  const match = summaryPattern.exec(stderr.slice(stderr.lastIndexOf("Summary:")))
+  if (match === null) return undefined
+  return { lufs: finiteOr(match[1] ?? "", SILENCE_LUFS), lra: finiteOr(match[2] ?? "", 0), truePeak: finiteOr(match[3] ?? "", SILENCE_LUFS) }
+}
+
+export const envelopeArgs = (source: string, metadata: string): ReadonlyArray<string> => [
+  "-hide_banner", "-nostats", "-i", source, "-map", "0:a:0",
+  "-af", `ebur128=metadata=1,ametadata=mode=print:key=lavfi.r128.M:file=${metadata}`, "-f", "null", "-"
+]
+
+export interface Moment {
+  readonly time: number
+  readonly lufs: number
+}
+
+export const momentsOf = (text: string): ReadonlyArray<Moment> => {
+  const moments: Array<Moment> = []
+  let time: number | undefined
+  for (const line of text.split("\n")) {
+    const stamp = /pts_time:(\S+)/.exec(line)
+    if (stamp !== null) {
+      time = Number(stamp[1])
+      continue
+    }
+    const value = /^lavfi\.r128\.M=(\S+)$/.exec(line.trim())
+    if (value !== null && time !== undefined) moments.push({ time, lufs: finiteOr(value[1] ?? "", SILENCE_LUFS) })
+  }
+  return moments
+}
+
+// Each sample takes the last moment at or before its time, so a sample never reads ahead of the audio.
+export const sampledAt = (moments: ReadonlyArray<Moment>, step: number, seconds: number): ReadonlyArray<number> => {
+  const count = Math.floor(seconds / step) + 1
+  const values: Array<number> = []
+  let index = 0
+  for (let sample = 0; sample < count; sample++) {
+    const at = sample * step
+    while (index + 1 < moments.length && (moments[index + 1]?.time ?? Infinity) <= at) index++
+    values.push(Math.max(SILENCE_LUFS, moments[index]?.lufs ?? SILENCE_LUFS))
+  }
+  return values
+}
+
+export interface Span {
+  readonly name: "quiet" | "loud"
+  readonly from: number
+  readonly to: number
+}
+
+const PASSAGE_FRAMES = REEL_RATE
+
+export const passagesOf = (parts: ReadonlyArray<Part>, lufs: ReadonlyArray<number>): ReadonlyArray<Span> => {
+  const eligible = parts.flatMap((part, index) => {
+    const level = lufs[index]
+    return part.frames >= PASSAGE_FRAMES && level !== undefined && level > SILENCE_LUFS ? [{ index, lufs: level }] : []
+  })
+  if (eligible.length < 2) return []
+  const quiet = eligible.reduce((best, item) => item.lufs < best.lufs ? item : best)
+  const loud = eligible.reduce((best, item) => item.lufs >= best.lufs ? item : best)
+  const span = (name: Span["name"], index: number): Span => {
+    const from = secondsOf(parts.slice(0, index))
+    return { name, from, to: from + (parts[index]?.frames ?? 0) / REEL_RATE }
+  }
+  return [span("quiet", quiet.index), span("loud", loud.index)]
 }
