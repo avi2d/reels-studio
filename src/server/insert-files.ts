@@ -5,8 +5,6 @@ import { markArgs, markOf, PageChars, pageTextOf, quoteFound } from "./page-mark
 import { Settings } from "./settings.ts"
 
 const decodeChars = Schema.decodeUnknownEffect(Schema.fromJsonString(PageChars))
-const PAGE_COORDINATES = "device"
-
 class QuoteNotFound extends Data.TaggedError("QuoteNotFound")<{ readonly document: string; readonly page: number }> {}
 
 export const sharedViewOf = (name: string): string => `attached-views/${name}`
@@ -28,8 +26,8 @@ const pageFiles = Effect.fnUntraced(function*(dir: string, document: string, pag
   const fs = yield* FileSystem.FileSystem
   const settings = yield* Settings
   const view = viewOf(dir, document)
-  const picture = `${view}/page-${page}-${PAGE_COORDINATES}-large.png`
-  const chars = `${view}/page-${page}-${PAGE_COORDINATES}-chars.json`
+  const picture = `${view}/page-${page}-large.png`
+  const chars = `${view}/page-${page}-chars.json`
   if ((yield* fs.exists(picture)) && (yield* fs.exists(chars))) return { picture, chars }
   yield* fs.makeDirectory(view, { recursive: true })
   const reader = `${settings.root}/tools/pdf`
@@ -44,7 +42,7 @@ const pageFiles = Effect.fnUntraced(function*(dir: string, document: string, pag
 
 const markName = Effect.fnUntraced(function*(page: number, quote: string) {
   const digest = yield* (yield* Crypto.Crypto).digest("SHA-256", new TextEncoder().encode(quote))
-  return `mark-${page}-${PAGE_COORDINATES}-${Buffer.from(digest).toString("hex").slice(0, 16)}.jpg`
+  return `mark-${page}-${Buffer.from(digest).toString("hex").slice(0, 16)}.jpg`
 })
 
 export const quoteOnPage = Effect.fnUntraced(function*(dir: string, document: string, page: number, quote: string) {

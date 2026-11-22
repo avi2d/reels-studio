@@ -95,6 +95,8 @@ jobs:
         run: bunx checks-ci draft-hold
       - id: test
         run: bun run test --pr
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6
+      - run: uv run --project tools/pdf python tools/pdf/test_page.py
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

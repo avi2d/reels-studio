@@ -38,7 +38,7 @@ def write_pdf(path: Path, rotation: int, crop: tuple[int, int, int, int]) -> Non
 
 class PageCoordinates(unittest.TestCase):
     def test_rotated_and_offset_crop_boxes_follow_ink_not_unrotated_coordinates(self) -> None:
-        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as directory:
+        with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             for crop in [(0, 0, 300, 220), (36, 36, 264, 204)]:
                 for rotation in [0, 90, 180, 270]:
