@@ -45,6 +45,20 @@ test("a rebound host is refused while the loopback allow list passes", () => {
   expect(isAllowedHost(undefined, allowed)).toBe(false)
 })
 
+test("a single localhost label passes through the gateway port with a matching origin", () => {
+  const allowed = allowedHosts(8765)
+  expect(isAllowedHost("montage-loudness.localhost:8090", allowed)).toBe(true)
+  expect(isAllowedHost("montage-loudness.localhost", allowed)).toBe(true)
+  expect(isSameOrigin("http://montage-loudness.localhost:8090", "montage-loudness.localhost:8090")).toBe(true)
+})
+
+test("localhost look-alike domains and nested labels are rejected", () => {
+  const allowed = allowedHosts(8765)
+  expect(isAllowedHost("evil.localhost.attacker.example", allowed)).toBe(false)
+  expect(isAllowedHost("localhost.attacker.example", allowed)).toBe(false)
+  expect(isAllowedHost("evil.extra.localhost:8090", allowed)).toBe(false)
+})
+
 test("the allow list always carries loopback with the studio port", () => {
   const allowed = allowedHosts(8765)
   expect(allowed.has("localhost:8765")).toBe(true)

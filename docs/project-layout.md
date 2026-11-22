@@ -15,8 +15,14 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/shared/timeline.ts` | The formats of the gaze samples, the blocks, the takes and the person's choices, and the spans the montage plays |
 | `src/shared/framing.ts` | The zoom that keeps the eyes on one line across a join, used by the page and the reel build |
 | `src/shared/joins.ts` | The places to check at joins and the cuts at answered places, used by the page |
+| `src/shared/face.ts` | The face setting of the reel, off or light, used by the server and the page |
 | `src/shared/retouch.ts` | The state of the skin and eye trial and the time a minute of video takes, used by the server and the page |
-| `src/shared/inserts.ts` | Where each insert stands in the cut, its shape, and what the page and the build show of it |
+| `src/shared/inserts.ts` | Where each insert stands in the cut, its shape, and what the page and the build show of it: a picture, a clip or a PDF page |
+| `src/shared/zones.ts` | The pixels of the frame each player covers and the box where text stays visible |
+| `src/shared/subtitles.ts` | When each spoken word of the cut shows as a one-word subtitle |
+| `src/shared/captions.ts` | The key thoughts of `texts.json` in the cut, and the subtitle file libass draws |
+| `src/server/captions.ts` | Reads the approved texts, shrinks long subtitle words, and measures the ink against the box before the build |
+| `src/server/approval.ts` | Reads the saved yes and checks it against the plan and the on-screen texts |
 | `src/shared/reel.ts` | The state of a reel build and of the built file, used by the server and the page |
 | `src/shared/gather.ts` | When the studio asks the chat model to gather the blocks by itself |
 | `src/shared/brief.ts` | The format of the brief, the plan and the saved yes, and the work the studio does after the yes |
@@ -24,13 +30,14 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/shared/library.ts` | The formats of an uploaded video, of a video offered to a reel from the shared list or another folder, and of a pick, used by the server and the page |
 | `src/shared/page.ts` | The addresses of the home, uploaded videos and project pages, used by the server and the page |
 | `tools/transcribe/` | The speech recognizer, a Python script that uv runs |
-| `tools/pdf/` | The PDF reader that renders the first pages and takes out the text, a Python script that uv runs |
+| `tools/pdf/` | The PDF reader that renders the first pages and takes out the text, and renders one page with the place of each letter for an insert, Python scripts that uv runs |
 | `tools/gaze/` | The measure of where the speaker looks and the skin and eye trial, Python scripts that uv runs |
+| `tools/fonts/` | The script that makes Reels Accent from Playfair Display Italic, with fontTools |
 | `deploy/reels-studio.service` | The systemd user unit that keeps the studio running |
 | `src/pi/` | The pi extension that keeps the chat model inside one video folder |
 | `src/web/` | The page, its styles and its script |
 | `skills/` | The four skills the chat model reads: plan, style, player zones and inserts |
-| `brands/` | One folder per style profile with its colours, fonts and templates |
+| `brands/` | One folder per style profile with its colours, fonts and templates, and the font files under `fonts/` |
 | `prompts/studio.md` | The system prompt of the chat model |
 | `projects/` | One folder per video with the originals, the files attached in the chat, the chat, the transcripts and the plan, and `.library` with the shared list of uploaded videos, kept out of git |
 | `tests/unit/` | The unit tests |

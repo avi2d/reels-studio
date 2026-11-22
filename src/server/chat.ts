@@ -33,7 +33,7 @@ const UNAVAILABLE = "Чат недоступен. Отправьте сообщ�
 const LOOKING: ChatEvent = { type: "step", text: "Смотрю приложенные файлы" }
 const INTERRUPTED = "студия остановилась раньше, чем ответила. Отправьте сообщение ещё раз."
 const GATHER_PROMPT = "The studio has heard every uploaded video and asks you to gather the blocks now. Write blocks.json as «Blocks and takes» in the reels-plan skill says, from every heard video. Write no plan and ask nothing. The person does not see this message or your answer."
-const YES_NOTE = "\nWith this message the person agrees with the whole plan in plan.md. Follow «After the yes» in the reels-plan skill now, and leave plan.md as it is.\n"
+const YES_NOTE = "\nWith this message the person agrees with the whole plan in plan.md. Follow «After the yes» in the reels-plan skill now, and leave plan.md and texts.json as they are.\n"
 
 const briefNote = (brief: string): string => brief === ""
   ? "\nThe person has not written a brief yet. The page holds it in the field «Задание» of the stage «Видео и задание».\n"
@@ -65,7 +65,7 @@ const blocksLine = (timeline: TimelineView["timeline"]): ReadonlyArray<string> =
 const insertsLine = (inserts: TimelineView["inserts"]): ReadonlyArray<string> => {
   if (inserts.state === "unreadable") return ["inserts.json is not valid and must be rewritten in the format the reels-inserts skill gives."]
   if (inserts.state === "ready" && inserts.dropped > 0) {
-    return [`inserts.json names ${inserts.dropped} insert(s) with a repeated id, a missing picture, a video or word numbers that do not exist, and the page leaves them out.`]
+    return [`inserts.json names ${inserts.dropped} insert(s) with a repeated id, a missing picture, clip or document, a quote that is not on its page, a video or word numbers that do not exist, and the page leaves them out.`]
   }
   return []
 }
@@ -357,9 +357,9 @@ export class Chat extends Context.Service<Chat, {
           yield* append(dir, names.length === 0 ? { role: "user", text: trimmed } : { role: "user", text: trimmed, files: names })
         }).pipe(Effect.onError(() => release(id, turn)))
         if (approved !== undefined) {
-          yield* brief.agree(id, approved)
+          const snapshot = yield* brief.agree(id, approved).pipe(Effect.onError(() => release(id, turn)))
           if (!(yield* brief.working(id))) {
-            yield* Effect.forkDetach(brief.workAlone(id, approved, Deferred.await(turn.finished)).pipe(
+            yield* Effect.forkDetach(brief.workAlone(id, snapshot, Deferred.await(turn.finished)).pipe(
               Effect.catchTag("ApiError", (error) => Effect.logError("the work after the yes failed", error.message))
             ))
           }

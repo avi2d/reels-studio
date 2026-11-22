@@ -15,6 +15,7 @@ import { run } from "./run.ts"
 import { reelPane } from "./reel.ts"
 import { retouchCard } from "./retouch.ts"
 import { stageRail, type StageId, type StageNote } from "./stages.ts"
+import { montageSound } from "./montage-sound.ts"
 import { timelineCard, type Status } from "./timeline.ts"
 import { uploadedView } from "./uploaded.ts"
 import { videosCard } from "./videos.ts"
@@ -77,6 +78,7 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
     const seen = { first: true }
     const activeStage: { now: StageId } = { now: "brief" }
     let builtPane: ReturnType<typeof reelPane> | undefined
+    const sound = montageSound(project.id)
     const timeline = timelineCard(project.id, {
       ask: (message) => { chat.ask(message) },
       openTakes: () => { if (stages.now() === "brief") stages.open("takes") },
@@ -86,13 +88,16 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
         stages.note("takes", notes.takes)
         stages.note("pauses", notes.pauses)
         reel.classList.toggle("blank", status.blocks === undefined)
-        if (seen.first && status.blocks !== undefined) stages.open("takes")
+        if (seen.first && status.blocks !== undefined && stages.now() === "brief") stages.open("takes")
         seen.first = false
       },
       edited: () => { builtPane?.edited() },
-      settled: (ok) => { builtPane?.settled(ok) },
+      settled: (ok) => {
+        sound.refresh()
+        builtPane?.settled(ok)
+      },
       active: () => activeStage.now !== "file" && activeStage.now !== "looks"
-    })
+    }, sound.dbAt)
     const built = reelPane(project.id, {
       note: (note) => { stages.note("file", note) },
       playing: () => { timeline.stop() },
@@ -100,11 +105,15 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
       pending: () => timeline.busy()
     })
     builtPane = built
-    const looks = retouchCard(project.id)
+    const looks = retouchCard(project.id, () => {
+      stages.open("file")
+      built.build()
+    })
     const brief = briefCards(project.id, (message) => { chat.ask(message) }, () => { timeline.refresh() })
     const refresh = (): void => {
       videos.refresh()
       timeline.refresh()
+      sound.refresh()
       brief.refresh()
       built.refresh()
       looks.refresh()
@@ -116,6 +125,7 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
     }, "Удалить ролик")
     const back = iconButton("plain", "back", "Все ролики", { class: "back", href: HOME_PATH })
     const { panels } = timeline
+    panels.viewer.querySelector(".viewbox")?.append(sound.node)
     const stages = stageRail(
       { brief: h("div", { class: "pane" }, videoCard(project, refresh), ...brief.nodes, videos.node, remove), takes: panels.takes, pauses: panels.pauses, file: built.node, looks: h("div", { class: "pane" }, looks.node, built.colour) },
       panels.tracks,

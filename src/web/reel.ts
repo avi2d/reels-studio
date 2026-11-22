@@ -1,10 +1,12 @@
 import { Effect } from "effect"
-import { judgeSound, jumpsOf, LOUDNESS_TARGET, type ColourView, type Jump, type Levelling, type Passage, type PictureSide, type ReelView, type Sound, type Verdict } from "../shared/reel.ts"
+import type { Face } from "../shared/face.ts"
+import { jumpsOf, LOUDNESS_TARGET, type ColourView, type Jump, type Levelling, type Passage, type PictureSide, type ReelView, type Sound } from "../shared/reel.ts"
 import * as Api from "./api.ts"
 import { button } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatLength, formatSize } from "./format.ts"
 import { loudnessChart } from "./loudness-chart.ts"
+import { lufs, verdictWords } from "./sound-verdict.ts"
 import type { StageNote } from "./stages.ts"
 
 const POLL_MS = 1000
@@ -15,50 +17,22 @@ const NO_CUT = "В монтаже нет ни одного блока. Собе�
 const FAILED = "Ролик не собрался. Подробности в журнале студии. Нажмите «Собрать ролик», чтобы попробовать ещё раз."
 const NOT_SAVED = "Монтаж ещё не сохранился. Проверьте Wi-Fi: студия сохраняет его сама."
 const STALE = "Монтаж изменился после сборки. Соберите ролик заново, чтобы файл совпал с монтажом."
+const FACE_STALE = "На вкладке «Внешность» выбрано другое лицо, чем в файле. Соберите ролик заново, чтобы файл совпал с выбором."
+
+export const staleText = (view: ReelView, dirty: boolean): string =>
+  !dirty && view.file !== undefined && view.file.face !== view.face ? FACE_STALE : STALE
 const UNLEVELLED = "Этот ролик собран до выравнивания громкости. Соберите его заново, чтобы выровнять звук."
 const PASSAGE_LABEL = { quiet: "Тихий отрывок", loud: "Громкий отрывок" } as const
 const VERSION_LABEL = { before: "До", after: "После" } as const
 
-const lufs = (value: number): string => `${String(Math.round(value)).replace("-", "−")}\u00a0LUFS`
-
 const decimal = (value: number): string => value.toFixed(1).replace("-", "−").replace(".", ",")
 
-const SOUND_LABEL = { good: "Звук хороший", check: "Звук можно публиковать, но есть замечания", bad: "Звук плохой" } as const
-const ISSUE_NOTE = {
-  "off-target": "Громкость далеко от цели.",
-  uneven: "Громкость меняется: тихие и громкие места звучат по-разному.",
-  "over-peak": "Пики выше −1,5 dBTP.",
-  clipping: "Срывы: пики выше 0 dBTP, звук будет обрезаться."
-} as const
-
-const JUMP_LIST = 5
 const CHART_LABEL = "График громкости по времени: до и после выравнивания"
 const CHART_KEY = "Серая линия — до выравнивания, оранжевая — после. Пунктир — цель. Красные полосы — скачки громкости."
 
-const jumpLine = (jumps: ReadonlyArray<Jump>, uneven: boolean): string => {
-  if (jumps.length === 0) return uneven ? ISSUE_NOTE.uneven : "Скачков громкости нет."
-  const spans = jumps.slice(0, JUMP_LIST).map((jump) => `${formatLength(jump.from)}–${formatLength(jump.to)}`)
-  const rest = jumps.length - spans.length
-  return `Скачки громкости: ${spans.join(", ")}${rest > 0 ? ` и ещё ${rest}` : ""}.`
-}
-
-const averageLine = (offTarget: boolean): string =>
-  offTarget ? `Средняя громкость далеко от цели ${lufs(LOUDNESS_TARGET)}.` : `Средняя громкость хорошая: цель ${lufs(LOUDNESS_TARGET)}.`
-
-const peakLine = (verdict: Verdict): string => {
-  if (verdict.issues.includes("clipping")) return ISSUE_NOTE.clipping
-  if (verdict.issues.includes("over-peak")) return ISSUE_NOTE["over-peak"]
-  return "Срывов нет."
-}
-
 const verdictNotes = (sound: Sound, jumps: ReadonlyArray<Jump>): ReadonlyArray<HTMLElement> => {
-  const verdict = judgeSound(sound)
-  return [
-    h("p", {}, h("strong", {}, SOUND_LABEL[verdict.level])),
-    h("p", { class: "muted" }, jumpLine(jumps, verdict.issues.includes("uneven"))),
-    h("p", { class: "muted" }, averageLine(verdict.issues.includes("off-target"))),
-    h("p", { class: "muted" }, peakLine(verdict))
-  ]
+  const words = verdictWords(sound, jumps)
+  return [h("p", {}, h("strong", {}, words.label)), ...words.notes.map((note) => h("p", { class: "muted" }, note))]
 }
 
 const beforeLine = (before: number): string => `До выравнивания: громкость ${decimal(before)}\u00a0LUFS.`
@@ -70,6 +44,12 @@ const SAVE_HINT = "На айфоне откройте скачанный фай�
 
 const MATCHED = "Студия измерила цвет кожи в каждом видео ролика и подогнала остальные видео к первому видео с лицом. На каждой картинке слева последний кадр одного видео, справа первый кадр следующего."
 const NO_FACE = "Студия не нашла лицо хотя бы в одном видео, и цвет этого видео остался как есть."
+
+export const faceSetting = (face: Face): string => face === "light"
+  ? "Лицо в ролике: выровнять кожу и белки глаз. Выключить можно на вкладке «Внешность»."
+  : "Лицо в ролике: не трогать. Выровнять кожу и белки глаз можно на вкладке «Внешность»."
+
+export const faceFact = (face: Face): string => face === "light" ? "лицо слегка выровнено" : "лицо не тронуто"
 
 export const colourNote = (colour: ColourView): string | undefined => {
   if (colour.matched > 0) return colour.unmeasured > 0 ? `${MATCHED} ${NO_FACE}` : MATCHED
@@ -133,6 +113,7 @@ interface ReelUi {
   readonly passages: HTMLDivElement
   readonly unlevelled: HTMLParagraphElement
   readonly stale: HTMLParagraphElement
+  readonly face: HTMLParagraphElement
   readonly save: ReturnType<typeof button>
   readonly file: HTMLDivElement
   readonly make: ReturnType<typeof button>
@@ -181,7 +162,7 @@ const passageRow = (pane: Pane, passage: Passage): HTMLElement => {
   return h("div", { class: "passage" },
     h("span", {}, PASSAGE_LABEL[passage.name]),
     h("span", { class: "muted" }, `${lufs(passage.before)} → ${lufs(passage.after)}`),
-    ...versions)
+    h("span", { class: "versions passage-plays" }, ...versions))
 }
 
 const showLevelling = (pane: Pane, levelling: Levelling | undefined, seconds: number): void => {
@@ -212,6 +193,7 @@ const show = (pane: Pane, view: ReelView): void => {
   ui.cancel.hidden = !state.busy
   ui.cancel.disabled = false
   ui.make.textContent = view.file === undefined ? "Собрать ролик" : "Собрать заново"
+  ui.face.textContent = faceSetting(view.face)
   ui.status.textContent = statusOf(view)
   ui.bar.hidden = view.job.state !== "running"
   ui.bar.value = view.job.state === "running" ? view.job.done : 0
@@ -225,8 +207,9 @@ const show = (pane: Pane, view: ReelView): void => {
       ui.save.setAttribute("href", Api.reelDownloadUrl(pane.projectId, view.file.made))
       showLevelling(pane, view.file.levelling, view.file.seconds)
     }
-    ui.facts.textContent = `Длина ${formatLength(view.file.seconds)} · ${formatSize(view.file.size)} · собран ${madeAt(view.file.made)}`
+    ui.facts.textContent = `Длина ${formatLength(view.file.seconds)} · ${formatSize(view.file.size)} · собран ${madeAt(view.file.made)} · ${faceFact(view.file.face)}`
     ui.stale.hidden = state.busy || (view.file.fresh && !state.dirty)
+    ui.stale.textContent = staleText(view, state.dirty)
   }
   showColour(pane, view)
   hooks.note({ note: "", done: view.file?.fresh === true && !state.dirty })
@@ -287,6 +270,7 @@ export const reelPane = (projectId: string, hooks: ReelHooks): {
   readonly pause: () => void
   readonly edited: () => void
   readonly settled: (ok: boolean) => void
+  readonly build: () => void
 } => {
   const state: ReelState = { timer: 0, made: undefined, src: undefined, stopAt: undefined, dirty: false, busy: false, counter: 0, floor: 0, applied: 0 }
   const status = h("p", { class: "muted", role: "status" })
@@ -302,14 +286,14 @@ export const reelPane = (projectId: string, hooks: ReelHooks): {
   const passages = h("div", { class: "passages", hidden: true })
   const unlevelled = h("p", { class: "muted", hidden: true }, UNLEVELLED)
   const stale = h("p", { class: "stale", hidden: true }, STALE)
+  const face = h("p", { class: "face-setting" })
   const save = button("normal", { download: "" }, "Скачать")
   const file = h("div", { class: "built", hidden: true }, player, h("div", { class: "built-facts" }, facts, unlevelled, chart, verdict, passages, numbers, save, h("p", { class: "muted" }, SAVE_HINT)))
   const make = button("primary", {}, "Собрать ролик")
   const cancel = button("quiet", { hidden: true }, "Остановить сборку")
-  const actions = h("div", { class: "row" }, make, cancel)
   const colour = h("section", { class: "card colour-card", hidden: true })
-  const node = h("div", { class: "pane" }, h("section", { class: "card reel-card" }, h("h2", {}, "Готовый ролик"), h("p", { class: "muted" }, ABOUT), actions, status, bar, stale, problem), file)
-  const pane: Pane = { projectId, hooks, state, ui: { status, bar, problem, player, facts, loudness, verdict, chart, measured, numbers, passages, unlevelled, stale, save, file, make, cancel, colour, node } }
+  const node = h("div", { class: "pane" }, h("section", { class: "card reel-card" }, h("h2", {}, "Готовый ролик"), h("p", { class: "muted" }, ABOUT), face, h("div", { class: "row" }, make, cancel), status, bar, stale, problem), file)
+  const pane: Pane = { projectId, hooks, state, ui: { status, bar, problem, player, facts, loudness, verdict, chart, measured, numbers, passages, unlevelled, stale, face, save, file, make, cancel, colour, node } }
   player.addEventListener("play", hooks.playing)
   player.addEventListener("timeupdate", () => {
     if (state.stopAt !== undefined && player.currentTime >= state.stopAt) {
@@ -324,6 +308,7 @@ export const reelPane = (projectId: string, hooks: ReelHooks): {
     state.dirty = true
     make.disabled = true
     hooks.note({ note: "", done: false })
+    stale.textContent = STALE
     if (!file.hidden) stale.hidden = false
   }
   const settled = (ok: boolean): void => {
@@ -356,5 +341,7 @@ export const reelPane = (projectId: string, hooks: ReelHooks): {
     })
   })
 
-  return { node, colour, refresh: () => refresh(pane), pause: () => { player.pause() }, edited, settled }
+  const build = (): void => { if (!make.disabled) make.click() }
+
+  return { node, colour, refresh: () => refresh(pane), pause: () => { player.pause() }, edited, settled, build }
 }

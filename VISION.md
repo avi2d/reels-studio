@@ -20,15 +20,18 @@ It owns the path from an uploaded original to a separate video for each platform
 ## A text outside the clear zone stops the render
 
 - A text that leaves the zone its player keeps clear stops the render, with no softer warning, at the cost of a late failure.
+- Each player's clear zone comes from numbers it publishes or from measuring it, at the cost of measuring again when a player changes.
 
 ## A program comes first, and the chat model may see video
 
 - The chat model runs in a cloud and may read the words of a video, its frames and the files the person attaches, at the cost of her words and pictures leaving the home.
 - Where a program on the home computer gives a good result, the studio uses the program and does not ask the model, at the cost of more code to write.
 
-## The studio answers only at home
+## The studio answers at home and on the owner's Mac
 
-- The studio answers only the home network and has no tunnel, public address or password, at the cost of no access from outside the home.
+- The studio answers the home network and the owner's Mac through the `local-apps` gateway.
+  The gateway listens only on that Mac's loopback address.
+  The studio has no public address or password, at the cost of no public access.
 - Speech recognition runs on the home computer with an open model and sends nothing to a cloud service, at the cost of slower transcription.
 
 ## The home computer is left as it is

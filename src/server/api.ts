@@ -1,5 +1,6 @@
 import { Effect, FileSystem, Layer, Option, Schema, Stream } from "effect"
 import { Pick } from "../shared/library.ts"
+import { Face } from "../shared/face.ts"
 import { RetouchPicture } from "../shared/retouch.ts"
 import { PictureSide } from "../shared/reel.ts"
 import { Edits, type TimelinePage } from "../shared/timeline.ts"
@@ -44,6 +45,12 @@ const pictureOf = (request: HttpServerRequest.HttpServerRequest) => {
   return Number.isInteger(join) && join >= 1 && side !== undefined
     ? Effect.succeed({ made: madeOf(request), join, side })
     : badRequest("Такой картинки нет")
+}
+
+const pageOf = (request: HttpServerRequest.HttpServerRequest) => {
+  const page = Number(queryOf(request, "page"))
+  const quote = queryOf(request, "quote")
+  return Number.isInteger(page) && page >= 1 && quote.trim() !== "" ? Effect.succeed({ page, quote }) : badRequest("Такой страницы нет")
 }
 
 const versionOf = (request: HttpServerRequest.HttpServerRequest): ReelVersion =>
@@ -191,6 +198,15 @@ const uploads = Layer.mergeAll(
     return yield* HttpServerResponse.file(target, { contentType: "image/jpeg", headers: { "cache-control": "no-store" } }).pipe(
       Effect.mapError(() => new ApiError({ status: 500, message: "Файл недоступен. Попробуйте открыть страницу ещё раз." }))
     )
+  }))),
+  HttpRouter.add("GET", "/api/projects/:id/attachments/:name/clip", (request) => reply(Effect.gen(function*() {
+    const attachments = yield* Attachments
+    return yield* sendFile(yield* attachments.clip(yield* param("id"), yield* param("name")), "video/mp4", request.headers["range"])
+  }))),
+  HttpRouter.add("GET", "/api/projects/:id/attachments/:name/page", (request) => reply(Effect.gen(function*() {
+    const attachments = yield* Attachments
+    const { page, quote } = yield* pageOf(request)
+    return yield* sendFile(yield* attachments.page(yield* param("id"), yield* param("name"), page, quote), "image/jpeg", request.headers["range"])
   })))
 )
 
@@ -233,6 +249,10 @@ const reel = Layer.mergeAll(
     const media = yield* Media
     return json(yield* media.cancelReel(yield* param("id")))
   }))),
+  HttpRouter.add("GET", "/api/projects/:id/sound", reply(Effect.gen(function*() {
+    const media = yield* Media
+    return json(yield* media.sound(yield* param("id")))
+  }))),
   HttpRouter.add("GET", "/api/projects/:id/reel/file", (request) => reply(Effect.gen(function*() {
     const media = yield* Media
     const target = yield* media.reelFile(yield* param("id"), madeOf(request), versionOf(request))
@@ -253,6 +273,8 @@ const reel = Layer.mergeAll(
   })))
 )
 
+const NewFace = Schema.Struct({ face: Face })
+
 const retouch = Layer.mergeAll(
   HttpRouter.add("GET", "/api/projects/:id/retouch", reply(Effect.gen(function*() {
     const media = yield* Media
@@ -261,6 +283,11 @@ const retouch = Layer.mergeAll(
   HttpRouter.add("POST", "/api/projects/:id/retouch", reply(Effect.gen(function*() {
     const media = yield* Media
     return json(yield* media.startTrial(yield* param("id")), 202)
+  }))),
+  HttpRouter.add("PUT", "/api/projects/:id/retouch/face", reply(Effect.gen(function*() {
+    const media = yield* Media
+    const id = yield* param("id")
+    return json(yield* media.setFace(id, (yield* body(NewFace)).face))
   }))),
   HttpRouter.add("GET", "/api/projects/:id/retouch/:name", (request) => reply(Effect.gen(function*() {
     const media = yield* Media

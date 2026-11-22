@@ -48,5 +48,5 @@ export const allowedHosts = (port: number): ReadonlySet<string> => {
 
 export const isAllowedHost = (host: string | undefined, allowed: ReadonlySet<string>): boolean => {
   if (host === undefined) return false
-  return allowed.has(host.toLowerCase())
+  return allowed.has(host.toLowerCase()) || /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.localhost(?::[0-9]{1,5})?$/i.test(host)
 }

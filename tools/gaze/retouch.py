@@ -143,6 +143,7 @@ def main() -> None:
     parser.add_argument("before")
     parser.add_argument("folder")
     parser.add_argument("--encoder", default="libx264")
+    parser.add_argument("--close-up", action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args()
     folder = Path(args.folder)
 
@@ -164,8 +165,9 @@ def main() -> None:
          "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{WIDTH}x{HEIGHT}", "-r", str(RATE), "-i", "-",
          "-i", args.before, "-map", "0:v:0", "-map", "1:a:0",
          "-vf", "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p",
-         "-c:v", args.encoder, "-b:v", "10M", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
-         "-c:a", "copy", "-movflags", "+faststart", str(folder / "after.mp4")],
+         "-c:v", args.encoder, "-profile:v", "high", "-b:v", "10M", "-maxrate", "12M", "-bufsize", "24M", "-g", str(RATE * 2),
+         "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
+         "-c:a", "copy", "-map_metadata", "-1", "-movflags", "+faststart", str(folder / "after.mp4")],
         stdin=subprocess.PIPE,
     )
     size = WIDTH * HEIGHT * 3
@@ -188,7 +190,7 @@ def main() -> None:
             else:
                 steady = steady + (points - steady) * STEADY
             done = retouch(frame, steady)
-            if not pictured and frames >= RATE * 3:
+            if args.close_up and not pictured and frames >= RATE * 3:
                 cv2.imwrite(str(folder / "before.jpg"), close_up(frame, steady), [cv2.IMWRITE_JPEG_QUALITY, 92])
                 cv2.imwrite(str(folder / "after.jpg"), close_up(done, steady), [cv2.IMWRITE_JPEG_QUALITY, 92])
                 pictured = True
@@ -202,7 +204,7 @@ def main() -> None:
     if reader.wait() != 0 or writer.wait() != 0 or frames == 0:
         print("The video cannot be read or written.", file=sys.stderr)
         raise SystemExit(65)
-    if not pictured:
+    if args.close_up and not pictured:
         print("No face was found after the first 3 seconds, so there is no close-up.", file=sys.stderr)
         raise SystemExit(66)
     took = time.monotonic() - started
