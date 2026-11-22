@@ -85,13 +85,25 @@ The file holds the chosen takes in row order, without removed pauses, with the s
 It is 1080 by 1920 at 30 frames a second, H.264 High with AAC sound in an MP4.
 An iPhone HDR original is turned into ordinary BT.709 colours, so the reel does not look washed out in Instagram.
 The studio cuts each clip to whole frames, encodes the clips one by one through `REELS_HEAVY` with `REELS_ENCODER`, then joins them without encoding again.
-When the cut shows inserts, one more pass lays the pictures over the joined file and copies its sound as it is.
-A bar shows how much of the reel is encoded.
+The studio then brings the joined file to -14 LUFS with one gain curve over the whole reel.
+A limiter keeps the true peak under -1.5 dBTP.
+The gain change at each join is a short ramp that ends at the join, so the levelled line stays flat there.
+When the cut shows inserts, one more pass lays the pictures over the levelled file and copies its sound as it is.
+The joined file before levelling stays beside the reel as `before-<stamp>.mp4`.
+The download always serves the levelled file.
+A bar follows the parts, the levelling and the inserts.
 «Остановить сборку» stops a waiting or running build, ends its ffmpeg and removes the half-built parts, and the last finished reel stays.
 The build waits while the computer hears another video, because the studio runs one heavy job at a time.
 The originals stay untouched.
 
 The stage plays the built file and offers «Скачать».
+The stage names the measured loudness of the built file with a plain verdict word.
+It says when the peaks stay clean.
+A chart shows the loudness over time before and after the levelling, with the target as a line and the jumps marked.
+The numbers sit under the «Цифры» toggle.
+When at least two parts run 1 s or more, the quietest and the loudest passages each offer «До» and «После», so the owner can hear the change.
+A reel built before the levelling keeps playing.
+The stage asks for a rebuild to level its sound.
 On an iPhone, save the downloaded file to «Фото», and the Instagram reel screen finds it there.
 After a change of the cut, the stage says the file no longer matches the cut, and «Собрать заново» builds it again.
 A server restart forgets a build in progress, and the person presses the button again.
@@ -189,5 +201,6 @@ Each video folder holds these next to `plan.json`:
 | `inserts.json` | The pictures to show over phrases, written by the chat model |
 | `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses and the answers to the places to check and to the inserts |
 | `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
-| `reel/reel.json` | The build time, the video file it published, the parts and the inserts it holds, so the stage can tell whether the cut changed since |
+| `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |
+| `reel/reel.json` | The build time, the video file it published, the parts, the inserts and the measured loudness it holds. The stage reads it to tell whether the cut changed since |
 | `gathered.json` | The heard videos and the settled gaze the studio last asked the chat model to gather blocks from, with a failed mark, the hash of the `blocks.json` the failed attempt saw, and the hash of the `blocks.json` it last shortened pauses for |

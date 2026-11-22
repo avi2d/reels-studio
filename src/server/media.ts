@@ -10,7 +10,7 @@ import { keyOf, listenAgain, makeShelves, orBroken, videosIn, type Failures, typ
 import { Projects } from "./projects.ts"
 import { sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
-import { buildReel, readReel, reelVideoAt } from "./reel.ts"
+import { buildReel, readReel, reelVideoAt, type ReelVersion } from "./reel.ts"
 import { readCut, readTimeline } from "./timeline-files.ts"
 
 interface Running {
@@ -174,8 +174,8 @@ const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, r
     return yield* reelOf(dir)
   }, orBroken, Effect.provideContext(context))
 
-  const reelFile = Effect.fn("Media.reelFile")(function*(id: string, made: string) {
-    const target = yield* reelVideoAt(yield* folder(id), made)
+  const reelFile = Effect.fn("Media.reelFile")(function*(id: string, made: string, version: ReelVersion) {
+    const target = yield* reelVideoAt(yield* folder(id), made, version)
     if (target === undefined) return yield* notFound("Ролик ещё не собран")
     return target
   }, orBroken, Effect.provideContext(context))
@@ -208,7 +208,7 @@ export class Media extends Context.Service<Media, {
   readonly reel: (id: string) => Effect.Effect<ReelView, ApiError>
   readonly buildReel: (id: string) => Effect.Effect<ReelView, ApiError>
   readonly cancelReel: (id: string) => Effect.Effect<ReelView, ApiError>
-  readonly reelFile: (id: string, made: string) => Effect.Effect<string, ApiError>
+  readonly reelFile: (id: string, made: string, version: ReelVersion) => Effect.Effect<string, ApiError>
   readonly withoutWork: <A, E, R>(dir: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }>()("reels-studio/Media") {
   static readonly layer = Layer.effect(
