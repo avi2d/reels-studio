@@ -18,7 +18,9 @@ export const icon = (name: IconName, label?: string): HTMLElement =>
 
 export const setPressed = (target: WaButton, pressed: boolean): void => {
   target.setAttribute("aria-pressed", String(pressed))
-  void target.updateComplete.then(() => { target.button.ariaPressed = String(pressed) })
+  // Outside a browser, or before wa-button is defined, the element has no updateComplete and no inner button.
+  if (!("customElements" in globalThis)) return
+  void customElements.whenDefined("wa-button").then(() => target.updateComplete).then(() => { target.button.ariaPressed = String(pressed) })
 }
 
 export const button = (look: Look, props: Props, ...children: ReadonlyArray<Child>): WaButton => {
