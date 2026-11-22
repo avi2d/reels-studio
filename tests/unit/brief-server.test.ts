@@ -12,6 +12,8 @@ import type { VideoView } from "../../src/shared/plan.ts"
 import { NO_EDITS, type TimelineView } from "../../src/shared/timeline.ts"
 import { mediaWith, projectAt } from "./server-fixtures.ts"
 
+const unexpected = () => Effect.die("unexpected service call")
+
 test("a yes waits for a listening video instead of omitting it from the approved cut", async () => {
   const dir = await mkdtemp(join(tmpdir(), "brief-server-"))
   try {
@@ -35,6 +37,31 @@ test("a yes waits for a listening video instead of omitting it from the approved
     expect(media.edits().chosen).toEqual([{ block: "one", video: "a", from: 0 }])
     const approval: unknown = JSON.parse(await readFile(join(dir, "approval.json"), "utf8"))
     expect(approval).toMatchObject({ done: [{ kind: "take", block: "One" }, { kind: "pauses" }] })
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("a view after work completes reads the approval instead of returning a stale proposed plan", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "brief-view-"))
+  try {
+    await writeFile(join(dir, "plan.md"), "Plan")
+    const state = GatherState.of({
+      running: unexpected, track: (_id, task) => task, settled: unexpected,
+      trackAlone: (_id, task) => task, blocked: unexpected,
+      working: () => Effect.promise(async () => {
+        await writeFile(join(dir, "approval.json"), JSON.stringify({ plan: "Plan", at: "2026-11-20T10:00:00.000Z", done: [] }))
+        return false
+      }),
+      withoutGather: (_id, use) => use
+    })
+    const timeline: TimelineView = { looks: [], faces: [], timeline: { state: "none" } }
+    const dependencies = Layer.mergeAll(BunServices.layer, Layer.succeed(GatherState, state), Layer.succeed(Media, mediaWith(() => [], timeline).service), Layer.succeed(Projects, projectAt(dir)))
+    const view = await Effect.runPromise(Effect.gen(function*() {
+      const brief = yield* Brief
+      return yield* brief.view("p")
+    }).pipe(Effect.provide(Brief.layer.pipe(Layer.provide(dependencies)))))
+    expect(view).toMatchObject({ working: false, plan: { state: "approved", text: "Plan" } })
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
