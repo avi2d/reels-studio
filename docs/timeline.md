@@ -139,6 +139,22 @@ The trial waits in the same queue as the other heavy jobs, and a new trial repla
 The close-up comes from the first frame with a face from 3 s on.
 Without such a frame the trial fails, and the last trial stays.
 
+## The face in the reel
+
+The trial shows one face close-up as a single frame, with the left side before and the right side after.
+The person drags the line between them.
+Holding «Держите, чтобы увидеть до» shows the whole frame before, and «Крупнее» zooms to the face.
+Under the trial, the switch «Выровнять кожу и белки глаз в готовом ролике» sets how the face goes into the reel.
+Each reel starts with the switch off, and the studio keeps no choice from one reel for the next.
+The switch turns on only after a trial, so the person sets it after comparing the close-ups.
+A line under the switch says whether the built file already has the chosen face.
+When it does not, the button «Собрать ролик с выровненным лицом» or «Собрать ролик заново» opens the «Готовый ролик» stage and starts the build there.
+With the switch off, the build is the same as without the setting, and no step touches the frames.
+With the switch on, the build runs `tools/gaze/retouch.py` on the whole levelled reel, before the inserts go on, so the inserts stay as they are.
+That retouch changes pixels only inside the face, the same way the trial does.
+The «Готовый ролик» stage names the chosen face above its build button and the face of the built file in the file facts.
+After a new choice it says the file no longer matches.
+
 ## Keys
 
 | Key | What it does |
@@ -240,8 +256,9 @@ Each video folder holds these next to `plan.json`:
 | `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
 | `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |
-| `reel/reel.json` | The build time, the video file it published, the parts, the inserts, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
+| `reel/reel.json` | The build time, the video file it published, the parts, the inserts, the face setting, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
+| `looks.json` | The face setting of the reel, `off` or `light`, written when the person picks it |
 | `retouch/trial.json` | The time of the last skin and eye trial, the seconds it retouched and the seconds that took |
 | `retouch/before.jpg`, `retouch/after.jpg` | The face close-up of the trial before and after |
-| `retouch/compare.mp4` | The 20 s of the trial with the original on the left and the retouch on the right
+| `retouch/compare.mp4` | The 20 s of the trial with the original on the left and the retouch on the right |
 | `gathered.json` | The heard videos and the settled gaze the studio last asked the chat model to gather blocks from, with a failed mark, the hash of the `blocks.json` the failed attempt saw, and the hash of the `blocks.json` it last shortened pauses for |
