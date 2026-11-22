@@ -76,7 +76,7 @@ Each insert names exactly one of `picture`, `clip` or `document`.
   The studio leaves out an insert whose quote is not on its page, so never shorten, fix or translate it.
 - `video` is the file name from `source/`, exactly as written there.
 - `from` and `to` are the word numbers of the first and last word of the phrase in the transcript of that video.
-- `reason` is one short Russian sentence that says what the picture shows for this phrase.
+- `reason` is one short Russian sentence that says what the file shows for this phrase.
   Never put a number or a file name in it.
 - Write the whole file again on every change, as valid JSON and nothing else.
 

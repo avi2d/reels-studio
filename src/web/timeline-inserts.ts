@@ -94,7 +94,7 @@ const insertItem = (place: InsertPlace, number: number, data: InsertData, action
         "data-key": `keep-insert:${planned.id}`,
         click: () => { answer({ id: planned.id, answer: "keep" }) }
       }, ...spoken(KEEP.label, `${KEEP.label}: вставка ${number}`)),
-      ...(place.visual.kind !== "clip" && place.answer !== "sound" ? [] : [button(chosen("sound"), {
+      ...(place.visual.kind !== "clip" ? [] : [button(chosen("sound"), {
         title: SOUND.does,
         "aria-pressed": String(place.answer === "sound"),
         "data-key": `sound-insert:${planned.id}`,
