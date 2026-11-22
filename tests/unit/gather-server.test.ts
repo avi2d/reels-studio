@@ -36,3 +36,28 @@ test("polling stays active after chat writes changed blocks until pause shorteni
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test("polling stays idle when changed blocks cannot shorten because the timeline is unreadable", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "gather-server-"))
+  try {
+    const previous = '{"blocks":[]}'
+    const changed = '{unreadable'
+    await writeFile(join(dir, "gathered.json"), JSON.stringify({ videos: ["a"], gazed: ["a"], failed: true, hash: blocksHash(changed), shortened: blocksHash(previous) }))
+    await writeFile(join(dir, "blocks.json"), changed)
+    const timeline: TimelineView = { looks: [{ video: "a", state: "measured" }], faces: [], timeline: { state: "unreadable" } }
+    const media = mediaWith(() => [{ name: "a", state: "ready", transcript: { duration: 1, words: [] } }], timeline)
+    const chat = Chat.of({
+      history: () => Effect.die("unexpected service call"), send: () => Effect.die("unexpected service call"),
+      gather: () => Effect.die("unexpected service call"), withoutTurn: (_id, use) => use
+    })
+    const dependencies = Layer.mergeAll(BunServices.layer, GatherState.layer, Layer.succeed(Media, media.service), Layer.succeed(Projects, projectAt(dir)), Layer.succeed(Chat, chat))
+    const result = await Effect.runPromise(Effect.gen(function*() {
+      const gather = yield* Gather
+      return { running: yield* gather.running("p"), failed: yield* gather.failed("p") }
+    }).pipe(Effect.provide(Gather.layer.pipe(Layer.provide(dependencies)))))
+    expect(result.running).toBe(false)
+    expect(result.failed).toBe(true)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
