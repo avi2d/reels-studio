@@ -38,7 +38,7 @@
 .notes, .details, .detail { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .details, .detail { min-height: 0; }
 .details { flex: 1; }
-.takes, .pause-list, .place-list, .detail .files { position: relative; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; }
+.takes, .pause-list, .places-detail, .detail .files { position: relative; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; }
 .notes:empty, .details:empty { display: none; }
 .detail + .detail { padding-top: 14px; border-top: 1px solid var(--wa-color-surface-border); }
 .detail-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
