@@ -102,6 +102,7 @@ The originals stay untouched.
 
 After each change of the cut, the studio checks the sound of the cut on the home computer, without the picture.
 It cuts the sound of each clip from the original video and levels it with the same gain curve and limiter as the build.
+When the sound of a clip insert is on, the check mixes it under the voice as the build does.
 The check waits while another heavy job runs, and a failed check waits for the next change of the cut.
 Under the player, a line names the verdict of that check in the words of the «Готовый ролик» stage.
 So the owner knows the sound before the build and the download.
@@ -270,7 +271,7 @@ Each video folder holds these next to `plan.json`:
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
 | `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |
 | `reel/reel.json` | The build time, the video file it published, the parts, the inserts, the face setting, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
-| `reel/sound.json` | The parts of the last checked cut, its measured loudness before and after levelling, and the gain of each part over its source time, which the montage plays |
+| `reel/sound.json` | The parts of the last checked cut with the heard clip inserts, its measured loudness before and after levelling, and the gain of each part over its source time, which the montage plays |
 | `reel/sound-work/` | The sound of each clip and the levelled sound while a check runs, removed when it ends |
 | `looks.json` | The face setting of the reel, `off` or `light`, written when the person picks it |
 | `retouch/trial.json` | The time of the last skin and eye trial, the seconds it retouched and the seconds that took |
