@@ -34,6 +34,8 @@ class FakeEl {
   volume = 1
   ended = false
   seeking = false
+  readyState = 0
+  style = { transform: "" }
   src = ""
   private attrs: Record<string, string> = {}
   private classes = new Set<string>()
@@ -222,6 +224,8 @@ const setup = (blocks: number): { readonly card: ReturnType<typeof timelineCard>
   const timeline = (): unknown => ({
     looks: [{ video: "a", state: "measured" }],
     faces: [],
+    pictures: [],
+    inserts: { state: "none" },
     timeline: { state: "ready", blocks: blocksOf(count), dropped: 0, edits: { order: [], deleted: [], chosen: [], pauses: [] } },
     gathering: false,
     gatherFailed: false

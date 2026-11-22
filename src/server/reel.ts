@@ -1,15 +1,24 @@
-import { DateTime, Effect, FileSystem, Option, Schema } from "effect"
-import type { Clip } from "../shared/timeline.ts"
+import { Data, DateTime, Effect, FileSystem, Option, Schema } from "effect"
+import { shapeOf, type Shown } from "../shared/inserts.ts"
+import { Frame } from "../shared/timeline.ts"
 import { LOUDNESS_TARGET, Loudness, Passage, Series, SERIES_STEP, Sound, type ReelView } from "../shared/reel.ts"
-import { curveOf, joinArgs, joinList, gainMomentsOf, joinsOf, levelArgs, partArgs, partsOf, passagesOf, progressSeconds, sameParts, sampledAt, secondsOf, type Moment, type Span } from "./media-commands.ts"
+import { pictureProbeArgs } from "./attachment-notes.ts"
+import {
+  curveOf, gainMomentsOf, insertArgs, joinArgs, joinList, joinsOf, levelArgs, partArgs, partsOf, passagesOf, progressSeconds, sameParts, sampledAt, secondsOf, type InsertPicture, type Moment, type Span
+} from "./media-commands.ts"
 import { isHdrVideo, measureLoudness, momentaryLoudness, places, tool } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
+import type { Cut } from "./timeline-files.ts"
+
+const ShownInsert = Schema.Struct({ picture: Schema.String, start: Schema.Finite, end: Schema.Finite })
+type ShownInsert = typeof ShownInsert.Type
 
 const Record = Schema.Struct({
   made: Schema.String,
   video: Schema.String,
   before: Schema.String,
-  parts: Schema.Array(Schema.Struct({ video: Schema.String, start: Schema.Finite, frames: Schema.Int })),
+  parts: Schema.Array(Schema.Struct({ video: Schema.String, start: Schema.Finite, frames: Schema.Int, frame: Schema.optionalKey(Frame) })),
+  inserts: Schema.Array(ShownInsert).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   loudness: Loudness,
   sound: Sound,
   series: Series,
@@ -20,6 +29,34 @@ const decodeRecord = Schema.decodeUnknownOption(RecordFile)
 const encodeRecord = Schema.encodeEffect(RecordFile)
 
 export type ReelVersion = "after" | "before"
+
+const PictureProbe = Schema.fromJsonString(Schema.Struct({
+  streams: Schema.Array(Schema.Struct({ width: Schema.optionalKey(Schema.Finite), height: Schema.optionalKey(Schema.Finite) })),
+  frames: Schema.optionalKey(Schema.Array(Schema.Struct({
+    side_data_list: Schema.optionalKey(Schema.Array(Schema.Struct({ rotation: Schema.optionalKey(Schema.Finite) })))
+  })))
+}))
+const decodePictureProbe = Schema.decodeUnknownEffect(PictureProbe)
+
+const recorded = (inserts: ReadonlyArray<Shown>): ReadonlyArray<ShownInsert> =>
+  inserts.map((one) => ({ picture: one.picture, start: Number(one.start.toFixed(4)), end: Number(one.end.toFixed(4)) }))
+
+const sameInserts = (left: ReadonlyArray<ShownInsert>, right: ReadonlyArray<ShownInsert>): boolean =>
+  JSON.stringify(left) === JSON.stringify(right)
+
+class PictureUnreadable extends Data.TaggedError("PictureUnreadable")<{ readonly picture: string }> {}
+
+const pictureOf = Effect.fnUntraced(function*(dir: string, insert: Shown) {
+  const file = `${dir}/attached/${insert.picture}`
+  const probe = yield* decodePictureProbe(yield* tool("ffprobe", pictureProbeArgs(file), []))
+  const stream = probe.streams.find((one) => one.width !== undefined)
+  if (stream?.width === undefined || stream.height === undefined) return yield* new PictureUnreadable({ picture: insert.picture })
+  const rotation = probe.frames?.[0]?.side_data_list?.find((one) => one.rotation !== undefined)?.rotation
+  const upright = rotation !== undefined && Math.abs(rotation % 180) === 90
+  const width = upright ? stream.height : stream.width
+  const height = upright ? stream.width : stream.height
+  return { file, shape: shapeOf(width, height), width, height, start: insert.start, end: insert.end } satisfies InsertPicture
+})
 
 const reelPlaces = (dir: string): { readonly record: string; readonly work: string; readonly video: (name: string) => string } => ({
   record: `${dir}/reel/reel.json`,
@@ -101,12 +138,16 @@ const publish = Effect.fnUntraced(function*(dir: string, record: typeof Record.T
   yield* Effect.uninterruptible(fs.rename(`${place.work}/reel.json`, place.record))
 })
 
-const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, onDone: (share: number) => Effect.Effect<void>) {
+const PARTS_SHARE = 0.75
+
+const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (share: number) => Effect.Effect<void>) {
   const fs = yield* FileSystem.FileSystem
   const settings = yield* Settings
   const place = reelPlaces(dir)
-  const parts = partsOf(clips)
+  const parts = partsOf(cut.clips)
   const total = secondsOf(parts)
+  const pictures = yield* Effect.forEach(cut.inserts, (insert) => pictureOf(dir, insert))
+  const partsShare = pictures.length === 0 ? 1 : PARTS_SHARE
   yield* fs.remove(place.work, { recursive: true, force: true })
   yield* fs.makeDirectory(place.work, { recursive: true })
   yield* sweepReel(dir)
@@ -120,7 +161,7 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray
     const name = `part-${String(rendered.length + 1).padStart(3, "0")}.mov`
     yield* tool("ffmpeg", partArgs(source, part, tone, settings.encoder, `${place.work}/${name}`), settings.heavy, (line) => {
       const seconds = progressSeconds(line)
-      return seconds === undefined ? Effect.void : onDone(Math.min(1, (before + seconds) / total))
+      return seconds === undefined ? Effect.void : onDone(Math.min(1, (before + seconds) / total) * partsShare)
     })
     rendered.push({ name, lufs: (yield* measureLoudness(`${place.work}/${name}`)).lufs })
   }
@@ -128,8 +169,16 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray
   const heard = yield* measureLoudness(`${place.work}/joined.mp4`)
   const moments = yield* momentaryLoudness(`${place.work}/joined.mp4`, `${place.work}/moments.txt`)
   const levelled = gainMomentsOf(moments, joinsOf(parts))
+  const levelledFile = pictures.length === 0 ? `${place.work}/reel.mp4` : `${place.work}/levelled.mp4`
   const trial = yield* levelReel(place.work, levelled, 0, `${place.work}/trial.mp4`)
-  const changed = yield* levelReel(place.work, levelled, LOUDNESS_TARGET - trial.lufs, `${place.work}/reel.mp4`)
+  const changed = yield* levelReel(place.work, levelled, LOUDNESS_TARGET - trial.lufs, levelledFile)
+  if (pictures.length > 0) {
+    yield* tool("ffmpeg", insertArgs(levelledFile, pictures, settings.encoder, `${place.work}/reel.mp4`), settings.heavy, (line) => {
+      const seconds = progressSeconds(line)
+      return seconds === undefined ? Effect.void : onDone(PARTS_SHARE + (1 - PARTS_SHARE) * Math.min(1, seconds / total))
+    })
+  }
+  const finalChanged = pictures.length === 0 ? changed : yield* measureLoudness(`${place.work}/reel.mp4`)
   const changedMoments = yield* momentaryLoudness(`${place.work}/reel.mp4`, `${place.work}/moments-after.txt`)
   const passages = yield* measurePassages(place.work, passagesOf(parts, rendered.map((part) => part.lufs)))
   const made = DateTime.formatIso(yield* DateTime.now)
@@ -138,15 +187,16 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray
     video: videoOf(made),
     before: beforeOf(made),
     parts,
-    loudness: { before: heard.lufs, after: changed.lufs },
-    sound: { lufs: changed.lufs, lra: changed.lra, truePeak: changed.truePeak },
+    inserts: recorded(cut.inserts),
+    loudness: { before: heard.lufs, after: finalChanged.lufs },
+    sound: { lufs: finalChanged.lufs, lra: finalChanged.lra, truePeak: finalChanged.truePeak },
     series: { before: sampledAt(moments, SERIES_STEP, total), after: sampledAt(changedMoments, SERIES_STEP, total) },
     passages
   }
   yield* publish(dir, record)
 })
 
-export const buildReel = Effect.fn("Reel.build")(function*(dir: string, clips: ReadonlyArray<Clip>, onDone: (share: number) => Effect.Effect<void>) {
+export const buildReel = Effect.fn("Reel.build")(function*(dir: string, cut: Cut, onDone: (share: number) => Effect.Effect<void>) {
   const fs = yield* FileSystem.FileSystem
   const cleanup = Effect.andThen(
     fs.remove(reelPlaces(dir).work, { recursive: true, force: true }).pipe(
@@ -156,12 +206,12 @@ export const buildReel = Effect.fn("Reel.build")(function*(dir: string, clips: R
       Effect.catch((error) => Effect.logError("the unpublished reel video was not removed", error))
     )
   )
-  yield* encodeReel(dir, clips, onDone).pipe(Effect.ensuring(cleanup))
+  yield* encodeReel(dir, cut, onDone).pipe(Effect.ensuring(cleanup))
 })
 
-export const readReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, job: ReelView["job"]) {
+export const readReel = Effect.fnUntraced(function*(dir: string, made: Cut, job: ReelView["job"]) {
   const fs = yield* FileSystem.FileSystem
-  const parts = partsOf(clips)
+  const parts = partsOf(made.clips)
   const cut = secondsOf(parts)
   const published = yield* publishedReel(dir)
   if (published === undefined) return { job, cut } satisfies ReelView
@@ -171,7 +221,7 @@ export const readReel = Effect.fnUntraced(function*(dir: string, clips: Readonly
     made: record.made,
     seconds: secondsOf(record.parts),
     size,
-    fresh: sameParts(record.parts, parts),
+    fresh: sameParts(record.parts, parts) && sameInserts(record.inserts, recorded(made.inserts)),
     loudness: record.loudness,
     sound: record.sound,
     series: record.series,

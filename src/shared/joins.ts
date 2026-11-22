@@ -1,5 +1,6 @@
+import { framedHead, frameToward, inView } from "./framing.ts"
 import type { Transcript } from "./plan.ts"
-import { FADE, type AnsweredJoin, type Clip, type Edits, type Head, type JoinAnswer, type VideoFaces } from "./timeline.ts"
+import { FADE, type AnsweredJoin, type Clip, type Edits, type Frame, type Head, type JoinAnswer, type JoinState, type VideoFaces } from "./timeline.ts"
 
 export const JUMP_STEP = 0.08
 export const AROUND_JOIN_SECONDS = 1.5
@@ -43,28 +44,94 @@ const sameEdge = (left: Edge, right: Edge): boolean => left.video === right.vide
 const isJoin = (answered: AnsweredJoin, join: Join): boolean =>
   sameEdge(answered.end, { video: join.end.video, at: join.end.end }) && sameEdge(answered.start, { video: join.start.video, at: join.start.start })
 
-const answerAt = (edits: Edits, join: Join): JoinAnswer | undefined => edits.joins.find((answered) => isJoin(answered, join))?.answer
+const answeredAt = (edits: Edits, join: Join): AnsweredJoin | undefined => edits.joins.find((answered) => isJoin(answered, join))
+
+const answerAt = (edits: Edits, join: Join): JoinState | undefined => answeredAt(edits, join)?.answer
+
+const coverAt = (edits: Edits, join: Join): string | undefined => {
+  const answered = answeredAt(edits, join)
+  return answered?.answer === "cover" ? answered.picture : undefined
+}
+
+export interface Cover {
+  readonly join: Join
+  readonly picture: string
+}
+
+export const coversOf = (clips: ReadonlyArray<Clip>, edits: Edits, pictures: ReadonlyArray<string>): ReadonlyArray<Cover> =>
+  joinsOf(clips).flatMap((join): ReadonlyArray<Cover> => {
+    const picture = coverAt(edits, join)
+    return picture === undefined || !pictures.includes(picture) ? [] : [{ join, picture }]
+  })
+
+type Align =
+  | { readonly kind: "zoom"; readonly frame: Frame }
+  | { readonly kind: "far" }
+  | { readonly kind: "level" }
+  | { readonly kind: "unmeasured" }
 
 export interface Place {
   readonly join: Join
   readonly shift: number
   readonly trim: JoinTrim
-  readonly answer: JoinAnswer | undefined
+  readonly align: Align
+  readonly answer: JoinState | undefined
+  readonly answered: AnsweredJoin | undefined
 }
 
-export const placesOf = (
-  clips: ReadonlyArray<Clip>, faces: ReadonlyMap<string, VideoFaces>, transcripts: ReadonlyMap<string, Transcript>, edits: Edits
-): ReadonlyArray<Place> =>
-  joinsOf(clips).flatMap((join): ReadonlyArray<Place> => {
-    const before = faces.get(join.end.video)
-    const after = faces.get(join.start.video)
-    const left = before === undefined ? undefined : headAt(before, join.end.end, "before")
-    const right = after === undefined ? undefined : headAt(after, join.start.start, "after")
-    if (left === undefined || right === undefined) return []
-    const shift = headShift(left, right)
-    if (shift <= JUMP_STEP) return []
-    return [{ join, shift, trim: trimOf(join, faces, transcripts), answer: answerAt(edits, join) }]
-  })
+
+
+interface Seen { readonly head: Head; readonly measured: boolean }
+
+const seenAt = (faces: VideoFaces | undefined, time: number, side: "before" | "after"): Seen | undefined => {
+  const head = faces === undefined ? undefined : headAt(faces, time, side)
+  if (head === undefined) return undefined
+  return faces?.aspect === undefined ? { head, measured: false } : { head: inView(head, faces.aspect), measured: true }
+}
+
+const alignOf = (before: Head, after: Seen, measured: boolean): Align => {
+  if (!measured) return { kind: "unmeasured" }
+  const frame = frameToward(before, after.head)
+  if (frame === undefined) return { kind: "far" }
+  if (frame.scale < 1.005) return { kind: "level" }
+  return { kind: "zoom", frame }
+}
+
+type Faces = ReadonlyMap<string, VideoFaces>
+type Transcripts = ReadonlyMap<string, Transcript>
+
+interface Pass {
+  readonly frames: ReadonlyArray<Frame | undefined>
+  readonly places: ReadonlyArray<Place>
+}
+
+// A frame holds until the next join, so the head before a join is seen through the frame an earlier join set.
+const passOf = (clips: ReadonlyArray<Clip>, faces: Faces, transcripts: Transcripts, edits: Edits): Pass => {
+  const starts = new Map(joinsOf(clips).map((join) => [join.after, join]))
+  const places: Array<Place> = []
+  const frameAfter = (join: Join, held: Frame | undefined): Frame | undefined => {
+    const before = seenAt(faces.get(join.end.video), join.end.end, "before")
+    const after = seenAt(faces.get(join.start.video), join.start.start, "after")
+    if (before === undefined || after === undefined) return undefined
+    const shown = framedHead(before.head, held)
+    const shift = headShift(shown, after.head)
+    if (shift <= JUMP_STEP) return undefined
+    const align = alignOf(shown, after, before.measured && after.measured)
+    const given = answerAt(edits, join)
+    const answer = given === "zoom" && align.kind !== "zoom" ? undefined : given
+    places.push({ join, shift, trim: trimOf(join, faces, transcripts), align, answer, answered: answeredAt(edits, join) })
+    return answer === "zoom" && align.kind === "zoom" ? align.frame : undefined
+  }
+  const frames: Array<Frame | undefined> = []
+  for (const [index] of clips.entries()) {
+    const join = starts.get(index)
+    frames.push(join === undefined ? frames.at(-1) : frameAfter(join, frames.at(-1)))
+  }
+  return { frames, places }
+}
+
+export const placesOf = (clips: ReadonlyArray<Clip>, faces: Faces, transcripts: Transcripts, edits: Edits): ReadonlyArray<Place> =>
+  passOf(clips, faces, transcripts, edits).places
 
 export const facesByVideo = (faces: ReadonlyArray<VideoFaces>): ReadonlyMap<string, VideoFaces> =>
   new Map(faces.map((one) => [one.video, one]))
@@ -134,14 +201,27 @@ export const trimmed = (
   return clips.map((clip, index) => ({ ...clip, start: trims.get(index)?.start ?? clip.start, end: trims.get(index + 1)?.end ?? clip.end }))
 }
 
+export const cutOf = (clips: ReadonlyArray<Clip>, faces: Faces, transcripts: Transcripts, edits: Edits): ReadonlyArray<Clip> => {
+  const { frames } = passOf(clips, faces, transcripts, edits)
+  const framed = clips.map((clip, index) => {
+    const frame = frames[index]
+    return frame === undefined ? clip : { ...clip, frame }
+  })
+  return trimmed(framed, faces, transcripts, edits)
+}
+
 export const openPlaces = (places: ReadonlyArray<Place>): number => places.filter((place) => place.answer === undefined).length
+
+const endsOf = (join: Join) => ({ end: { video: join.end.video, at: join.end.end }, start: { video: join.start.video, at: join.start.start } })
 
 export const withAnswer = (edits: Edits, join: Join, answer: JoinAnswer): Edits => ({
   ...edits,
-  joins: [
-    ...edits.joins.filter((answered) => !isJoin(answered, join)),
-    { end: { video: join.end.video, at: join.end.end }, start: { video: join.start.video, at: join.start.start }, answer }
-  ]
+  joins: [...edits.joins.filter((answered) => !isJoin(answered, join)), { ...endsOf(join), answer }]
+})
+
+export const withCover = (edits: Edits, join: Join, picture: string): Edits => ({
+  ...edits,
+  joins: [...edits.joins.filter((answered) => !isJoin(answered, join)), { ...endsOf(join), answer: "cover", picture }]
 })
 
 const lastSeconds = (clips: ReadonlyArray<Clip>, seconds: number): ReadonlyArray<Clip> => {

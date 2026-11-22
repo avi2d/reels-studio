@@ -68,7 +68,7 @@ const nextUnseen = Effect.fnUntraced(function*(unseen: Unseen, jobs: ReadonlyArr
     if (!((yield* fs.exists(place.transcript)) && (yield* fs.exists(place.preview)))) return false
     if (!(yield* fs.exists(place.gaze))) return true
     const measured = yield* Effect.option(readGaze(job))
-    return Option.isSome(measured) && measured.value.heads === undefined
+    return Option.isSome(measured) && (measured.value.heads === undefined || measured.value.aspect === undefined)
   }))
   return jobs.find((_, index) => waiting[index] === true)
 })
@@ -127,8 +127,7 @@ const startReel = (reels: Reels, dir: string): Effect.Effect<boolean> =>
 const reelTask = (reels: Reels, dir: string) =>
   Effect.gen(function*() {
     if (!(yield* startReel(reels, dir))) return
-    const clips = yield* readCut(dir, yield* sourceNames(dir))
-    yield* buildReel(dir, clips, (done) => setReel(reels, dir, { state: "running", done }))
+    yield* buildReel(dir, yield* readCut(dir, yield* sourceNames(dir)), (done) => setReel(reels, dir, { state: "running", done }))
   }).pipe(Effect.onExit((exit) => Exit.isFailure(exit) && !Exit.hasInterrupts(exit) ? setReel(reels, dir, { state: "failed" }) : forgetReel(reels, dir)))
 
 const step = Effect.fnUntraced(function*(failures: Failures, work: Ref.Ref<Work>) {
@@ -169,7 +168,7 @@ const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, r
     const dir = yield* folder(id)
     const job = (yield* Ref.get(reels)).get(dir)
     if (job?.state === "waiting" || job?.state === "running") return yield* reelOf(dir)
-    const clips = yield* readCut(dir, yield* sourceNames(dir))
+    const { clips } = yield* readCut(dir, yield* sourceNames(dir))
     if (clips.length === 0) return yield* badRequest("В монтаже нет ни одного блока. Сначала соберите блоки.")
     yield* queueWaiting(reels, dir)
     return yield* reelOf(dir)

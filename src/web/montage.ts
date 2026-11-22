@@ -1,5 +1,6 @@
 import { Data, Effect } from "effect"
-import { fadeGain, type Clip } from "../shared/timeline.ts"
+import { VIEW_WIDTH } from "../shared/framing.ts"
+import { fadeGain, type Clip, type Frame } from "../shared/timeline.ts"
 import * as Api from "./api.ts"
 import { h } from "./dom.ts"
 
@@ -23,10 +24,13 @@ const HAVE_CURRENT_DATA = 2
 
 const hasFrame = (node: HTMLVideoElement): boolean => node.readyState >= HAVE_CURRENT_DATA && !node.seeking
 
+const transformOf = (frame: Frame | undefined): string =>
+  frame === undefined ? "" : `scale(${frame.scale}) translate(${-frame.left / VIEW_WIDTH * 100}%, ${-frame.top * 100}%)`
+
 interface Screen {
   readonly node: HTMLElement
   readonly nodes: Map<string, HTMLVideoElement>
-  readonly seek: (node: HTMLVideoElement, at: number) => void
+  readonly seek: (node: HTMLVideoElement, at: number, frame: Frame | undefined) => void
   readonly reveal: (node: HTMLVideoElement) => void
   readonly nodeOf: (video: string) => HTMLVideoElement
   shown: HTMLVideoElement | undefined
@@ -42,9 +46,15 @@ const screenOf = (projectId: string, events: ScreenEvents): Screen => {
   const node = h("div", { class: "screen" })
   const nodes = new Map<string, HTMLVideoElement>()
   const wanted = new WeakMap<HTMLVideoElement, number>()
-  const seek = (video: HTMLVideoElement, at: number): void => {
+  const framing = new WeakMap<HTMLVideoElement, Frame | undefined>()
+  const applyFrame = (video: HTMLVideoElement): void => { video.style.transform = transformOf(framing.get(video)) }
+  // The new frame waits for the seek, or the last picture of the old place shows enlarged for a moment.
+  const seek = (video: HTMLVideoElement, at: number, frame: Frame | undefined): void => {
     wanted.set(video, at)
-    if (video.readyState >= HAVE_METADATA && Math.abs(video.currentTime - at) > SEEK_SLACK) video.currentTime = at
+    framing.set(video, frame)
+    if (video.readyState < HAVE_METADATA) return
+    if (Math.abs(video.currentTime - at) > SEEK_SLACK) video.currentTime = at
+    else applyFrame(video)
   }
   const screen: Screen = {
     node,
@@ -62,9 +72,12 @@ const screenOf = (projectId: string, events: ScreenEvents): Screen => {
       video.dataset.video = name
       video.addEventListener("loadedmetadata", () => {
         const at = wanted.get(video)
-        if (at !== undefined) seek(video, at)
+        if (at !== undefined) seek(video, at, framing.get(video))
       })
-      video.addEventListener("seeked", () => { events.ready(video) })
+      video.addEventListener("seeked", () => {
+        applyFrame(video)
+        events.ready(video)
+      })
       video.addEventListener("loadeddata", () => { events.ready(video) })
       video.addEventListener("error", () => {
         nodes.delete(name)
@@ -118,7 +131,7 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
     if (index > state.index && last !== undefined) state.before += last.end - last.start
     state.index = index
     const node = nodeOf(clip.video)
-    seek(node, clip.start)
+    seek(node, clip.start, clip.frame)
     if (node === screen.shown) start(node)
     else {
       screen.shown?.pause()
@@ -127,7 +140,7 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
     const next = state.clips[index + 1]
     if (next !== undefined && next.video !== clip.video) {
       const upcoming = nodeOf(next.video)
-      if (upcoming !== screen.shown) seek(upcoming, next.start)
+      if (upcoming !== screen.shown) seek(upcoming, next.start, next.frame)
     }
   }
   const watch = (): void => {
@@ -173,7 +186,7 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
   const show = (clip: Clip): void => {
     if (state.clips.length > 0) return
     const node = nodeOf(clip.video)
-    seek(node, clip.start)
+    seek(node, clip.start, clip.frame)
     if (screen.shown === undefined || node === screen.shown || hasFrame(node)) reveal(node)
     else state.awaited = node
   }
