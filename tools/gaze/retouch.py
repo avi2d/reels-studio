@@ -170,7 +170,6 @@ def main() -> None:
     )
     size = WIDTH * HEIGHT * 3
     frames = 0
-    found = 0
     steady: np.ndarray | None = None
     pictured = False
     while True:
@@ -183,9 +182,12 @@ def main() -> None:
         done = frame
         if seen.face_landmarks:
             points = np.array([(point.x * WIDTH, point.y * HEIGHT) for point in seen.face_landmarks[0]], np.float32)
-            steady = points if steady is None else steady + (points - steady) * STEADY
+            face = float(np.linalg.norm(points[BROW_TOP] - points[CHIN]))
+            if steady is None or np.mean(np.linalg.norm(points - steady, axis=1)) > face * 0.05:
+                steady = points
+            else:
+                steady = steady + (points - steady) * STEADY
             done = retouch(frame, steady)
-            found += 1
             if not pictured and frames >= RATE * 3:
                 cv2.imwrite(str(folder / "before.jpg"), close_up(frame, steady), [cv2.IMWRITE_JPEG_QUALITY, 92])
                 cv2.imwrite(str(folder / "after.jpg"), close_up(done, steady), [cv2.IMWRITE_JPEG_QUALITY, 92])
@@ -204,7 +206,7 @@ def main() -> None:
         print("No face was found after the first 3 seconds, so there is no close-up.", file=sys.stderr)
         raise SystemExit(66)
     took = time.monotonic() - started
-    result = {"seconds": frames / RATE, "took": round(took, 2), "found": round(found / frames, 4)}
+    result = {"seconds": frames / RATE, "took": round(took, 2)}
     (folder / "retouch.json").write_text(json.dumps(result), encoding="utf-8")
 
 
