@@ -28,7 +28,7 @@ test("a yes waits for a listening video instead of omitting it from the approved
     const dependencies = Layer.mergeAll(BunServices.layer, GatherState.layer, Layer.succeed(Media, media.service), Layer.succeed(Projects, projectAt(dir)))
     const program = Effect.gen(function*() {
       const brief = yield* Brief
-      const fiber = yield* Effect.forkChild(brief.workAlone("p", "plan", Effect.void))
+      const fiber = yield* Effect.forkChild(brief.workAlone("p", { plan: "plan", texts: null }, Effect.void))
       yield* Effect.sleep("1200 millis")
       expect(yield* brief.working("p")).toBe(true)
       videos = [{ name: "a", state: "ready", transcript: { duration: 1, words: [{ start: 0, end: 1, text: "Hello" }] } }]
