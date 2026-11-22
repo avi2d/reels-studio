@@ -270,7 +270,7 @@ Each answer takes the place off the count, and `timeline.json` keeps it by the i
 ## Key thoughts
 
 The chat model writes the key thoughts to `texts.json`, each tied to the words of one phrase.
-The «Паузы и склейки» stage lists every key thought of `texts.json` under «Ключевые мысли», with its lines, its words and its time in the cut.
+The «Паузы и склейки» stage lists every key thought of `texts.json` under «Ключевые мысли», with its lines and, when the studio knows them, its words and its time in the cut.
 A key thought the reel cannot show stays in the list, marked «не встанет в ролик», with its reason:
 
 | Reason | What the list says |
