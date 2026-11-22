@@ -135,8 +135,8 @@ export const firstSeconds = (parts: ReadonlyArray<Part>, seconds: number): Reado
   })
 }
 
-export const retouchArgs = (looker: string, before: string, folder: string, encoder: string): ReadonlyArray<string> => [
-  "run", "--project", looker, "python", `${looker}/retouch.py`, "--encoder", encoder, before, folder
+export const retouchArgs = (looker: string, video: { readonly before: string; readonly folder: string; readonly closeUp: boolean }, encoder: string): ReadonlyArray<string> => [
+  "run", "--project", looker, "python", `${looker}/retouch.py`, "--encoder", encoder, ...(video.closeUp ? [] : ["--no-close-up"]), video.before, video.folder
 ]
 
 export const retouchedFrames = (line: string): number | undefined => {

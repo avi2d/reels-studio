@@ -1,5 +1,6 @@
 import { Effect, FileSystem, Layer, Option, Schema, Stream } from "effect"
 import { Pick } from "../shared/library.ts"
+import { Face } from "../shared/face.ts"
 import { RetouchPicture } from "../shared/retouch.ts"
 import { PictureSide } from "../shared/reel.ts"
 import { Edits, type TimelinePage } from "../shared/timeline.ts"
@@ -253,6 +254,8 @@ const reel = Layer.mergeAll(
   })))
 )
 
+const NewFace = Schema.Struct({ face: Face })
+
 const retouch = Layer.mergeAll(
   HttpRouter.add("GET", "/api/projects/:id/retouch", reply(Effect.gen(function*() {
     const media = yield* Media
@@ -261,6 +264,11 @@ const retouch = Layer.mergeAll(
   HttpRouter.add("POST", "/api/projects/:id/retouch", reply(Effect.gen(function*() {
     const media = yield* Media
     return json(yield* media.startTrial(yield* param("id")), 202)
+  }))),
+  HttpRouter.add("PUT", "/api/projects/:id/retouch/face", reply(Effect.gen(function*() {
+    const media = yield* Media
+    const id = yield* param("id")
+    return json(yield* media.setFace(id, (yield* body(NewFace)).face))
   }))),
   HttpRouter.add("GET", "/api/projects/:id/retouch/:name", (request) => reply(Effect.gen(function*() {
     const media = yield* Media
