@@ -1,6 +1,7 @@
 import type { Transcript } from "../shared/plan.ts"
 import { SILENCE_LUFS } from "../shared/reel.ts"
 import { INSERT_DRIFT, INSERT_FADE, type Shape } from "../shared/inserts.ts"
+import type { Rgb } from "../shared/reel.ts"
 import { cameraShare, FADE, type Clip, type Frame, type Gaze } from "../shared/timeline.ts"
 
 const HDR_TRANSFERS = new Set(["arib-std-b67", "smpte2084"])
@@ -94,23 +95,76 @@ const reelVideo = (frame: Frame | undefined): string => {
   ].join(",")
 }
 
+export const TO_RGB = "scale=in_color_matrix=bt709:in_range=tv:out_range=pc"
+
+const gainFilter = (gain: Rgb): string =>
+  `${TO_RGB},format=gbrpf32le,colorchannelmixer=rr=${gain.r.toFixed(4)}:gg=${gain.g.toFixed(4)}:bb=${gain.b.toFixed(4)},scale=in_range=pc:out_color_matrix=bt709:out_range=tv,format=yuv420p`
+
+export interface Look {
+  readonly hdr: boolean
+  readonly gain: Rgb | undefined
+}
+
+const lookFilter = (look: Look, frame: Frame | undefined): string =>
+  [look.hdr ? TO_SDR : "format=yuv420p", ...(look.gain === undefined ? [] : [gainFilter(look.gain)]), reelVideo(frame)].join(",")
+
 const fadesOf = (seconds: number): string => {
   const fade = Math.min(FADE, seconds / 2)
   return `afade=t=in:d=${fade},afade=t=out:st=${(seconds - fade).toFixed(4)}:d=${fade}`
 }
 
-export const partArgs = (source: string, part: Part, hdr: boolean, encoder: string, output: string): ReadonlyArray<string> => {
+export const partArgs = (source: string, part: Part, look: Look, encoder: string, output: string): ReadonlyArray<string> => {
   const seconds = part.frames / REEL_RATE
   return [
     "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y",
     "-ss", part.start.toFixed(4), "-i", source,
     "-map", "0:v:0", "-map", "0:a:0", "-frames:v", String(part.frames), "-t", seconds.toFixed(6),
-    "-vf", `fps=${REEL_RATE},${hdr ? TO_SDR : "format=yuv420p"},${reelVideo(part.frame)}`, "-af", fadesOf(seconds),
+    "-vf", `fps=${REEL_RATE},${lookFilter(look, part.frame)}`, "-af", fadesOf(seconds),
     "-c:v", encoder, "-profile:v", "high", "-b:v", "10M", "-maxrate", "12M", "-bufsize", "24M", "-g", String(REEL_RATE * 2),
     "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
     "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2", "-map_metadata", "-1", "-f", "mov", output
   ]
 }
+
+export const firstSeconds = (parts: ReadonlyArray<Part>, seconds: number): ReadonlyArray<Part> => {
+  let left = Math.round(seconds * REEL_RATE)
+  return parts.flatMap((part) => {
+    const frames = Math.min(part.frames, left)
+    left -= frames
+    return frames > 0 ? [{ ...part, frames }] : []
+  })
+}
+
+export const retouchArgs = (looker: string, before: string, folder: string, encoder: string): ReadonlyArray<string> => [
+  "run", "--project", looker, "python", `${looker}/retouch.py`, "--encoder", encoder, before, folder
+]
+
+export const retouchedFrames = (line: string): number | undefined => {
+  const match = /^frames=(\d+)$/.exec(line.trim())
+  return match?.[1] === undefined ? undefined : Number(match[1])
+}
+
+export const compareArgs = (before: string, after: string, encoder: string, output: string): ReadonlyArray<string> => [
+  "-hide_banner", "-loglevel", "error", "-y", "-i", before, "-i", after,
+  "-filter_complex", "[0:v][1:v]hstack=inputs=2,format=yuv420p[v]", "-map", "[v]", "-map", "0:a:0",
+  "-c:v", encoder, "-b:v", "16M", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
+  "-c:a", "copy", "-movflags", "+faststart", "-f", "mp4", output
+]
+
+export interface Shot {
+  readonly source: string
+  readonly time: number
+  readonly look: Look
+}
+
+export const lastFrameOf = (part: Part): number => part.start + (part.frames - 1) / REEL_RATE
+
+export const pictureArgs = (left: Shot, right: Shot, output: string): ReadonlyArray<string> => [
+  "-hide_banner", "-loglevel", "error", "-y",
+  "-ss", left.time.toFixed(4), "-i", left.source, "-ss", right.time.toFixed(4), "-i", right.source,
+  "-filter_complex", `[0:v]${lookFilter(left.look, undefined)},scale=540:960[left];[1:v]${lookFilter(right.look, undefined)},scale=540:960[right];[left][right]hstack=inputs=2`,
+  "-frames:v", "1", "-q:v", "3", output
+]
 
 export interface InsertPicture {
   readonly file: string

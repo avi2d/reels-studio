@@ -1,7 +1,8 @@
 import { Cause, Context, Deferred, Effect, Exit, FileSystem, Layer, Option, Ref } from "effect"
 import type { Offer, Pick, UploadedVideo } from "../shared/library.ts"
 import type { VideoView } from "../shared/plan.ts"
-import type { ReelJob, ReelView } from "../shared/reel.ts"
+import type { PictureSide, ReelJob, ReelView } from "../shared/reel.ts"
+import type { RetouchPicture, RetouchView } from "../shared/retouch.ts"
 import { type Edits, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
 import { ApiError, badRequest, notFound } from "./api-error.ts"
 import { makeExchange, type Needs } from "./media-exchange.ts"
@@ -10,8 +11,9 @@ import { keyOf, listenAgain, makeShelves, orBroken, videosIn, type Failures, typ
 import { Projects } from "./projects.ts"
 import { sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
-import { buildReel, readReel, reelVideoAt, type ReelVersion } from "./reel.ts"
-import { readCut, readTimeline } from "./timeline-files.ts"
+import { buildReel, readReel, reelPictureAt, reelVideoAt, type ReelVersion } from "./reel.ts"
+import { readTrial, runTrial, trialPicture } from "./retouch.ts"
+import { readCut, readTimeline, type Cut } from "./timeline-files.ts"
 
 interface Running {
   readonly dir: string
@@ -124,10 +126,13 @@ const nextReel = Effect.fnUntraced(function*(reels: Reels, closed: ReadonlySet<s
 const startReel = (reels: Reels, dir: string): Effect.Effect<boolean> =>
   Ref.modify(reels, (map) => map.get(dir)?.state === "waiting" ? [true, new Map([...map, [dir, { state: "running", done: 0 }]])] : [false, map])
 
-const reelTask = (reels: Reels, dir: string) =>
+type Build<E, R> = (dir: string, cut: Cut, onDone: (share: number) => Effect.Effect<void>) => Effect.Effect<void, E, R>
+
+const reelTask = <E, R>(reels: Reels, dir: string, build: Build<E, R>) =>
   Effect.gen(function*() {
     if (!(yield* startReel(reels, dir))) return
-    yield* buildReel(dir, yield* readCut(dir, yield* sourceNames(dir)), (done) => setReel(reels, dir, { state: "running", done }))
+    const cut = yield* readCut(dir, yield* sourceNames(dir))
+    yield* build(dir, cut, (done) => setReel(reels, dir, { state: "running", done }))
   }).pipe(Effect.onExit((exit) => Exit.isFailure(exit) && !Exit.hasInterrupts(exit) ? setReel(reels, dir, { state: "failed" }) : forgetReel(reels, dir)))
 
 const step = Effect.fnUntraced(function*(failures: Failures, work: Ref.Ref<Work>) {
@@ -136,7 +141,9 @@ const step = Effect.fnUntraced(function*(failures: Failures, work: Ref.Ref<Work>
   const unheard = yield* nextUnheard(failures.unheard, jobs)
   if (unheard !== undefined) return yield* attempt(work, unheard, listen(unheard), () => markFailed(failures.unheard, unheard))
   const reel = yield* nextReel(failures.reels, closed)
-  if (reel !== undefined) return yield* attempt(work, { dir: reel, name: "the reel" }, reelTask(failures.reels, reel), () => Effect.void)
+  if (reel !== undefined) return yield* attempt(work, { dir: reel, name: "the reel" }, reelTask(failures.reels, reel, buildReel), () => Effect.void)
+  const trial = yield* nextReel(failures.trials, closed)
+  if (trial !== undefined) return yield* attempt(work, { dir: trial, name: "the retouch trial" }, reelTask(failures.trials, trial, (dir, cut, onDone) => runTrial(dir, cut.clips, onDone)), () => Effect.void)
   const stale = yield* nextStale(failures.stale, jobs)
   if (stale !== undefined) return yield* attempt(work, stale, refreshPreview(stale), () => markFailed(failures.stale, stale))
   const unseen = yield* nextUnseen(failures.unseen, jobs)
@@ -180,13 +187,52 @@ const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, r
     return target
   }, orBroken, Effect.provideContext(context))
 
+  const reelPicture = Effect.fn("Media.reelPicture")(function*(id: string, picture: Picture) {
+    const target = yield* reelPictureAt(yield* folder(id), picture.made, picture.join, picture.side)
+    if (target === undefined) return yield* notFound("Такой картинки нет")
+    return target
+  }, orBroken, Effect.provideContext(context))
+
   const cancelReel = Effect.fn("Media.cancelReel")(function*(id: string) {
     const dir = yield* folder(id)
     yield* stopReel(work, reels, dir)
     return yield* reelOf(dir)
   }, orBroken, Effect.provideContext(context))
 
-  return { reel, buildReel: queueReel, cancelReel, reelFile }
+  return { reel, buildReel: queueReel, cancelReel, reelFile, reelPicture }
+}
+
+export interface Picture {
+  readonly made: string
+  readonly join: number
+  readonly side: PictureSide
+}
+
+const trialHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, trials: Reels, context: Context.Context<Needs>) => {
+  const trialOf = Effect.fnUntraced(function*(dir: string) {
+    const job = (yield* Ref.get(trials)).get(dir) ?? { state: "idle" }
+    return yield* readTrial(dir, (yield* readCut(dir, yield* sourceNames(dir))).clips, job)
+  })
+
+  const trial = Effect.fn("Media.trial")(function*(id: string) {
+    return yield* trialOf(yield* folder(id))
+  }, orBroken, Effect.provideContext(context))
+
+  const startTrial = Effect.fn("Media.startTrial")(function*(id: string) {
+    const dir = yield* folder(id)
+    const { clips } = yield* readCut(dir, yield* sourceNames(dir))
+    if (clips.length === 0) return yield* badRequest("В монтаже нет ни одного блока. Сначала соберите блоки.")
+    yield* queueWaiting(trials, dir)
+    return yield* trialOf(dir)
+  }, orBroken, Effect.provideContext(context))
+
+  const trialFile = Effect.fn("Media.trialFile")(function*(id: string, name: RetouchPicture) {
+    const target = yield* trialPicture(yield* folder(id), name)
+    if (target === undefined) return yield* notFound("Проба ещё не готова")
+    return target
+  }, orBroken, Effect.provideContext(context))
+
+  return { trial, startTrial, trialFile }
 }
 
 
@@ -209,6 +255,10 @@ export class Media extends Context.Service<Media, {
   readonly buildReel: (id: string) => Effect.Effect<ReelView, ApiError>
   readonly cancelReel: (id: string) => Effect.Effect<ReelView, ApiError>
   readonly reelFile: (id: string, made: string, version: ReelVersion) => Effect.Effect<string, ApiError>
+  readonly trial: (id: string) => Effect.Effect<RetouchView, ApiError>
+  readonly startTrial: (id: string) => Effect.Effect<RetouchView, ApiError>
+  readonly trialFile: (id: string, name: RetouchPicture) => Effect.Effect<string, ApiError>
+  readonly reelPicture: (id: string, picture: Picture) => Effect.Effect<string, ApiError>
   readonly withoutWork: <A, E, R>(dir: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }>()("reels-studio/Media") {
   static readonly layer = Layer.effect(
@@ -221,10 +271,11 @@ export class Media extends Context.Service<Media, {
       const unseen: Unseen = yield* Ref.make<ReadonlyMap<string, GazeFailure>>(new Map())
       const stale: Unheard = yield* Ref.make<ReadonlySet<string>>(new Set())
       const reels: Reels = yield* Ref.make<ReadonlyMap<string, ReelJob>>(new Map())
+      const trials: Reels = yield* Ref.make<ReadonlyMap<string, ReelJob>>(new Map())
       const work = yield* Ref.make<Work>({ closed: new Set(), closedJobs: new Set(), running: undefined })
 
       const guarded = Effect.gen(function*() {
-        const outcome = yield* Effect.exit(step({ unheard, unseen, stale, reels }, work))
+        const outcome = yield* Effect.exit(step({ unheard, unseen, stale, reels, trials }, work))
         if (Exit.isSuccess(outcome)) return
         yield* Effect.logError("the media worker failed", outcome.cause)
         yield* Effect.sleep("3 seconds")
@@ -283,7 +334,7 @@ export class Media extends Context.Service<Media, {
         )
       }
 
-      const { uploaded, retryUploaded, uploadedPreview, removeUploaded, library, reuse } = makeShelves(projects, { unheard, unseen, stale, reels }, withoutJob, context)
+      const { uploaded, retryUploaded, uploadedPreview, removeUploaded, library, reuse } = makeShelves(projects, { unheard, unseen, stale, reels, trials }, withoutJob, context)
 
       const timeline = Effect.fn("Media.timeline")(function*(id: string) {
         const dir = yield* projects.folder(id)
@@ -292,9 +343,11 @@ export class Media extends Context.Service<Media, {
 
       const { exchangeEdits, mergeEdits } = yield* makeExchange(projects, context)
 
-      const { reel, buildReel: queueReel, cancelReel, reelFile } = reelHandlers(projects.folder, reels, work, context)
+      const { reel, buildReel: queueReel, cancelReel, reelFile, reelPicture } = reelHandlers(projects.folder, reels, work, context)
 
-      return Media.of({ videos, preview, retry, library, reuse, uploaded, retryUploaded, uploadedPreview, removeUploaded, timeline, exchangeEdits, mergeEdits, reel, buildReel: queueReel, cancelReel, reelFile, withoutWork })
+      const { trial, startTrial, trialFile } = trialHandlers(projects.folder, trials, context)
+
+      return Media.of({ videos, preview, retry, library, reuse, uploaded, retryUploaded, uploadedPreview, removeUploaded, timeline, exchangeEdits, mergeEdits, reel, buildReel: queueReel, cancelReel, reelFile, reelPicture, trial, startTrial, trialFile, withoutWork })
     })
   )
 }

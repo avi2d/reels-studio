@@ -6,6 +6,22 @@ export const ReelJob = Schema.Union([
 ])
 export type ReelJob = typeof ReelJob.Type
 
+export const Rgb = Schema.Struct({ r: Schema.Finite, g: Schema.Finite, b: Schema.Finite })
+export type Rgb = typeof Rgb.Type
+
+export const VideoColour = Schema.Union([
+  Schema.Struct({ video: Schema.String, state: Schema.Literal("reference"), skin: Rgb }),
+  Schema.Struct({ video: Schema.String, state: Schema.Literal("matched"), skin: Rgb, gain: Rgb }),
+  Schema.Struct({ video: Schema.String, state: Schema.Literal("unmeasured") })
+])
+export type VideoColour = typeof VideoColour.Type
+
+export const PictureSide = Schema.Literals(["before", "after"])
+export type PictureSide = typeof PictureSide.Type
+
+export const ColourView = Schema.Struct({ joins: Schema.Int, matched: Schema.Int, unmeasured: Schema.Int })
+export type ColourView = typeof ColourView.Type
+
 export const LOUDNESS_TARGET = -14
 const LOUDNESS_TOLERANCE = 1
 const LOUDNESS_BAD = 3
@@ -85,6 +101,7 @@ export const ReelView = Schema.Struct({
     seconds: Schema.Finite,
     size: Schema.Finite,
     fresh: Schema.Boolean,
+    colour: Schema.optionalKey(ColourView),
     levelling: Schema.optionalKey(Levelling)
   }))
 })

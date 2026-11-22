@@ -1,15 +1,20 @@
 import { Data, DateTime, Effect, FileSystem, Option, Schema } from "effect"
 import { shapeOf, type Shown } from "../shared/inserts.ts"
 import { Frame } from "../shared/timeline.ts"
-import { Levelling, LOUDNESS_TARGET, SERIES_STEP, type ReelView } from "../shared/reel.ts"
+import { Levelling, LOUDNESS_TARGET, SERIES_STEP, VideoColour, type ColourView, type PictureSide, type ReelView } from "../shared/reel.ts"
 import { pictureProbeArgs } from "./attachment-notes.ts"
 import { curveOf, gainsOf, levelArgs, type PartLevel } from "./level-curve.ts"
 import {
-  insertArgs, joinArgs, joinList, partArgs, partsOf, passagesOf, progressSeconds, sameParts, sampledAt, secondsOf, type InsertPicture, type Moment, type Part, type Span
+  insertArgs, joinArgs, joinList, lastFrameOf, partArgs, partsOf, passagesOf, pictureArgs, progressSeconds, sameParts, sampledAt, secondsOf, type InsertPicture, type Moment, type Part, type Span
 } from "./media-commands.ts"
 import { isHdrVideo, measureLoudness, momentaryLoudness, places, tool } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
+import { colourJoins, coloursOf, gainOf, measureSkin } from "./skin.ts"
 import type { Cut } from "./timeline-files.ts"
+
+
+const Colour = Schema.Struct({ videos: Schema.Array(VideoColour), joins: Schema.Int })
+type Colour = typeof Colour.Type
 
 const ShownInsert = Schema.Struct({ picture: Schema.String, start: Schema.Finite, end: Schema.Finite })
 type ShownInsert = typeof ShownInsert.Type
@@ -18,6 +23,7 @@ const Record = Schema.Struct({
   made: Schema.String,
   video: Schema.String,
   parts: Schema.Array(Schema.Struct({ video: Schema.String, start: Schema.Finite, frames: Schema.Int, frame: Schema.optionalKey(Frame) })),
+  colour: Schema.optionalKey(Colour),
   inserts: Schema.Array(ShownInsert).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   levelling: Schema.optionalKey(Levelling)
 })
@@ -43,7 +49,7 @@ const sameInserts = (left: ReadonlyArray<ShownInsert>, right: ReadonlyArray<Show
 
 class PictureUnreadable extends Data.TaggedError("PictureUnreadable")<{ readonly picture: string }> {}
 
-const pictureOf = Effect.fnUntraced(function*(dir: string, insert: Shown) {
+const insertPictureOf = Effect.fnUntraced(function*(dir: string, insert: Shown) {
   const file = `${dir}/attached/${insert.picture}`
   const probe = yield* decodePictureProbe(yield* tool("ffprobe", pictureProbeArgs(file), []))
   const stream = probe.streams.find((one) => one.width !== undefined)
@@ -55,15 +61,22 @@ const pictureOf = Effect.fnUntraced(function*(dir: string, insert: Shown) {
   return { file, shape: shapeOf(width, height), width, height, start: insert.start, end: insert.end } satisfies InsertPicture
 })
 
+
 const reelPlaces = (dir: string): { readonly record: string; readonly work: string; readonly video: (name: string) => string } => ({
   record: `${dir}/reel/reel.json`,
   work: `${dir}/reel/work`,
   video: (name: string) => `${dir}/reel/${name}`
 })
 
-const stamped = (made: string): string => made.replace(/:/g, "-")
-export const videoOf = (made: string): string => `reel-${stamped(made)}.mp4`
-const beforeOf = (made: string): string => `before-${stamped(made)}.mp4`
+const stemOf = (made: string): string => `reel-${made.replace(/:/g, "-")}`
+
+export const videoOf = (made: string): string => `${stemOf(made)}.mp4`
+
+const beforeOf = (made: string): string => `before-${made.replace(/:/g, "-")}.mp4`
+
+const pictureName = (join: number, side: PictureSide): string => `join-${join}-${side}.jpg`
+
+const pictureOf = (made: string, join: number, side: PictureSide): string => `${stemOf(made)}-${pictureName(join, side)}`
 
 const publishedReel = Effect.fnUntraced(function*(dir: string) {
   const fs = yield* FileSystem.FileSystem
@@ -76,11 +89,19 @@ const publishedReel = Effect.fnUntraced(function*(dir: string) {
   return { target, record } as const
 })
 
-export const reelVideoAt = Effect.fnUntraced(function*(dir: string, made: string, version: ReelVersion) {
+const builtFileAt = Effect.fnUntraced(function*(dir: string, name: string) {
   const fs = yield* FileSystem.FileSystem
-  const target = reelPlaces(dir).video(version === "before" ? beforeOf(made) : videoOf(made))
+  const target = reelPlaces(dir).video(name)
   if (!(yield* fs.exists(target))) return undefined
   return target
+})
+
+export const reelVideoAt = Effect.fnUntraced(function*(dir: string, made: string, version: ReelVersion) {
+  return yield* builtFileAt(dir, version === "before" ? beforeOf(made) : videoOf(made))
+})
+
+export const reelPictureAt = Effect.fnUntraced(function*(dir: string, made: string, join: number, side: PictureSide) {
+  return yield* builtFileAt(dir, pictureOf(made, join, side))
 })
 
 const sweepReel = Effect.fnUntraced(function*(dir: string) {
@@ -89,14 +110,77 @@ const sweepReel = Effect.fnUntraced(function*(dir: string) {
   const record = (yield* fs.exists(place.record))
     ? Option.getOrUndefined(decodeRecord(yield* fs.readFileString(place.record)))
     : undefined
-  const kept = new Set<string | undefined>([record?.video, record?.levelling === undefined ? undefined : beforeOf(record.made)])
+  const pictures = record?.colour === undefined
+    ? []
+    : Array.from({ length: record.colour.joins }, (_, index) => [pictureOf(record.made, index + 1, "before"), pictureOf(record.made, index + 1, "after")]).flat()
+  const kept = new Set<string | undefined>([record?.video, record?.levelling === undefined ? undefined : beforeOf(record.made), ...pictures])
   if (!(yield* fs.exists(`${dir}/reel`))) return
   yield* Effect.forEach(yield* fs.readDirectory(`${dir}/reel`), (name) =>
-    name.endsWith(".mp4") && !kept.has(name)
+    (name.endsWith(".mp4") || name.endsWith(".jpg")) && !kept.has(name)
       ? fs.remove(`${dir}/reel/${name}`, { force: true }).pipe(
         Effect.catch((error) => Effect.logError("the unpublished reel video was not removed", error))
       )
       : Effect.void, { discard: true })
+})
+
+// The first video of the cut with a face, in cut order, is the one the others are brought to.
+const measureColours = Effect.fnUntraced(function*(dir: string, parts: ReadonlyArray<Part>, work: string) {
+  const videos = [...new Set(parts.map((part) => part.video))]
+  return coloursOf(yield* Effect.forEach(videos, (video) => Effect.map(measureSkin({ dir, name: video }, work), (skin) => ({ video, skin }))))
+})
+
+const lookOf = Effect.fnUntraced(function*(dir: string, video: string, colours: ReadonlyArray<VideoColour>, hdr: Map<string, boolean>) {
+  const source = places({ dir, name: video }).source
+  const tone = hdr.get(video) ?? (yield* isHdrVideo(source))
+  hdr.set(video, tone)
+  return { source, look: { hdr: tone, gain: gainOf(colours, video) } }
+})
+
+const makePictures = Effect.fnUntraced(function*(dir: string, parts: ReadonlyArray<Part>, colours: ReadonlyArray<VideoColour>, hdr: Map<string, boolean>) {
+  const settings = yield* Settings
+  const work = reelPlaces(dir).work
+  const joins = colours.some((colour) => colour.state === "matched") ? colourJoins(parts) : []
+  for (const [index, join] of joins.entries()) {
+    const end = yield* lookOf(dir, join.end.video, colours, hdr)
+    const start = yield* lookOf(dir, join.start.video, colours, hdr)
+    const sides = [
+      ["before", { ...end.look, gain: undefined }, { ...start.look, gain: undefined }],
+      ["after", end.look, start.look]
+    ] as const
+    for (const [side, left, right] of sides) {
+      const shots = [{ source: end.source, time: lastFrameOf(join.end), look: left }, { source: start.source, time: join.start.start, look: right }] as const
+      yield* tool("ffmpeg", pictureArgs(shots[0], shots[1], `${work}/${pictureName(index + 1, side)}`), settings.heavy)
+    }
+  }
+  return joins.length
+})
+
+const publishPictures = Effect.fnUntraced(function*(dir: string, made: string, joins: number) {
+  const fs = yield* FileSystem.FileSystem
+  const place = reelPlaces(dir)
+  for (let join = 1; join <= joins; join++) {
+    for (const side of ["before", "after"] as const) yield* fs.rename(`${place.work}/${pictureName(join, side)}`, place.video(pictureOf(made, join, side)))
+  }
+})
+
+export const renderParts = Effect.fnUntraced(function*(dir: string, parts: ReadonlyArray<Part>, colours: ReadonlyArray<VideoColour>, work: string, output: string, onDone: (share: number) => Effect.Effect<void>) {
+  const fs = yield* FileSystem.FileSystem
+  const settings = yield* Settings
+  const total = secondsOf(parts)
+  const hdr = new Map<string, boolean>()
+  const names: Array<string> = []
+  for (const part of parts) {
+    const { source, look } = yield* lookOf(dir, part.video, colours, hdr)
+    const before = secondsOf(parts.slice(0, names.length))
+    const name = `part-${String(names.length + 1).padStart(3, "0")}.mov`
+    yield* tool("ffmpeg", partArgs(source, part, look, settings.encoder, `${work}/${name}`), settings.heavy, (line) => {
+      const seconds = progressSeconds(line)
+      return seconds === undefined ? Effect.void : onDone(Math.min(1, (before + seconds) / total))
+    })
+    names.push(name)
+  }
+  yield* fs.writeFileString(`${work}/parts.txt`, joinList(names))
+  yield* tool("ffmpeg", joinArgs(`${work}/parts.txt`, output), settings.heavy)
 })
 
 const measurePassages = Effect.fnUntraced(function*(work: string, levelled: string, spans: ReadonlyArray<Span>) {
@@ -169,26 +253,19 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
   const place = reelPlaces(dir)
   const parts = partsOf(cut.clips)
   const total = secondsOf(parts)
-  const pictures = yield* Effect.forEach(cut.inserts, (insert) => pictureOf(dir, insert))
+  const pictures = yield* Effect.forEach(cut.inserts, (insert) => insertPictureOf(dir, insert))
   const insertsShare = pictures.length === 0 ? 0 : INSERTS_SHARE
   const partsShare = 1 - SOUND_SHARE - insertsShare
   yield* fs.remove(place.work, { recursive: true, force: true })
   yield* fs.makeDirectory(place.work, { recursive: true })
   yield* sweepReel(dir)
-  const hdr = new Map<string, boolean>()
+  const colours = yield* measureColours(dir, parts, place.work)
+  const joins = yield* makePictures(dir, parts, colours, new Map())
+  yield* renderParts(dir, parts, colours, place.work, `${place.work}/joined.mp4`, (share) => onDone(share * partsShare))
   const rendered: Array<Rendered> = []
-  for (const part of parts) {
-    const source = places({ dir, name: part.video }).source
-    const tone = hdr.get(part.video) ?? (yield* isHdrVideo(source))
-    hdr.set(part.video, tone)
-    const before = secondsOf(parts.slice(0, rendered.length))
-    const name = `part-${String(rendered.length + 1).padStart(3, "0")}.mov`
-    yield* tool("ffmpeg", partArgs(source, part, tone, settings.encoder, `${place.work}/${name}`), settings.heavy, (line) => {
-      const seconds = progressSeconds(line)
-      return seconds === undefined ? Effect.void : onDone(Math.min(1, (before + seconds) / total) * partsShare)
-    })
-    const to = secondsOf(parts.slice(0, rendered.length + 1))
-    rendered.push({ name, from: before, to, lufs: (yield* measureLoudness(`${place.work}/${name}`)).lufs })
+  for (const [index] of parts.entries()) {
+    const name = `part-${String(index + 1).padStart(3, "0")}.mov`
+    rendered.push({ name, from: secondsOf(parts.slice(0, index)), to: secondsOf(parts.slice(0, index + 1)), lufs: (yield* measureLoudness(`${place.work}/${name}`)).lufs })
   }
   const levelledFile = pictures.length === 0 ? `${place.work}/reel.mp4` : `${place.work}/levelled.mp4`
   const levelling = yield* levelSound(place.work, parts, rendered, levelledFile, (step) => onDone(partsShare + SOUND_SHARE * step / SOUND_STEPS))
@@ -204,8 +281,10 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
     video: videoOf(made),
     parts,
     inserts: recorded(cut.inserts),
+    colour: { videos: colours, joins },
     levelling
   }
+  yield* publishPictures(dir, made, joins)
   yield* publish(dir, record)
 })
 
@@ -222,20 +301,27 @@ export const buildReel = Effect.fn("Reel.build")(function*(dir: string, cut: Cut
   yield* encodeReel(dir, cut, onDone).pipe(Effect.ensuring(cleanup))
 })
 
-export const readReel = Effect.fnUntraced(function*(dir: string, made: Cut, job: ReelView["job"]) {
+const colourView = (colour: Colour): ColourView => ({
+  joins: colour.joins,
+  matched: colour.videos.filter((video) => video.state === "matched").length,
+  unmeasured: colour.videos.filter((video) => video.state === "unmeasured").length
+})
+
+export const readReel = Effect.fnUntraced(function*(dir: string, cut: Cut, job: ReelView["job"]) {
   const fs = yield* FileSystem.FileSystem
-  const parts = partsOf(made.clips)
-  const cut = secondsOf(parts)
+  const parts = partsOf(cut.clips)
+  const seconds = secondsOf(parts)
   const published = yield* publishedReel(dir)
-  if (published === undefined) return { job, cut } satisfies ReelView
+  if (published === undefined) return { job, cut: seconds } satisfies ReelView
   const size = Number((yield* fs.stat(published.target)).size)
   const { record } = published
   const file = {
     made: record.made,
     seconds: secondsOf(record.parts),
     size,
-    fresh: sameParts(record.parts, parts) && sameInserts(record.inserts, recorded(made.inserts)),
+    fresh: sameParts(record.parts, parts) && sameInserts(record.inserts, recorded(cut.inserts)),
+    ...(record.colour === undefined ? {} : { colour: colourView(record.colour) }),
     ...(record.levelling === undefined ? {} : { levelling: record.levelling })
   }
-  return { job, cut, file } satisfies ReelView
+  return { job, cut: seconds, file } satisfies ReelView
 })

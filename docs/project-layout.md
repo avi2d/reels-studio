@@ -15,6 +15,7 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/shared/timeline.ts` | The formats of the gaze samples, the blocks, the takes and the person's choices, and the spans the montage plays |
 | `src/shared/framing.ts` | The zoom that keeps the eyes on one line across a join, used by the page and the reel build |
 | `src/shared/joins.ts` | The places to check at joins and the cuts at answered places, used by the page |
+| `src/shared/retouch.ts` | The state of the skin and eye trial and the time a minute of video takes, used by the server and the page |
 | `src/shared/inserts.ts` | Where each insert stands in the cut, its shape, and what the page and the build show of it |
 | `src/shared/reel.ts` | The state of a reel build and of the built file, used by the server and the page |
 | `src/shared/gather.ts` | When the studio asks the chat model to gather the blocks by itself |
@@ -24,7 +25,7 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/shared/page.ts` | The addresses of the home, uploaded videos and project pages, used by the server and the page |
 | `tools/transcribe/` | The speech recognizer, a Python script that uv runs |
 | `tools/pdf/` | The PDF reader that renders the first pages and takes out the text, a Python script that uv runs |
-| `tools/gaze/` | The measure of where the speaker looks, a Python script that uv runs |
+| `tools/gaze/` | The measure of where the speaker looks and the skin and eye trial, Python scripts that uv runs |
 | `deploy/reels-studio.service` | The systemd user unit that keeps the studio running |
 | `src/pi/` | The pi extension that keeps the chat model inside one video folder |
 | `src/web/` | The page, its styles and its script |
