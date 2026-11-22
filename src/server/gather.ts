@@ -102,8 +102,12 @@ export class Gather extends Context.Service<Gather, {
 
       const running = (id: string): Effect.Effect<boolean> => Effect.gen(function*() {
         if (yield* state.running(id)) return true
-        const { step } = yield* stepOf(id).pipe(Effect.orElseSucceed(() => ({ step: { kind: "wait" } as const })))
-        return step.kind !== "wait"
+        return yield* Effect.gen(function*() {
+          const { dir, step, heard, listening, gathered } = yield* stepOf(id)
+          if (step.kind !== "wait") return true
+          if (listening || heard.length === 0) return false
+          return shortenDue(yield* readBlocks(dir), gathered?.shortened)
+        }).pipe(Effect.orElseSucceed(() => false))
       })
       const failed = (id: string): Effect.Effect<boolean> => Effect.gen(function*() {
         const dir = yield* projects.folder(id).pipe(Effect.orElseSucceed(() => undefined))
