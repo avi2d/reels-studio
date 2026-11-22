@@ -141,7 +141,8 @@ Without such a frame the trial fails, and the last trial stays.
 ## The face in the reel
 
 The trial shows one face close-up as a single frame, with the left side before and the right side after.
-The person drags the line between them, holds «Держите, чтобы увидеть до» to see the whole frame before, and presses «Крупнее» to zoom to the face.
+The person drags the line between them.
+Holding «Держите, чтобы увидеть до» shows the whole frame before, and «Крупнее» zooms to the face.
 Under the trial, the switch «Выровнять кожу и белки глаз в готовом ролике» sets how the face goes into the reel.
 Each reel starts with the switch off, and the studio keeps no choice from one reel for the next.
 The switch turns on only after a trial, so the person sets it after comparing the close-ups.
