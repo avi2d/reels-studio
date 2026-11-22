@@ -118,4 +118,4 @@ export const insertList = (data: InsertData, actions: InsertActions): ReadonlyAr
     h("p", { class: "did" }, "Пока звучит фраза, поверх видео стоит ваша картинка, а голос продолжается. Высокая картинка закрывает весь кадр, широкая встаёт карточкой над вами. Посмотрите каждую."),
     h("ul", { class: "answers-said" }, ...[KEEP, REPLACE, REMOVE].map(({ label, does }) => h("li", {}, h("b", {}, `«${label}».`), ` ${does}`))),
     ...statusOf(data, actions),
-    h("ol", { class: "place-list", "data-scroll-key": "inserts" }, ...data.places.map((place, index) => insertItem(place, index + 1, data, actions))))]
+    h("ol", { class: "place-list" }, ...data.places.map((place, index) => insertItem(place, index + 1, data, actions))))]

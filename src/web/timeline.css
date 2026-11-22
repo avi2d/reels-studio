@@ -42,7 +42,7 @@
 .notes, .details, .detail { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .details, .detail { min-height: 0; }
 .details { flex: 1; }
-.takes, .pause-list, .places-detail, .detail .files { position: relative; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; }
+.takes, .detail .files { position: relative; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; }
 .notes:empty, .details:empty { display: none; }
 .pane.whole { overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; }
 .pane.whole > *, .pane.whole .detail { flex: none; }
@@ -70,6 +70,8 @@ del.gap { color: var(--wa-color-text-quiet); }
 .pause-row .take-acts { flex: none; flex-wrap: nowrap; }
 .place-list { display: flex; flex-direction: column; gap: 8px; }
 .answers-said { display: flex; flex-direction: column; gap: 4px; margin: 0; padding-left: 1.2em; font-size: 14px; }
+.place { flex-wrap: wrap; }
+.place .where { flex-basis: 240px; }
 .place.answered .where b { color: var(--wa-color-text-quiet); }
 .place .thumb { flex: none; align-self: flex-start; width: 48px; height: 48px; max-width: none; object-fit: cover; border-radius: 8px; }
 .place .thumb.removed { opacity: 0.4; filter: grayscale(1); }
