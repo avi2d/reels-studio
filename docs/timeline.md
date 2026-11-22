@@ -98,8 +98,8 @@ Before it encodes, the build measures the skin colour of each video in the cut, 
 It reads up to 15 frames with a face from the preview, spread over the video.
 In each frame it takes a box of cheeks and nose under the eyes from the gaze samples.
 The skin colour is the median red, green and blue of the pixels of all boxes.
-The first video of the cut in cut order keeps its colour.
-Each later video gets a gain per channel that brings its skin colour to the first, between 0.8 and 1.25.
+The first video of the cut with a face, in cut order, keeps its colour.
+Each other video gets a gain per channel that brings its skin colour to that one, between 0.8 and 1.25.
 A video with no face in its gaze samples keeps its colour.
 For each joined pair of videos, the build saves two pictures of their first join, before and after the gain.
 The «Внешность» stage shows them side by side under the skin and eye trial.

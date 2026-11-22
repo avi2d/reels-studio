@@ -114,7 +114,7 @@ const sweepReel = Effect.fnUntraced(function*(dir: string) {
       : Effect.void, { discard: true })
 })
 
-// The first video of the cut in cut order is the one the others are brought to.
+// The first video of the cut with a face, in cut order, is the one the others are brought to.
 const measureColours = Effect.fnUntraced(function*(dir: string, parts: ReadonlyArray<Part>, work: string) {
   const videos = [...new Set(parts.map((part) => part.video))]
   return coloursOf(yield* Effect.forEach(videos, (video) => Effect.map(measureSkin({ dir, name: video }, work), (skin) => ({ video, skin }))))
