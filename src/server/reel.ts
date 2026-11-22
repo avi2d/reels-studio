@@ -5,8 +5,11 @@ import { Levelling, LOUDNESS_TARGET, SERIES_STEP, VideoColour, type ColourView, 
 import { pictureProbeArgs } from "./attachment-notes.ts"
 import { curveOf, gainsOf, levelArgs, type PartLevel } from "./level-curve.ts"
 import {
-  insertArgs, joinArgs, joinList, lastFrameOf, partArgs, partsOf, passagesOf, pictureArgs, progressSeconds, sameParts, sampledAt, secondsOf, type InsertPicture, type Moment, type Part, type Span
+  joinArgs, joinList, lastFrameOf, partArgs, partsOf, passagesOf, pictureArgs, progressSeconds, sameParts, sampledAt, secondsOf, type Moment, type Part, type Span
 } from "./media-commands.ts"
+import { hasCaptions, type Captions } from "../shared/captions.ts"
+import { placeCaptions } from "./captions.ts"
+import { finishArgs, type InsertPicture } from "./finish-commands.ts"
 import { isHdrVideo, measureLoudness, momentaryLoudness, places, tool } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
 import { colourJoins, coloursOf, gainOf, measureSkin } from "./skin.ts"
@@ -25,6 +28,7 @@ const Record = Schema.Struct({
   parts: Schema.Array(Schema.Struct({ video: Schema.String, start: Schema.Finite, frames: Schema.Int, frame: Schema.optionalKey(Frame) })),
   colour: Schema.optionalKey(Colour),
   inserts: Schema.Array(ShownInsert).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  captions: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed(""))),
   levelling: Schema.optionalKey(Levelling)
 })
 const RecordFile = Schema.fromJsonString(Record)
@@ -43,6 +47,8 @@ const decodePictureProbe = Schema.decodeUnknownEffect(PictureProbe)
 
 const recorded = (inserts: ReadonlyArray<Shown>): ReadonlyArray<ShownInsert> =>
   inserts.map((one) => ({ picture: one.picture, start: Number(one.start.toFixed(4)), end: Number(one.end.toFixed(4)) }))
+
+const captionsKey = (captions: Captions): string => hasCaptions(captions) ? String(Bun.hash(JSON.stringify(captions))) : ""
 
 const sameInserts = (left: ReadonlyArray<ShownInsert>, right: ReadonlyArray<ShownInsert>): boolean =>
   JSON.stringify(left) === JSON.stringify(right)
@@ -254,11 +260,13 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
   const parts = partsOf(cut.clips)
   const total = secondsOf(parts)
   const pictures = yield* Effect.forEach(cut.inserts, (insert) => insertPictureOf(dir, insert))
-  const insertsShare = pictures.length === 0 ? 0 : INSERTS_SHARE
+  const finishing = pictures.length > 0 || hasCaptions(cut.captions)
+  const insertsShare = finishing ? INSERTS_SHARE : 0
   const partsShare = 1 - SOUND_SHARE - insertsShare
   yield* fs.remove(place.work, { recursive: true, force: true })
   yield* fs.makeDirectory(place.work, { recursive: true })
   yield* sweepReel(dir)
+  const captions = yield* placeCaptions(place.work, cut.captions, total)
   const colours = yield* measureColours(dir, parts, place.work)
   const joins = yield* makePictures(dir, parts, colours, new Map())
   yield* renderParts(dir, parts, colours, place.work, `${place.work}/joined.mp4`, (share) => onDone(share * partsShare))
@@ -267,10 +275,10 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
     const name = `part-${String(index + 1).padStart(3, "0")}.mov`
     rendered.push({ name, from: secondsOf(parts.slice(0, index)), to: secondsOf(parts.slice(0, index + 1)), lufs: (yield* measureLoudness(`${place.work}/${name}`)).lufs })
   }
-  const levelledFile = pictures.length === 0 ? `${place.work}/reel.mp4` : `${place.work}/levelled.mp4`
+  const levelledFile = finishing ? `${place.work}/levelled.mp4` : `${place.work}/reel.mp4`
   const levelling = yield* levelSound(place.work, parts, rendered, levelledFile, (step) => onDone(partsShare + SOUND_SHARE * step / SOUND_STEPS))
-  if (pictures.length > 0) {
-    yield* tool("ffmpeg", insertArgs(levelledFile, pictures, settings.encoder, `${place.work}/reel.mp4`), settings.heavy, (line) => {
+  if (finishing) {
+    yield* tool("ffmpeg", finishArgs(levelledFile, pictures, captions, settings.encoder, `${place.work}/reel.mp4`), settings.heavy, (line) => {
       const seconds = progressSeconds(line)
       return seconds === undefined ? Effect.void : onDone(1 - insertsShare + insertsShare * Math.min(1, seconds / total))
     })
@@ -281,6 +289,7 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
     video: videoOf(made),
     parts,
     inserts: recorded(cut.inserts),
+    captions: captionsKey(cut.captions),
     colour: { videos: colours, joins },
     levelling
   }
@@ -319,7 +328,7 @@ export const readReel = Effect.fnUntraced(function*(dir: string, cut: Cut, job: 
     made: record.made,
     seconds: secondsOf(record.parts),
     size,
-    fresh: sameParts(record.parts, parts) && sameInserts(record.inserts, recorded(cut.inserts)),
+    fresh: sameParts(record.parts, parts) && sameInserts(record.inserts, recorded(cut.inserts)) && record.captions === captionsKey(cut.captions),
     ...(record.colour === undefined ? {} : { colour: colourView(record.colour) }),
     ...(record.levelling === undefined ? {} : { levelling: record.levelling })
   }

@@ -26,7 +26,7 @@ const startsOf = (clips: ReadonlyArray<Span>): ReadonlyArray<number> => {
 
 const totalOf = (clips: ReadonlyArray<Span>): number => clips.reduce((total, clip) => total + clip.end - clip.start, 0)
 
-const phraseSpan = (clips: ReadonlyArray<Clip>, transcript: Transcript, planned: PlannedInsert): Span | undefined => {
+export const phraseSpan = (clips: ReadonlyArray<Clip>, transcript: Transcript, planned: Pick<PlannedInsert, "video" | "from" | "to">): Span | undefined => {
   const first = transcript.words[planned.from]
   const last = transcript.words[planned.to]
   if (first === undefined || last === undefined || planned.from > planned.to) return undefined

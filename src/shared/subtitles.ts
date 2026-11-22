@@ -8,7 +8,7 @@ interface Placed extends Span {
   readonly video: string
 }
 
-export const WORD_HOLD = 0.4
+const WORD_HOLD = 0.4
 
 const EDGE_MARKS = /^[\s.,!?;:…«»"“”„()[\]—–-]+|[\s.,!?;:…«»"“”„()[\]—–-]+$/gu
 
