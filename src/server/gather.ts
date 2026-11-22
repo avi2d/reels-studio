@@ -9,6 +9,13 @@ import { readGathered, readyTranscripts } from "./timeline-files.ts"
 
 const encodeGathered = Schema.encodeEffect(Schema.fromJsonString(Gathered))
 
+const remember = Effect.fnUntraced(function*(dir: string, videos: ReadonlyArray<string>, settled: ReadonlyArray<string>, failed: boolean, hash: string | undefined, shortened: string | undefined) {
+  const fs = yield* FileSystem.FileSystem
+  const file = `${dir}/gathered.json`
+  yield* fs.writeFileString(`${file}.new`, yield* encodeGathered({ videos, gazed: [...settled], failed, ...(hash === undefined ? {} : { hash }), ...(shortened === undefined ? {} : { shortened }) }))
+  yield* fs.rename(`${file}.new`, file)
+})
+
 export class Gather extends Context.Service<Gather, {
   readonly running: (id: string) => Effect.Effect<boolean>
   readonly failed: (id: string) => Effect.Effect<boolean>
@@ -28,12 +35,6 @@ export class Gather extends Context.Service<Gather, {
         const file = path.join(dir, "blocks.json")
         if (!(yield* fs.exists(file))) return undefined
         return yield* fs.readFileString(file)
-      })
-
-      const remember = Effect.fnUntraced(function*(dir: string, videos: ReadonlyArray<string>, settled: ReadonlyArray<string>, failed: boolean, hash: string | undefined, shortened: string | undefined) {
-        const file = path.join(dir, "gathered.json")
-        yield* fs.writeFileString(`${file}.new`, yield* encodeGathered({ videos, gazed: [...settled], failed, ...(hash === undefined ? {} : { hash }), ...(shortened === undefined ? {} : { shortened }) }))
-        yield* fs.rename(`${file}.new`, file)
       })
 
       const stepOf = Effect.fnUntraced(function*(id: string) {
