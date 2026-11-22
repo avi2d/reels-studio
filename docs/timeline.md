@@ -100,7 +100,7 @@ The studio draws a long subtitle word smaller to fit the Instagram box.
 A key thought that leaves the box stops the build.
 The joined file before levelling stays beside the reel as `before-<stamp>.mp4`.
 The download always serves the levelled file.
-A bar follows the parts, the levelling and the inserts.
+A bar follows the parts, the levelling, the inserts and the text.
 «Остановить сборку» stops a waiting or running build, ends its ffmpeg and removes the half-built parts, and the last finished reel stays.
 The build waits while the computer hears another video, because the studio runs one heavy job at a time.
 The originals stay untouched.
@@ -172,7 +172,7 @@ The switch turns on only after a trial, so the person sets it after comparing th
 A line under the switch says whether the built file already has the chosen face.
 When it does not, the button «Собрать ролик с выровненным лицом» or «Собрать ролик заново» opens the «Готовый ролик» stage and starts the build there.
 With the switch off, the build is the same as without the setting, and no step touches the frames.
-With the switch on, the build runs `tools/gaze/retouch.py` on the whole levelled reel, before the inserts go on, so the inserts stay as they are.
+With the switch on, the build runs `tools/gaze/retouch.py` on the whole levelled reel, before the inserts and the text go on, so the inserts and the text stay as they are.
 That retouch changes pixels only inside the face, the same way the trial does.
 The «Готовый ролик» stage names the chosen face above its build button and the face of the built file in the file facts.
 After a new choice it says the file no longer matches.
