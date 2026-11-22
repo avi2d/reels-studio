@@ -57,10 +57,10 @@ export interface Cover {
   readonly picture: string
 }
 
-export const coversOf = (clips: ReadonlyArray<Clip>, edits: Edits): ReadonlyArray<Cover> =>
+export const coversOf = (clips: ReadonlyArray<Clip>, edits: Edits, pictures: ReadonlyArray<string>): ReadonlyArray<Cover> =>
   joinsOf(clips).flatMap((join): ReadonlyArray<Cover> => {
     const picture = coverAt(edits, join)
-    return picture === undefined ? [] : [{ join, picture }]
+    return picture === undefined || !pictures.includes(picture) ? [] : [{ join, picture }]
   })
 
 export interface Place {

@@ -281,7 +281,7 @@ const drawPanels = (
 
 const insertsOf = (loaded: Loaded, reel: ReadonlyArray<Clip>, edits: Edits): ReturnType<typeof insertPlaces> => {
   const { inserts } = loaded.view
-  return insertPlaces(inserts.state === "ready" ? inserts.planned : [], reel, loaded.transcripts, edits)
+  return insertPlaces(inserts.state === "ready" ? inserts.planned : [], reel, loaded.transcripts, edits, loaded.view.pictures)
 }
 
 export interface DrawnReady {
@@ -306,7 +306,7 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): DrawnRe
   const open = displayed[index]
   drawChrome(parts, displayed, placed, open, index, pauses, allRemoved, edits, actions)
   const inserts = insertsOf(loaded, reel, edits)
-  const shown = shownInserts(inserts, reel, edits)
+  const shown = shownInserts(inserts, reel, edits, loaded.view.pictures)
   drawRows(parts, displayed, open, shown, actions)
   const { places, coverage } = drawPanels(parts, displayed, placed, open, index, loaded, edits, deleted, faces, inserts, actions)
   return {

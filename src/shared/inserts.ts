@@ -1,5 +1,5 @@
 import type { Span, Transcript } from "./plan.ts"
-import { coversOf, type Join } from "./joins.ts"
+import { coversOf, type Cover, type Join } from "./joins.ts"
 import type { Clip, Edits, InsertAnswer, PlannedInsert } from "./timeline.ts"
 
 const INSERT_SHORTEST = 2
@@ -72,28 +72,30 @@ export interface Shown extends Span {
 const answerOf = (edits: Edits, id: string): InsertAnswer | undefined => edits.inserts.find((one) => one.id === id)
 
 export const insertPlaces = (
-  planned: ReadonlyArray<PlannedInsert>, reel: ReadonlyArray<Clip>, transcripts: ReadonlyMap<string, Transcript>, edits: Edits
+  planned: ReadonlyArray<PlannedInsert>, reel: ReadonlyArray<Clip>, transcripts: ReadonlyMap<string, Transcript>, edits: Edits, pictures: ReadonlyArray<string>
 ): ReadonlyArray<InsertPlace> => {
   const total = totalOf(reel)
   return planned.map((one) => {
     const answered = answerOf(edits, one.id)
     const transcript = transcripts.get(one.video)
     const said = transcript === undefined ? undefined : phraseSpan(reel, transcript, one)
+    const replacement = answered?.answer === "replace" && pictures.includes(answered.picture) ? answered.picture : undefined
     return {
       planned: one,
-      picture: answered?.answer === "replace" ? answered.picture : one.picture,
-      answer: answered?.answer,
+      picture: replacement ?? one.picture,
+      answer: replacement !== undefined ? answered?.answer : answered?.answer === "replace" ? undefined : answered?.answer,
       span: said === undefined ? undefined : fitted(said, total)
     }
   }).toSorted((left, right) => (left.span?.start ?? Infinity) - (right.span?.start ?? Infinity))
 }
 
 // A later insert starts where the earlier one ends, so two pictures never stand on the screen at once.
-export const shownInserts = (places: ReadonlyArray<InsertPlace>, reel: ReadonlyArray<Clip>, edits: Edits): ReadonlyArray<Shown> => {
+export const shownInserts = (places: ReadonlyArray<InsertPlace>, reel: ReadonlyArray<Clip>, edits: Edits, pictures: ReadonlyArray<string>, resolved?: ReadonlyArray<Cover>): ReadonlyArray<Shown> => {
+  const covers = (resolved ?? coversOf(reel, edits, pictures)).filter((cover) => pictures.includes(cover.picture))
   const wanted = [
     ...places.flatMap((place): ReadonlyArray<Shown> =>
       place.span === undefined || place.answer === "remove" ? [] : [{ id: place.planned.id, picture: place.picture, ...place.span }]),
-    ...coversOf(reel, edits).map(({ join, picture }): Shown => ({ id: coverId(join), picture, ...coverSpan(reel, join) }))
+    ...covers.map(({ join, picture }): Shown => ({ id: coverId(join), picture, ...coverSpan(reel, join) }))
   ].toSorted((left, right) => left.start - right.start)
   const shown: Array<Shown> = []
   for (const one of wanted) {

@@ -110,8 +110,8 @@ const cardSize = (width: number, height: number): { readonly width: number; read
 
 // zoompan steps by whole pixels, so the picture goes in at twice the size it leaves at and the slow zoom does not shake.
 const drift = (width: number, height: number, frames: number): string =>
-  `scale=${2 * width}:${2 * height}:force_original_aspect_ratio=increase,crop=${2 * width}:${2 * height},setsar=1,` +
-  `zoompan=z='1+${INSERT_DRIFT}*on/${Math.max(1, frames)}':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=${width}x${height}:fps=${REEL_RATE}`
+  `trim=end_frame=1,scale=${2 * width}:${2 * height}:force_original_aspect_ratio=increase,crop=${2 * width}:${2 * height},setsar=1,` +
+  `zoompan=z='1+${INSERT_DRIFT}*on/${Math.max(1, frames)}':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=${Math.max(1, frames)}:s=${width}x${height}:fps=${REEL_RATE}`
 
 const insertFilter = (picture: InsertPicture, index: number): { readonly layer: string; readonly x: number; readonly y: number } => {
   const seconds = picture.end - picture.start
@@ -142,7 +142,7 @@ const insertGraph = (pictures: ReadonlyArray<InsertPicture>): string =>
 
 export const insertArgs = (reel: string, pictures: ReadonlyArray<InsertPicture>, encoder: string, output: string): ReadonlyArray<string> => [
   "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y", "-i", reel,
-  ...pictures.flatMap((picture) => ["-loop", "1", "-framerate", String(REEL_RATE), "-t", (picture.end - picture.start).toFixed(4), "-i", picture.file]),
+  ...pictures.flatMap((picture) => ["-i", picture.file]),
   "-filter_complex", insertGraph(pictures), "-map", "[out]", "-map", "0:a:0",
   "-c:v", encoder, "-profile:v", "high", "-b:v", "10M", "-maxrate", "12M", "-bufsize", "24M", "-g", String(REEL_RATE * 2),
   "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",

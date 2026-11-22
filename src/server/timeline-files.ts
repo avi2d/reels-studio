@@ -4,7 +4,7 @@ import { kindOfName } from "../shared/chat.ts"
 import { onFrames } from "./media-commands.ts"
 import { Gathered } from "../shared/gather.ts"
 import { insertPlaces, shownInserts } from "../shared/inserts.ts"
-import { facesByVideo, trimmed } from "../shared/joins.ts"
+import { coversOf, facesByVideo, trimmed } from "../shared/joins.ts"
 import {
   assemble, Blocks, clipsOf, Edits, InsertsFile, NO_EDITS, soundBlocks,
   type Clip, type Gaze, type GazeFailure, type PlannedInserts, type TimelineView, type VideoFaces
@@ -144,8 +144,11 @@ export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyA
   if (written === "none" || written === "unreadable") return { clips: [], inserts: [] } satisfies Cut
   const { blocks } = soundBlocks(written, transcripts, new Map())
   const edits = yield* readEdits(dir)
-  const clips = onFrames(trimmed(clipsOf(assemble(blocks, edits, transcripts)), facesByVideo(faces), transcripts, edits))
-  const planned = yield* readInserts(dir, yield* readPictures(dir), transcripts)
-  const placesNow = insertPlaces(planned.state === "ready" ? planned.planned : [], clips, transcripts, edits)
-  return { clips, inserts: shownInserts(placesNow, clips, edits) } satisfies Cut
+  const pictures = yield* readPictures(dir)
+  const base = trimmed(clipsOf(assemble(blocks, edits, transcripts)), facesByVideo(faces), transcripts, edits)
+  const resolved = coversOf(base, edits, pictures)
+  const clips = onFrames(base)
+  const planned = yield* readInserts(dir, pictures, transcripts)
+  const placesNow = insertPlaces(planned.state === "ready" ? planned.planned : [], clips, transcripts, edits, pictures)
+  return { clips, inserts: shownInserts(placesNow, clips, edits, pictures, resolved) } satisfies Cut
 })

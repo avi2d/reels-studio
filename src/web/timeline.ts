@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { aroundInsert, lookAt, reelWithin, shiftedBy, withInsert, type InsertLook, type Shown } from "../shared/inserts.ts"
+import { aroundInsert, insertPlaces, lookAt, reelWithin, shiftedBy, shownInserts, withInsert, type InsertLook, type Shown } from "../shared/inserts.ts"
 import { AROUND_JOIN_SECONDS, aroundJoin, facesByVideo, trimmed, withAnswer, withCover } from "../shared/joins.ts"
 import { lengthOf } from "../shared/plan.ts"
 import {
@@ -64,7 +64,13 @@ export const takeServer = (local: Edits, acked: Edits, server: Edits, ticket: Ti
 const reelOf = (loaded: Loaded, edits: Edits): ReadonlyArray<Clip> =>
   trimmed(clipsOf(placedOf(loaded, edits)), facesByVideo(loaded.view.faces), loaded.transcripts, edits)
 
-export const playedKey = (loaded: Loaded, edits: Edits): string => JSON.stringify(reelOf(loaded, edits))
+const shownOf = (loaded: Loaded, edits: Edits): ReadonlyArray<Shown> => {
+  const reel = reelOf(loaded, edits)
+  const planned = loaded.view.inserts.state === "ready" ? loaded.view.inserts.planned : []
+  return shownInserts(insertPlaces(planned, reel, loaded.transcripts, edits, loaded.view.pictures), reel, edits, loaded.view.pictures)
+}
+
+export const playedKey = (loaded: Loaded, edits: Edits): string => JSON.stringify([reelOf(loaded, edits), shownOf(loaded, edits)])
 
 interface State {
   loaded: Loaded | undefined
@@ -308,6 +314,13 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
     state.acked = merged
     state.edits = mergeEdits(sent, state.edits, merged)
     state.changes += 1
+    if (state.loaded !== undefined) {
+      const content = playedKey(state.loaded, state.edits)
+      if (content !== state.content) {
+        state.content = content
+        player.stop()
+      }
+    }
     draw()
   }, (ok) => { hooks.settled?.(ok) })
   const card: Card = { projectId, parts, ui, state, view, player, saving, hooks }
