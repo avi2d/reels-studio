@@ -34,7 +34,8 @@ const soundNotes = (sound: Sound): ReadonlyArray<HTMLElement> => {
   return [
     h("p", {}, h("strong", {}, SOUND_LABEL[verdict.level])),
     h("p", { class: "muted" }, `Громкость ${decimal(sound.lufs)}\u00a0LUFS при цели ${decimal(LOUDNESS_TARGET)}. Диапазон ${decimal(sound.lra)}\u00a0LU, пик ${decimal(sound.truePeak)}\u00a0dBTP.`),
-    ...verdict.issues.map((issue) => h("p", { class: "muted" }, ISSUE_NOTE[issue]))
+    ...verdict.issues.map((issue) => h("p", { class: "muted" }, ISSUE_NOTE[issue])),
+    ...(verdict.issues.includes("clipping") ? [] : [h("p", { class: "muted" }, "Срывов нет.")])
   ]
 }
 
