@@ -17,9 +17,11 @@ export type SoundLine =
 
 export const soundLineOf = (check: SoundCheck): SoundLine => {
   const { heard, job } = check
-  if (job.state === "running") return { kind: "checking", done: job.done }
-  if (job.state === "waiting") return { kind: "checking", done: undefined }
-  if (job.state === "failed") return { kind: "failed" }
+  if (heard?.fresh !== true) {
+    if (job.state === "running") return { kind: "checking", done: job.done }
+    if (job.state === "waiting") return { kind: "checking", done: undefined }
+    if (job.state === "failed") return { kind: "failed" }
+  }
   if (heard === undefined) return { kind: "none" }
   const words = verdictWords(heard.levelling.after, jumpsOf(heard.levelling.series.after, heard.seconds))
   return { kind: "heard", ...words, stale: !heard.fresh }
@@ -53,7 +55,7 @@ export const montageSound = (projectId: string): MontageSound => {
     globalThis.clearTimeout(state.timer)
     Effect.runFork(Api.getSound(projectId).pipe(
       Effect.map((check) => {
-        if (check.heard !== undefined) state.parts = check.heard.parts
+        state.parts = check.heard?.parts ?? []
         const line = soundLineOf(check)
         const open = node.querySelector("details")?.open ?? false
         paint(node, line)

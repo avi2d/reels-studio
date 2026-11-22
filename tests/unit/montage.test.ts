@@ -1,6 +1,47 @@
-import { expect, test } from "bun:test"
-import { montage } from "../../src/web/montage.ts"
+import { afterAll, beforeAll, expect, test } from "bun:test"
 import type { Clip } from "../../src/shared/timeline.ts"
+
+const montageModulePath = "../../src/web/montage.ts?audio-tests"
+const { montage }: typeof import("../../src/web/montage.ts") = await import(montageModulePath)
+
+class FakeAudioNode {
+  next: FakeAudioNode | undefined
+  connect(target: FakeAudioNode): FakeAudioNode {
+    this.next = target
+    return target
+  }
+}
+
+class FakeAudioContext {
+  static readonly instances: Array<FakeAudioContext> = []
+  state = "running"
+  currentTime = 0
+  resumes = 0
+  readonly destination = new FakeAudioNode()
+  constructor() { FakeAudioContext.instances.push(this) }
+  createMediaElementSource(): FakeAudioNode { return new FakeAudioNode() }
+  resume(): Promise<void> {
+    this.resumes += 1
+    this.state = "running"
+    return Promise.resolve()
+  }
+}
+
+class FakeGain extends FakeAudioNode {
+  static readonly instances: Array<FakeGain> = []
+  readonly gain = { value: 1, setTargetAtTime: (value: number): void => { this.gain.value = value } }
+  constructor(_context: FakeAudioContext, options?: { readonly gain: number }) {
+    super()
+    this.gain.value = options?.gain ?? 1
+    FakeGain.instances.push(this)
+  }
+}
+
+const originalAudio = { AudioContext: globalThis.AudioContext, GainNode: globalThis.GainNode, DynamicsCompressorNode: globalThis.DynamicsCompressorNode }
+beforeAll(() => {
+  Object.assign(globalThis, { AudioContext: FakeAudioContext, GainNode: FakeGain, DynamicsCompressorNode: FakeAudioNode })
+})
+afterAll(() => { Object.assign(globalThis, originalAudio) })
 
 class FakeVideo {
   dataset: Record<string, string | undefined> = {}
@@ -51,7 +92,7 @@ class FakeVideo {
   }
 }
 
-const setup = (): { player: ReturnType<typeof montage>; srcSets: () => number; failShown: () => void; videos: () => ReadonlyArray<FakeVideo> } => {
+const setup = (): { player: ReturnType<typeof montage>; srcSets: () => number; failShown: () => void; videos: () => ReadonlyArray<FakeVideo>; tick: () => void } => {
   const videos: Array<FakeVideo> = []
   const createElement = (tag: string): FakeVideo => {
     const made = new FakeVideo()
@@ -59,13 +100,15 @@ const setup = (): { player: ReturnType<typeof montage>; srcSets: () => number; f
     return made
   }
   Object.assign(globalThis, { document: { createElement } })
-  Object.assign(globalThis, { requestAnimationFrame: () => 0 })
+  const frames: Array<() => void> = []
+  Object.assign(globalThis, { requestAnimationFrame: (next: () => void) => frames.push(next) })
   const player = montage("project", () => {}, () => 0)
   return {
     player,
     srcSets: () => videos.reduce((sum, video) => sum + video.srcSets, 0),
     failShown: () => { videos.at(-1)?.fire("error") },
-    videos: () => videos
+    videos: () => videos,
+    tick: () => { frames.shift()?.() }
   }
 }
 
@@ -86,6 +129,53 @@ test("every source is authorized in the initiating call while the unshown one st
   player.play([clip("a", 2), clip("b", 3)])
   expect(videos().map((video) => video.plays)).toEqual([1, 1])
   expect(videos().every((video) => video.paused)).toBe(true)
+})
+
+test("playing another project reuses the audio context instead of accumulating one per montage", () => {
+  const first = setup()
+  first.player.play([clip("a", 0)])
+  const count = FakeAudioContext.instances.length
+  const second = setup()
+  second.player.play([clip("b", 0)])
+  expect(FakeAudioContext.instances.length).toBe(count)
+})
+
+test("the graph output offsets compressor makeup and finite ratio instead of raising the full-scale ceiling", () => {
+  const { player } = setup()
+  player.play([clip("a", 0)])
+  const context = FakeAudioContext.instances.at(-1)
+  if (context === undefined) throw new Error("No audio context was created")
+  const output = FakeGain.instances.find((gain) => gain.next === context.destination)
+  if (output === undefined) throw new Error("No output compensation gain was connected")
+  expect(20 * Math.log10(output.gain.value)).toBeCloseTo(-1.55, 10)
+})
+
+test("replaying a cached source resumes suspended and interrupted audio instead of playing silently", () => {
+  const { player } = setup()
+  player.play([clip("a", 0)])
+  const context = FakeAudioContext.instances.at(-1)
+  expect(context).toBeDefined()
+  if (context === undefined) throw new Error("No audio context was created")
+  for (const state of ["suspended", "interrupted"]) {
+    player.stop()
+    context.state = state
+    const before = context.resumes
+    player.play([clip("a", 0)])
+    expect(context.resumes).toBe(before + 1)
+  }
+})
+
+test("removing a playing montage pauses its videos instead of retaining active detached sources", () => {
+  const { player, videos, tick } = setup()
+  player.play([clip("a", 0)])
+  const video = videos()[0]
+  if (video === undefined) throw new Error("No video was created")
+  video.readyState = 2
+  tick()
+  expect(video.paused).toBe(false)
+  player.node.remove()
+  tick()
+  expect(video.paused).toBe(true)
 })
 
 test("a preview that fails while shown loads again on the next show", () => {

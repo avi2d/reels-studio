@@ -56,6 +56,18 @@ test("a jump inside one second names that second once, not as the range 0:04–0
   expect(words.notes[0]).toBe("Скачки громкости: 0:04, 0:05–0:06.")
 })
 
+test("undo to a checked cut shows its fresh verdict, not another cut's failed or busy job", () => {
+  const heard = { fresh: true, seconds: 1, levelling: levelling({ lufs: -14, lra: 1.2, truePeak: -2.6 }), parts: [] }
+  for (const job of [{ state: "failed" }, { state: "waiting" }, { state: "running", done: 0.4 }, { state: "idle" }] as const) {
+    expect(soundLineOf({ job, heard })).toMatchObject({ kind: "heard", level: "good", stale: false })
+  }
+})
+
+test("a failed check without a fresh verdict remains failed, not good sound", () => {
+  expect(soundLineOf({ job: { state: "failed" } })).toEqual({ kind: "failed" })
+  expect(soundLineOf({ job: { state: "failed" }, heard: { fresh: false, seconds: 1, levelling: levelling({ lufs: -14, lra: 1.2, truePeak: -2.6 }), parts: [] } })).toEqual({ kind: "failed" })
+})
+
 test("a montage whose check is running shows the check, not the verdict of the cut before the change", () => {
   const check: SoundCheck = { job: { state: "running", done: 0.4 }, heard: { fresh: false, seconds: 1, levelling: levelling({ lufs: -14, lra: 1.2, truePeak: -2.6 }), parts: [] } }
   expect(soundLineOf(check)).toEqual({ kind: "checking", done: 0.4 })

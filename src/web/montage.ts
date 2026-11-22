@@ -20,9 +20,30 @@ class Refused extends Data.TaggedError("Refused")<{ readonly byBrowser: boolean 
 
 export type LevelAt = (video: string, time: number) => number
 
-// The limiter of the build holds samples under 0.75, that is −2.5 dBFS.
 const LIMIT_DB = -2.5
+const LIMIT_RATIO = 20
 const GAIN_SMOOTHING = 0.02
+const COMPRESSED_FULL_SCALE_DB = LIMIT_DB * (1 - 1 / LIMIT_RATIO)
+const MAKEUP_DB = -COMPRESSED_FULL_SCALE_DB * 0.6
+const OUTPUT_GAIN_DB = LIMIT_DB - COMPRESSED_FULL_SCALE_DB - MAKEUP_DB
+
+interface AudioGraph {
+  readonly context: AudioContext
+  readonly limiter: DynamicsCompressorNode
+}
+
+let audioGraph: AudioGraph | undefined
+
+const graphOf = (): AudioGraph | undefined => {
+  if (audioGraph !== undefined) return audioGraph
+  if (typeof AudioContext === "undefined") return undefined
+  const context = new AudioContext()
+  const limiter = new DynamicsCompressorNode(context, { threshold: LIMIT_DB, knee: 0, ratio: LIMIT_RATIO, attack: 0.003, release: 0.05 })
+  const output = new GainNode(context, { gain: 10 ** (OUTPUT_GAIN_DB / 20) })
+  limiter.connect(output).connect(context.destination)
+  audioGraph = { context, limiter }
+  return audioGraph
+}
 
 interface Levelling {
   readonly follow: (node: HTMLVideoElement) => void
@@ -30,28 +51,19 @@ interface Levelling {
 
 // An element's own volume stops at 1, and a quiet part needs tens of dB more, so the gain runs through Web Audio.
 const levellingOf = (levelAt: LevelAt): Levelling => {
-  const graph: { context: AudioContext | undefined; limiter: DynamicsCompressorNode | undefined } = { context: undefined, limiter: undefined }
   const gains = new WeakMap<HTMLVideoElement, GainNode>()
-  const gainOf = (node: HTMLVideoElement): GainNode | undefined => {
-    const known = gains.get(node)
-    if (known !== undefined) return known
-    if (typeof AudioContext === "undefined") return undefined
-    const context = graph.context ?? new AudioContext()
-    graph.context = context
-    if (context.state === "suspended") void context.resume()
-    const limiter = graph.limiter ?? new DynamicsCompressorNode(context, { threshold: LIMIT_DB, knee: 0, ratio: 20, attack: 0.003, release: 0.05 })
-    if (graph.limiter === undefined) limiter.connect(context.destination)
-    graph.limiter = limiter
-    const gain = new GainNode(context)
-    context.createMediaElementSource(node).connect(gain).connect(limiter)
-    gains.set(node, gain)
-    return gain
-  }
   return {
     follow: (node) => {
       const video = node.dataset.video
-      const gain = gainOf(node)
-      if (video === undefined || gain === undefined || graph.context === undefined) return
+      const graph = graphOf()
+      if (video === undefined || graph === undefined) return
+      if (graph.context.state !== "running") void graph.context.resume()
+      let gain = gains.get(node)
+      if (gain === undefined) {
+        gain = new GainNode(graph.context)
+        graph.context.createMediaElementSource(node).connect(gain).connect(graph.limiter)
+        gains.set(node, gain)
+      }
       gain.gain.setTargetAtTime(10 ** (levelAt(video, node.currentTime) / 20), graph.context.currentTime, GAIN_SMOOTHING)
     }
   }
@@ -188,8 +200,9 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
     }
   }
   const watch = (): void => {
+    if (!screen.node.isConnected) stop()
     const clip = state.clips[state.index]
-    if (clip === undefined || !screen.node.isConnected) {
+    if (clip === undefined) {
       state.watching = false
       return
     }

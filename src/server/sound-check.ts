@@ -1,6 +1,6 @@
 import { Effect, FileSystem, Option, Schema } from "effect"
 import { Levelling, PartGains, type ReelJob, type SoundCheck } from "../shared/reel.ts"
-import { partsOf, sameParts, secondsOf } from "./media-commands.ts"
+import { partsOf, secondsOf, type Part } from "./media-commands.ts"
 import { soundPartArgs } from "./sound-commands.ts"
 import { measureLoudness, places, tool } from "./media-jobs.ts"
 import { levelSound, PartRecord, SOUND_STEPS, type Rendered } from "./reel.ts"
@@ -13,6 +13,9 @@ const decodeHeard = Schema.decodeUnknownOption(HeardFile)
 const encodeHeard = Schema.encodeEffect(HeardFile)
 
 const PARTS_SHARE = 0.4
+
+export const soundKeyOf = (parts: ReadonlyArray<Part>): string =>
+  JSON.stringify(parts.map(({ video, start, frames }) => ({ video, start, frames })))
 
 const soundPlaces = (dir: string): { readonly record: string; readonly work: string } => ({
   record: `${dir}/reel/sound.json`,
@@ -41,6 +44,7 @@ const hearCut = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (shar
 })
 
 export const checkSound = Effect.fn("Sound.check")(function*(dir: string, cut: Cut, onDone: (share: number) => Effect.Effect<void>) {
+  if (cut.clips.length === 0) return
   const fs = yield* FileSystem.FileSystem
   const cleanup = fs.remove(soundPlaces(dir).work, { recursive: true, force: true }).pipe(
     Effect.catch((error) => Effect.logError("the sound check files were not removed", error))
@@ -49,12 +53,13 @@ export const checkSound = Effect.fn("Sound.check")(function*(dir: string, cut: C
 })
 
 export const readSoundCheck = Effect.fnUntraced(function*(dir: string, cut: Cut, job: ReelJob) {
+  if (cut.clips.length === 0) return { job: { state: "idle" } } satisfies SoundCheck
   const fs = yield* FileSystem.FileSystem
   const { record } = soundPlaces(dir)
   const heard = (yield* fs.exists(record)) ? Option.getOrUndefined(decodeHeard(yield* fs.readFileString(record))) : undefined
   if (heard === undefined) return { job } satisfies SoundCheck
   return {
     job,
-    heard: { fresh: sameParts(heard.parts, partsOf(cut.clips)), seconds: secondsOf(heard.parts), levelling: heard.levelling, parts: heard.gains }
+    heard: { fresh: soundKeyOf(heard.parts) === soundKeyOf(partsOf(cut.clips)), seconds: secondsOf(heard.parts), levelling: heard.levelling, parts: heard.gains }
   } satisfies SoundCheck
 })

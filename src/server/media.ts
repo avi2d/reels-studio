@@ -13,7 +13,7 @@ import { sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
 import { buildReel, readReel, reelPictureAt, reelVideoAt, type ReelVersion } from "./reel.ts"
 import { readTrial, runTrial, trialPicture } from "./retouch.ts"
-import { checkSound, readSoundCheck } from "./sound-check.ts"
+import { checkSound, readSoundCheck, soundKeyOf } from "./sound-check.ts"
 import { readCut, readTimeline, type Cut } from "./timeline-files.ts"
 import { partsOf } from "./media-commands.ts"
 
@@ -213,7 +213,7 @@ const soundHandler = (folder: (id: string) => Effect.Effect<string, ApiError>, s
     const cut = yield* readCut(dir, yield* sourceNames(dir))
     const job = (yield* Ref.get(sounds)).get(dir) ?? { state: "idle" }
     const view = yield* readSoundCheck(dir, cut, job)
-    const key = JSON.stringify(partsOf(cut.clips))
+    const key = soundKeyOf(partsOf(cut.clips))
     const heard = view.heard?.fresh === true
     const busy = job.state === "waiting" || job.state === "running"
     if (cut.clips.length === 0 || heard || busy || (yield* Ref.get(tried)).get(dir) === key) return view
