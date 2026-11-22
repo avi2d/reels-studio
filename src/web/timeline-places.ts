@@ -51,6 +51,7 @@ const alignNote = ({ align, answer }: Place): string => {
   if (answer !== undefined) return ""
   if (align.kind === "zoom") return `глаза можно выровнять: картинка после склейки станет крупнее на ${percent(align.frame.scale)}`
   if (align.kind === "far") return "выровнять нельзя: сдвиг слишком большой, приближением его не скрыть"
+  if (align.kind === "level") return "глаза уже на одной высоте, выравнивать нечего"
   return "студия ещё измеряет кадр, выровнять можно будет позже"
 }
 

@@ -49,6 +49,7 @@ const answerAt = (edits: Edits, join: Join): JoinAnswer | undefined => edits.joi
 type Align =
   | { readonly kind: "zoom"; readonly frame: Frame }
   | { readonly kind: "far" }
+  | { readonly kind: "level" }
   | { readonly kind: "unmeasured" }
 
 export interface Place {
@@ -70,7 +71,8 @@ const seenAt = (faces: VideoFaces | undefined, time: number, side: "before" | "a
 const alignOf = (before: Head, after: Seen, measured: boolean): Align => {
   if (!measured) return { kind: "unmeasured" }
   const frame = frameToward(before, after.head)
-  if (frame === undefined || frame.scale <= 1 + 1e-9) return { kind: "far" }
+  if (frame === undefined) return { kind: "far" }
+  if (frame.scale < 1.005) return { kind: "level" }
   return { kind: "zoom", frame }
 }
 
