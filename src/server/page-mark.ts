@@ -80,7 +80,8 @@ const LINE_PAD = 0.25
 const WINDOW_MARGIN = 0.06
 const NARROWEST_WINDOW = 0.6
 
-const even = (value: number): number => 2 * Math.round(value / 2)
+// Rounding down keeps a size taken from an odd page inside that page.
+const even = (value: number): number => 2 * Math.floor(value / 2)
 
 const linesOf = (boxes: ReadonlyArray<Box>): ReadonlyArray<Box> => {
   const lines: Array<Box> = []

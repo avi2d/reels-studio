@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { markOf, pageTextOf, quoteFound, type PageChars } from "../../src/server/page-mark.ts"
+import { markOf, pageTextOf, quoteFound, type Mark, type PageChars } from "../../src/server/page-mark.ts"
 
 const CHAR = 10
 const LINE = 24
@@ -21,15 +21,27 @@ const PAGE = pageOf([
   "не чаще раза в год, предупредив за месяц."
 ])
 
+type Box = Mark["window"]
+
+const charsOf = (row: number, from: number, to: number): ReadonlyArray<Box> => {
+  const top = 100 + row * 2 * LINE
+  return Array.from({ length: to - from }, (_, at) => ({ left: 100 + (from + at) * CHAR, top, right: 100 + (from + at + 1) * CHAR, bottom: top + LINE }))
+}
+
+const holds = (outer: Box, inner: Box): boolean => outer.left <= inner.left && outer.top <= inner.top && outer.right >= inner.right && outer.bottom >= inner.bottom
+
 test("the mark covers the quoted words across two lines and not the clause number before them or the words after them", () => {
-  const mark = markOf(PAGE, "Арендодатель вправе повысить плату не чаще раза в год")
-  const pad = LINE / 4
-  const second = 100 + 2 * LINE
-  const third = 100 + 4 * LINE
-  expect(mark?.lines).toEqual([
-    { left: 100 + 5 * CHAR - pad, top: second - pad, right: 100 + 39 * CHAR + pad, bottom: second + LINE + pad },
-    { left: 100 - pad, top: third - pad, right: 100 + 18 * CHAR + pad, bottom: third + LINE + pad }
-  ])
+  const lines = markOf(PAGE, "Арендодатель вправе повысить плату не чаще раза в год")?.lines ?? []
+  expect(lines.length).toBe(2)
+  const [second, third] = lines.toSorted((upper, lower) => upper.top - lower.top)
+  if (second === undefined || third === undefined) throw new Error("two marked lines expected")
+  expect(charsOf(1, 5, 39).every((char) => holds(second, char))).toBe(true)
+  expect(charsOf(2, 0, 18).every((char) => holds(third, char))).toBe(true)
+  const clauseNumber = charsOf(1, 0, 4)
+  expect(clauseNumber.every((char) => second.left >= char.right)).toBe(true)
+  expect(charsOf(2, 18, 19).some((comma) => holds(third, comma))).toBe(false)
+  const nextWord = charsOf(2, 20, 31)
+  expect(nextWord.every((char) => third.right <= char.left)).toBe(true)
 })
 
 test("a quote that is not on the page gives no mark rather than marking the nearest line", () => {
@@ -57,6 +69,20 @@ test("the window around the mark stays inside the page, so a quote near the edge
   expect(window.right).toBeLessThanOrEqual(PAGE.width)
   expect(window.bottom).toBeLessThanOrEqual(PAGE.height)
   expect(window.bottom - window.top).toBeLessThanOrEqual(window.right - window.left)
+})
+
+test("the window of an odd-sized page whose text reaches every edge stays inside the page, not 1 px past it where the crop fails", () => {
+  const width = 1801
+  const height = 1273
+  const corners = [
+    { text: "А", left: 0, top: 0, right: 20, bottom: 24 },
+    { text: "Я", left: width - 20, top: height - 24, right: width, bottom: height }
+  ]
+  const window = markOf({ width, height, chars: corners }, "А")?.window ?? { left: -1, top: -1, right: width + 1, bottom: height + 1 }
+  expect(window.left).toBeGreaterThanOrEqual(0)
+  expect(window.top).toBeGreaterThanOrEqual(0)
+  expect(window.right).toBeLessThanOrEqual(width)
+  expect(window.bottom).toBeLessThanOrEqual(height)
 })
 
 test("the window of a page with little text holds all of that text and is no taller than it, not a square of empty paper", () => {

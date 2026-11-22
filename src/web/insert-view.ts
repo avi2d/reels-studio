@@ -39,9 +39,10 @@ export const insertView = (urls: Pick<InsertUrls, "visualUrl" | "clipUrl">): Ins
   }
   const follow = (visual: Visual & { readonly kind: "clip" }, since: number): void => {
     clip.muted = !visual.sound
-    const at = visual.start + since
+    const end = Number.isFinite(clip.duration) ? clip.duration : Number.POSITIVE_INFINITY
+    const at = Math.min(visual.start + since, end)
     if (Math.abs(clip.currentTime - at) > CLIP_DRIFT) clip.currentTime = at
-    if (clip.paused) clip.play().catch(() => undefined)
+    if (clip.paused && !clip.ended && at < end) clip.play().catch(() => undefined)
   }
   const paint = (look: InsertLook | undefined): void => {
     node.hidden = look === undefined
