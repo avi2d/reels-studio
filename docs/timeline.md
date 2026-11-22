@@ -119,7 +119,8 @@ In each frame, the Face Landmarker model finds the face, and the retouch changes
 It evens the skin tone and lightens the eye whites, and it draws no new frame.
 Skin evening removes small tone steps between fine detail and broad shading, so pores, the nose and the cheekbones stay.
 Eye lightening lifts and whitens only the light pixels of each eye outside the iris.
-The stage shows a close-up of the face before and after, and a clip with the original on the left and the retouch on the right.
+The stage shows a close-up of the face before and after.
+It also shows a clip with the original on the left and the retouch on the right.
 It also shows how long the retouch of the 20 s took and how long a minute of video would take.
 The trial waits in the same queue as the other heavy jobs, and a new trial replaces the last one.
 The close-up comes from the first frame with a face from 3 s on.
