@@ -278,7 +278,7 @@ const drawPanels = (
   replaceLists(parts.placeHolder,
     placeList(places, displayed, coverage, pictures, actions),
     ...insertList({ planned: loaded.view.inserts, places: inserts, pictures, phraseOf: (one) => phraseOf(loaded.transcripts, one) }, actions),
-    ...textList({ planned: loaded.view.texts, places: texts, phraseOf: (one) => phraseOf(loaded.transcripts, one) }, actions.ask))
+    ...textList({ planned: loaded.view.texts, places: texts, phraseOf: (one) => phraseOf(loaded.transcripts, one) }))
   replaceLists(parts.pauseHolder, pauseList(displayed, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
   return { places, coverage }
 }

@@ -16,6 +16,6 @@ export const TextsFile = Schema.Struct({ texts: Schema.Array(PlannedText) })
 
 export const PlannedTexts = Schema.Union([
   Schema.Struct({ state: Schema.Literals(["none", "unreadable"]) }),
-  Schema.Struct({ state: Schema.Literal("ready"), planned: Schema.Array(PlannedText), approved: Schema.Boolean })
+  Schema.Struct({ state: Schema.Literal("ready"), planned: Schema.Array(PlannedText) })
 ])
 export type PlannedTexts = typeof PlannedTexts.Type

@@ -271,7 +271,7 @@ Each answer takes the place off the count, and `timeline.json` keeps it by the i
 
 The chat model writes the key thoughts to `texts.json`, each tied to the words of one phrase.
 The «Паузы и склейки» stage lists every key thought of `texts.json` under «Ключевые мысли», with its lines, its words and its time in the cut.
-A key thought the reel does not show stays in the list, marked «не видна», with its reason:
+A key thought the reel cannot show stays in the list, marked «не встанет в ролик», with its reason:
 
 | Reason | What the list says |
 | --- | --- |
@@ -281,8 +281,7 @@ A key thought the reel does not show stays in the list, marked «не видна
 | It has no line with text | There is nothing to show |
 | The thought before it stands for the whole phrase | The earlier thought holds the screen |
 
-When `texts.json` does not read, the list says so and offers to ask the studio to write the thoughts again.
-While the plan waits for a yes, the list says the thoughts appear after the yes.
+When `texts.json` does not read, the list says so.
 
 ## Files
 

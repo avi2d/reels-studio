@@ -44,8 +44,8 @@ const wantedOf = (one: PlannedText, clips: ReadonlyArray<Clip>, transcripts: Rea
 // A later text starts where the earlier one ends, so two key thoughts never stand on the screen at once.
 export const textPlaces = (planned: ReadonlyArray<PlannedText>, clips: ReadonlyArray<Clip>, transcripts: ReadonlyMap<string, Transcript>): ReadonlyArray<TextPlace> => {
   const total = clips.reduce((sum, clip) => sum + clip.end - clip.start, 0)
-  const wanted = planned.map((one) => wantedOf(one, clips, transcripts, total))
-  const byStart = wanted.flatMap((one, index) => typeof one === "string" ? [] : [{ one, index }]).toSorted((left, right) => left.one.start - right.one.start)
+  const wanted = planned.map((one) => ({ planned: one, want: wantedOf(one, clips, transcripts, total) }))
+  const byStart = wanted.flatMap(({ want }, index) => typeof want === "string" ? [] : [{ one: want, index }]).toSorted((left, right) => left.one.start - right.one.start)
   const placed = new Map<number, ShownText | "covered">()
   let shownEnd = 0
   for (const { one, index } of byStart) {
@@ -57,9 +57,9 @@ export const textPlaces = (planned: ReadonlyArray<PlannedText>, clips: ReadonlyA
     placed.set(index, { ...one, start })
     shownEnd = one.end
   }
-  return planned.map((one, index): TextPlace => {
-    const place = placed.get(index) ?? wanted[index]
-    return typeof place === "object" ? { planned: one, state: "shown", shown: place } : { planned: one, state: "dropped", reason: place ?? "covered" }
+  return wanted.map(({ planned: one, want }, index): TextPlace => {
+    const place = placed.get(index) ?? want
+    return typeof place === "object" ? { planned: one, state: "shown", shown: place } : { planned: one, state: "dropped", reason: place }
   })
 }
 

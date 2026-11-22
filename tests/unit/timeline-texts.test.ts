@@ -30,8 +30,8 @@ const planned = (id: string, video: string) => ({ id, video, from: 0, to: 0, lin
 const dropped = (id: string, reason: Extract<TextPlace, { state: "dropped" }>["reason"]): TextPlace => ({ planned: planned(id, "a.mov"), state: "dropped", reason })
 
 const render = (places: ReadonlyArray<TextPlace>, state: "ready" | "unreadable" = "ready"): Drawn => {
-  const view = state === "ready" ? { state, planned: places.map((place) => place.planned), approved: true } : { state }
-  const [list]: ReadonlyArray<unknown> = textList({ planned: view, places, phraseOf: () => "Аванс" }, () => {})
+  const view = state === "ready" ? { state, planned: places.map((place) => place.planned) } : { state }
+  const [list]: ReadonlyArray<unknown> = textList({ planned: view, places, phraseOf: () => "Аванс" })
   if (!isDrawn(list)) throw new Error("no key thought list")
   return list
 }
@@ -51,7 +51,7 @@ test("each dropped key thought names itself and gives its own reason instead of 
   const items = itemsIn(render(places))
   expect(items).toHaveLength(3)
   const texts = items.map((item) => linesIn(item))
-  expect(texts.map((lines) => lines[0])).toEqual(["Мысль 1 не видна", "Мысль 2 не видна", "Мысль 3 не видна"])
+  expect(texts.map((lines) => lines[0])).toEqual(["Мысль 1 не встанет в ролик", "Мысль 2 не встанет в ролик", "Мысль 3 не встанет в ролик"])
   expect(texts.map((lines) => lines[1])).toEqual(["«Видео»", "«Слова»", "«Вырезано»"])
   const reasons = texts.map((lines) => lines.at(-1) ?? "")
   expect(new Set(reasons).size).toBe(3)
@@ -59,9 +59,9 @@ test("each dropped key thought names itself and gives its own reason instead of 
   expect(reasons[2]).toContain("нет в ролике")
 })
 
-test("the count says how many key thoughts are not seen, not that every thought is shown", () => {
+test("the count forecasts how many key thoughts will not go into the reel, not that every thought is shown", () => {
   const shown: TextPlace = { planned: planned("Есть", "a.mov"), state: "shown", shown: { id: "Есть", lines: [{ text: "Есть", accent: false }], start: 0, end: 2.5 } }
   const text = linesIn(render([shown, dropped("Вырезано", "cut")])).join("\n")
-  expect(text).toContain("Не видно 1 из 2.")
-  expect(text).not.toContain("Все мысли видны")
+  expect(text).toContain("Не встанут в ролик: 1 из 2.")
+  expect(text).not.toContain("Встанут в ролик: 2.")
 })

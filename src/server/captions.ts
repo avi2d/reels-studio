@@ -8,26 +8,26 @@ import { fitsArea, textAreaOf } from "../shared/zones.ts"
 import { REEL_RATE } from "./media-commands.ts"
 import { run } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
-import { readApproval } from "./approval.ts"
+import { readApproval, readText } from "./approval.ts"
 
 const decodeTexts = Schema.decodeUnknownOption(Schema.fromJsonString(TextsFile))
 
-const textsOf = Effect.fnUntraced(function*({ plan, texts }: Effect.Success<ReturnType<typeof readApproval>>, dir: string) {
+const textsOf = Effect.fnUntraced(function*(texts: string | undefined, dir: string) {
   if (texts === undefined) return { state: "none" } satisfies PlannedTexts
   const decoded = Option.getOrUndefined(decodeTexts(texts))
-  if (decoded !== undefined) return { state: "ready", planned: decoded.texts, approved: plan.state === "approved" } satisfies PlannedTexts
+  if (decoded !== undefined) return { state: "ready", planned: decoded.texts } satisfies PlannedTexts
   yield* Effect.logError("the on-screen texts are unreadable", `${dir}/texts.json`)
   return { state: "unreadable" } satisfies PlannedTexts
 })
 
 export const readTexts = Effect.fnUntraced(function*(dir: string) {
-  return yield* textsOf(yield* readApproval(dir), dir)
+  return yield* textsOf(yield* readText(`${dir}/texts.json`), dir)
 })
 
 export const readCaptions = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, transcripts: ReadonlyMap<string, Transcript>) {
   const approval = yield* readApproval(dir)
   if (approval.plan.state !== "approved") return NO_CAPTIONS
-  const texts = yield* textsOf(approval, dir)
+  const texts = yield* textsOf(approval.texts, dir)
   return { words: subtitleWords(clips, transcripts), texts: texts.state === "ready" ? shownTexts(texts.planned, clips, transcripts) : [] } satisfies Captions
 })
 
