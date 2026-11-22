@@ -125,8 +125,8 @@ test("the chat model is told where the gaze file is, or to rank by speech alone 
   const videos = [{ name: "a", state: "ready" as const, transcript: first }, { name: "b", state: "ready" as const, transcript: second }]
   const lines = videoLines(videos, {
     looks: [{ video: "a", state: "measured" }, { video: "b", state: "waiting" }],
-    faces: [],
-    timeline: { state: "unreadable" }
+    timeline: { state: "unreadable" },
+    inserts: { state: "none" }
   })
   expect(lines).toContain("gaze/a.txt")
   expect(lines).not.toContain("gaze/b.txt")
@@ -161,7 +161,7 @@ test("a save keeps a picked take and the studio pauses instead of dropping one s
   const base: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)] }
   const local: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0), choice("deposit", "a", 4)] }
   const current: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3)] }
-  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: local.chosen, pauses: [cut("a", 3)], kept: [], joins: [] })
+  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: local.chosen, pauses: [cut("a", 3)], kept: [], joins: [], inserts: [] })
 })
 
 test("returning a seen pause removes it instead of keeping the studio cut", () => {
@@ -175,28 +175,28 @@ test("a pause shortened after the last ack stays cut instead of coming back", ()
   const base: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3)] }
   const local: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0), choice("deposit", "a", 4)], pauses: [cut("a", 3)] }
   const current: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3), cut("a", 5)] }
-  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: local.chosen, pauses: [cut("a", 3), cut("a", 5)], kept: [], joins: [] })
+  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: local.chosen, pauses: [cut("a", 3), cut("a", 5)], kept: [], joins: [], inserts: [] })
 })
 
 test("an undone take goes back while a later studio pause stays cut", () => {
   const base: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 2)], pauses: [cut("a", 3)] }
   const local: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3)] }
   const current: Edits = { ...NO_EDITS, chosen: [choice("advance", "a", 2)], pauses: [cut("a", 3), cut("a", 5)] }
-  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3), cut("a", 5)], kept: [], joins: [] })
+  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: [choice("advance", "a", 0)], pauses: [cut("a", 3), cut("a", 5)], kept: [], joins: [], inserts: [] })
 })
 
 test("a reorder wins the order while untouched fields stay on the server", () => {
   const base: Edits = { ...NO_EDITS, order: ["advance", "deposit"] }
   const local: Edits = { ...NO_EDITS, order: ["deposit", "advance"] }
   const current: Edits = { ...NO_EDITS, order: ["advance", "deposit"], pauses: [cut("a", 3)] }
-  expect(mergeEdits(base, local, current)).toEqual({ order: ["deposit", "advance"], deleted: [], chosen: [], pauses: [cut("a", 3)], kept: [], joins: [] })
+  expect(mergeEdits(base, local, current)).toEqual({ order: ["deposit", "advance"], deleted: [], chosen: [], pauses: [cut("a", 3)], kept: [], joins: [], inserts: [] })
 })
 
 test("returning a pause while the studio cuts another keeps both", () => {
   const base: Edits = { ...NO_EDITS, pauses: [cut("a", 3)] }
   const local: Edits = { ...NO_EDITS, kept: [cut("a", 3)] }
   const current: Edits = { ...NO_EDITS, pauses: [cut("a", 3), cut("a", 5)] }
-  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: [], pauses: [cut("a", 5)], kept: [cut("a", 3)], joins: [] })
+  expect(mergeEdits(base, local, current)).toEqual({ order: [], deleted: [], chosen: [], pauses: [cut("a", 5)], kept: [cut("a", 3)], joins: [], inserts: [] })
 })
 
 const answered = (at: number) => ({ end: { video: "a", at }, start: { video: "a", at: at + 2 }, answer: "leave" as const })

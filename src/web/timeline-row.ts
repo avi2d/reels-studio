@@ -1,5 +1,6 @@
 import { offsetIn, playedPause, type Pause, type Placed, type Take } from "../shared/timeline.ts"
-import { lengthOf } from "../shared/plan.ts"
+import { insertsWithin, type Shown } from "../shared/inserts.ts"
+import { lengthOf, type Span } from "../shared/plan.ts"
 import { icon } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatLength, formatPause } from "./format.ts"
@@ -9,6 +10,8 @@ export interface RowActions {
   readonly textOf: (take: Take) => string
   readonly reorder: (blocks: ReadonlyArray<string>) => void
   readonly setPause: (video: string, after: number, removed: boolean) => void
+  readonly showInsert: (span: Span) => void
+  readonly pictureUrl: (picture: string) => string
 }
 
 const share = (part: number, whole: number): string => `${(whole <= 0 ? 0 : (part / whole) * 100).toFixed(2)}%`
@@ -28,6 +31,23 @@ const pauseMark = (one: Placed, pause: Pause, length: number, actions: RowAction
     "data-key": `pause:${one.take.video}:${pause.after}`,
     click: () => { actions.setPause(one.take.video, pause.after, !pause.removed) }
   }, pause.removed ? icon("undo") : size)
+}
+
+const insertMarks = (shown: ReadonlyArray<Shown>, window: Span, actions: RowActions): ReadonlyArray<HTMLElement> => {
+  const length = window.end - window.start
+  return insertsWithin(shown, window).map((piece) => {
+    const whole = shown.find((one) => one.id === piece.id) ?? piece
+    const label = `Посмотреть вставку «${piece.picture}»`
+    return h("button", {
+      type: "button",
+      class: "insert-mark",
+      style: `left: ${share(piece.start, length)}; width: ${share(piece.end - piece.start, length)}`,
+      "aria-label": label,
+      title: label,
+      "data-key": `insert-mark:${piece.id}:${piece.start.toFixed(2)}`,
+      click: () => { actions.showInsert(whole) }
+    }, h("img", { src: actions.pictureUrl(piece.picture), alt: "" }))
+  })
 }
 
 const EDGE = 48
@@ -130,7 +150,7 @@ interface At {
   readonly start: number
 }
 
-const slotOf = (row: HTMLElement, one: Placed, at: At, selected: string | undefined, actions: RowActions): HTMLElement => {
+const slotOf = (row: HTMLElement, one: Placed, at: At, selected: string | undefined, shown: ReadonlyArray<Shown>, actions: RowActions): HTMLElement => {
   const { block, take } = one
   const length = lengthOf(one.spans)
   const rank = block.takes.indexOf(take) + 1
@@ -150,13 +170,14 @@ const slotOf = (row: HTMLElement, one: Placed, at: At, selected: string | undefi
     h("span", { class: "at" }, formatLength(at.start)),
     h("span", { class: "said", title: actions.textOf(take) }, actions.textOf(take)),
     h("div", { class: block.id === selected ? "clip selected" : "clip" }, dragHandle(row, slot, block.title, block.id, selected, actions), pick),
-    h("div", { class: "gaps" }, ...one.pauses.flatMap((pause) => pauseMark(one, pause, length, actions) ?? [])))
+    h("div", { class: "gaps" }, ...one.pauses.flatMap((pause) => pauseMark(one, pause, length, actions) ?? [])),
+    h("div", { class: "inserts" }, ...insertMarks(shown, { start: at.start, end: at.start + length }, actions)))
   return slot
 }
 
-export const blockRow = (placed: ReadonlyArray<Placed>, selected: string | undefined, actions: RowActions): HTMLElement => {
-  const row = h("ol", { class: "blocks" })
+export const blockRow = (placed: ReadonlyArray<Placed>, selected: string | undefined, shown: ReadonlyArray<Shown>, actions: RowActions): HTMLElement => {
+  const row = h("ol", { class: shown.length === 0 ? "blocks" : "blocks with-inserts" })
   const starts = placed.map((_, index) => lengthOf(placed.slice(0, index).flatMap((one) => one.spans)))
-  row.append(...placed.map((one, index) => slotOf(row, one, { index, start: starts[index] ?? 0 }, selected, actions)))
+  row.append(...placed.map((one, index) => slotOf(row, one, { index, start: starts[index] ?? 0 }, selected, shown, actions)))
   return row
 }

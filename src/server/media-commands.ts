@@ -1,5 +1,7 @@
 import type { Transcript } from "../shared/plan.ts"
-import { cameraShare, FADE, type Clip, type Gaze } from "../shared/timeline.ts"
+import { SILENCE_LUFS } from "../shared/reel.ts"
+import { INSERT_DRIFT, INSERT_FADE, type Shape } from "../shared/inserts.ts"
+import { cameraShare, FADE, type Clip, type Frame, type Gaze } from "../shared/timeline.ts"
 
 const HDR_TRANSFERS = new Set(["arib-std-b67", "smpte2084"])
 
@@ -40,6 +42,7 @@ export interface Part {
   readonly video: string
   readonly start: number
   readonly frames: number
+  readonly frame?: Frame
 }
 
 // Each part lasts whole frames, so its sound and its picture end together and the joined reel does not drift.
@@ -47,7 +50,16 @@ export const partsOf = (clips: ReadonlyArray<Clip>): ReadonlyArray<Part> =>
   clips.flatMap((clip) => {
     const first = Math.round(clip.start * REEL_RATE)
     const frames = Math.round(clip.end * REEL_RATE) - first
-    return frames > 0 ? [{ video: clip.video, start: first / REEL_RATE, frames }] : []
+    if (frames <= 0) return []
+    const part = { video: clip.video, start: first / REEL_RATE, frames }
+    return [clip.frame === undefined ? part : { ...part, frame: clip.frame }]
+  })
+
+export const onFrames = (clips: ReadonlyArray<Clip>): ReadonlyArray<Clip> =>
+  clips.flatMap((clip) => {
+    const first = Math.round(clip.start * REEL_RATE)
+    const last = Math.round(clip.end * REEL_RATE)
+    return last > first ? [{ ...clip, start: first / REEL_RATE, end: last / REEL_RATE }] : []
   })
 
 export const secondsOf = (parts: ReadonlyArray<Part>): number =>
@@ -56,10 +68,31 @@ export const secondsOf = (parts: ReadonlyArray<Part>): number =>
 export const sameParts = (left: ReadonlyArray<Part>, right: ReadonlyArray<Part>): boolean =>
   left.length === right.length && left.every((part, index) => {
     const other = right[index]
-    return other !== undefined && other.video === part.video && other.start === part.start && other.frames === part.frames
+    return other !== undefined && other.video === part.video && other.start === part.start && other.frames === part.frames &&
+      sameFrame(other.frame, part.frame)
   })
 
-const REEL_VIDEO = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1"
+const sameFrame = (left: Frame | undefined, right: Frame | undefined): boolean =>
+  left === undefined || right === undefined
+    ? left === right
+    : left.scale === right.scale && left.left === right.left && left.top === right.top
+
+const REEL_WIDTH = 1080
+const REEL_HEIGHT = 1920
+
+const even = (value: number): number => Math.max(2, Math.ceil(value / 2) * 2)
+
+// One scale to the enlarged size and one crop, since cropping the 1080 by 1920 picture and scaling it again resamples twice.
+const reelVideo = (frame: Frame | undefined): string => {
+  if (frame === undefined) return `scale=${REEL_WIDTH}:${REEL_HEIGHT}:force_original_aspect_ratio=increase,crop=${REEL_WIDTH}:${REEL_HEIGHT},setsar=1`
+  const width = REEL_WIDTH * frame.scale
+  const height = REEL_HEIGHT * frame.scale
+  return [
+    `scale=${even(width)}:${even(height)}:force_original_aspect_ratio=increase`,
+    `crop=${REEL_WIDTH}:${REEL_HEIGHT}:(iw-${width.toFixed(2)})/2+${(frame.left * height).toFixed(2)}:(ih-${height.toFixed(2)})/2+${(frame.top * height).toFixed(2)}`,
+    "setsar=1"
+  ].join(",")
+}
 
 const fadesOf = (seconds: number): string => {
   const fade = Math.min(FADE, seconds / 2)
@@ -72,12 +105,72 @@ export const partArgs = (source: string, part: Part, hdr: boolean, encoder: stri
     "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y",
     "-ss", part.start.toFixed(4), "-i", source,
     "-map", "0:v:0", "-map", "0:a:0", "-frames:v", String(part.frames), "-t", seconds.toFixed(6),
-    "-vf", `fps=${REEL_RATE},${hdr ? TO_SDR : "format=yuv420p"},${REEL_VIDEO}`, "-af", fadesOf(seconds),
+    "-vf", `fps=${REEL_RATE},${hdr ? TO_SDR : "format=yuv420p"},${reelVideo(part.frame)}`, "-af", fadesOf(seconds),
     "-c:v", encoder, "-profile:v", "high", "-b:v", "10M", "-maxrate", "12M", "-bufsize", "24M", "-g", String(REEL_RATE * 2),
     "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
     "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2", "-map_metadata", "-1", "-f", "mov", output
   ]
 }
+
+export interface InsertPicture {
+  readonly file: string
+  readonly shape: Shape
+  readonly width: number
+  readonly height: number
+  readonly start: number
+  readonly end: number
+}
+
+const FRAME = { width: 1080, height: 1920 }
+const CARD_BOX = { left: 65, top: 269, width: 950, height: 979 }
+const CARD_BORDER = 12
+
+const cardSize = (width: number, height: number): { readonly width: number; readonly height: number } => {
+  const room = { width: CARD_BOX.width - 2 * CARD_BORDER, height: CARD_BOX.height - 2 * CARD_BORDER }
+  const scale = Math.min(room.width / width, room.height / height)
+  return { width: even(width * scale), height: even(height * scale) }
+}
+
+// zoompan steps by whole pixels, so the picture goes in at twice the size it leaves at and the slow zoom does not shake.
+const drift = (width: number, height: number, frames: number): string =>
+  `trim=end_frame=1,scale=${2 * width}:${2 * height}:force_original_aspect_ratio=increase,crop=${2 * width}:${2 * height},setsar=1,` +
+  `zoompan=z='1+${INSERT_DRIFT}*on/${Math.max(1, frames)}':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=${Math.max(1, frames)}:s=${width}x${height}:fps=${REEL_RATE}`
+
+const insertFilter = (picture: InsertPicture, index: number): { readonly layer: string; readonly x: number; readonly y: number } => {
+  const seconds = picture.end - picture.start
+  const frames = Math.round(seconds * REEL_RATE)
+  const fade = Math.min(INSERT_FADE, seconds / 2)
+  const fades = `format=yuva420p,fade=t=in:st=0:d=${fade}:alpha=1,fade=t=out:st=${(seconds - fade).toFixed(4)}:d=${fade}:alpha=1`
+  const timed = `setpts=PTS-STARTPTS+${picture.start.toFixed(4)}/TB`
+  if (picture.shape === "fill") {
+    return { layer: `[${index + 1}:v]${drift(FRAME.width, FRAME.height, frames)},${fades},${timed}[p${index}]`, x: 0, y: 0 }
+  }
+  const card = cardSize(picture.width, picture.height)
+  const outer = { width: card.width + 2 * CARD_BORDER, height: card.height + 2 * CARD_BORDER }
+  const framed = `pad=${outer.width}:${outer.height}:${CARD_BORDER}:${CARD_BORDER}:color=white`
+  return {
+    layer: `[${index + 1}:v]${drift(card.width, card.height, frames)},${framed},${fades},${timed}[p${index}]`,
+    x: CARD_BOX.left + Math.round((CARD_BOX.width - outer.width) / 2),
+    y: CARD_BOX.top + Math.round((CARD_BOX.height - outer.height) / 2)
+  }
+}
+
+const insertGraph = (pictures: ReadonlyArray<InsertPicture>): string =>
+  pictures.map((picture, index) => {
+    const { layer, x, y } = insertFilter(picture, index)
+    const under = index === 0 ? "[0:v]" : `[v${index}]`
+    const over = `${under}[p${index}]overlay=${x}:${y}:eof_action=pass:enable='between(t,${picture.start.toFixed(4)},${picture.end.toFixed(4)})'`
+    return `${layer};${over}${index === pictures.length - 1 ? ",format=yuv420p[out]" : `[v${index + 1}]`}`
+  }).join(";")
+
+export const insertArgs = (reel: string, pictures: ReadonlyArray<InsertPicture>, encoder: string, output: string): ReadonlyArray<string> => [
+  "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y", "-i", reel,
+  ...pictures.flatMap((picture) => ["-i", picture.file]),
+  "-filter_complex", insertGraph(pictures), "-map", "[out]", "-map", "0:a:0",
+  "-c:v", encoder, "-profile:v", "high", "-b:v", "10M", "-maxrate", "12M", "-bufsize", "24M", "-g", String(REEL_RATE * 2),
+  "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
+  "-c:a", "copy", "-map_metadata", "-1", "-movflags", "+faststart", "-f", "mp4", output
+]
 
 export const joinList = (names: ReadonlyArray<string>): string =>
   ["ffconcat version 1.0", ...names.map((name) => `file '${name}'`)].join("\n") + "\n"
@@ -158,4 +251,94 @@ export const gazeText = (video: string, transcript: Transcript, gaze: Gaze): str
     "",
     ...lines
   ].join("\n") + "\n"
+}
+
+// The reference meter is ebur128 (EBU Tech 3341). loudnorm reads about 0.9 LU low on the same audio, so it is not used to report.
+type Segment = { readonly start: number; readonly seconds: number }
+
+export const measureArgs = (source: string, segment?: Segment): ReadonlyArray<string> => [
+  "-hide_banner", "-nostats",
+  ...(segment === undefined ? [] : ["-ss", segment.start.toFixed(4), "-t", segment.seconds.toFixed(6)]),
+  "-i", source, "-map", "0:a:0", "-af", "ebur128=peak=true", "-f", "null", "-"
+]
+
+export interface Reading {
+  readonly lufs: number
+  readonly lra: number
+  readonly truePeak: number
+}
+
+const NUMBER = "(-?\\d+(?:\\.\\d+)?|-inf)"
+const summaryPattern = new RegExp(`Integrated loudness:\\s+I:\\s+${NUMBER} LUFS[\\s\\S]*?LRA:\\s+${NUMBER} LU[\\s\\S]*?True peak:\\s+Peak:\\s+${NUMBER} dBFS`)
+
+const finiteOr = (text: string, fallback: number): number => {
+  const value = Number(text)
+  return Number.isFinite(value) ? value : fallback
+}
+
+export const readingOf = (stderr: string): Reading | undefined => {
+  const match = summaryPattern.exec(stderr.slice(stderr.lastIndexOf("Summary:")))
+  if (match === null) return undefined
+  return { lufs: finiteOr(match[1] ?? "", SILENCE_LUFS), lra: finiteOr(match[2] ?? "", 0), truePeak: finiteOr(match[3] ?? "", SILENCE_LUFS) }
+}
+
+export const envelopeArgs = (source: string, metadata: string): ReadonlyArray<string> => [
+  "-hide_banner", "-nostats", "-i", source, "-map", "0:a:0",
+  "-af", `ebur128=metadata=1,ametadata=mode=print:key=lavfi.r128.M:file=${metadata}`, "-f", "null", "-"
+]
+
+export interface Moment {
+  readonly time: number
+  readonly lufs: number
+}
+
+export const momentsOf = (text: string): ReadonlyArray<Moment> => {
+  const moments: Array<Moment> = []
+  let time: number | undefined
+  for (const line of text.split("\n")) {
+    const stamp = /pts_time:(\S+)/.exec(line)
+    if (stamp !== null) {
+      time = Number(stamp[1])
+      continue
+    }
+    const value = /^lavfi\.r128\.M=(\S+)$/.exec(line.trim())
+    if (value !== null && time !== undefined) moments.push({ time, lufs: finiteOr(value[1] ?? "", SILENCE_LUFS) })
+  }
+  return moments
+}
+
+// Each sample takes the last moment at or before its time, so a sample never reads ahead of the audio.
+export const sampledAt = (moments: ReadonlyArray<Moment>, step: number, seconds: number): ReadonlyArray<number> => {
+  const count = Math.floor(seconds / step) + 1
+  const values: Array<number> = []
+  let index = 0
+  for (let sample = 0; sample < count; sample++) {
+    const at = sample * step
+    while (index + 1 < moments.length && (moments[index + 1]?.time ?? Infinity) <= at) index++
+    values.push(Math.max(SILENCE_LUFS, moments[index]?.lufs ?? SILENCE_LUFS))
+  }
+  return values
+}
+
+export interface Span {
+  readonly name: "quiet" | "loud"
+  readonly from: number
+  readonly to: number
+}
+
+const PASSAGE_FRAMES = REEL_RATE
+
+export const passagesOf = (parts: ReadonlyArray<Part>, lufs: ReadonlyArray<number>): ReadonlyArray<Span> => {
+  const eligible = parts.flatMap((part, index) => {
+    const level = lufs[index]
+    return part.frames >= PASSAGE_FRAMES && level !== undefined && level > SILENCE_LUFS ? [{ index, lufs: level }] : []
+  })
+  if (eligible.length < 2) return []
+  const quiet = eligible.reduce((best, item) => item.lufs < best.lufs ? item : best)
+  const loud = eligible.reduce((best, item) => item.lufs >= best.lufs ? item : best)
+  const span = (name: Span["name"], index: number): Span => {
+    const from = secondsOf(parts.slice(0, index))
+    return { name, from, to: from + (parts[index]?.frames ?? 0) / REEL_RATE }
+  }
+  return [span("quiet", quiet.index), span("loud", loud.index)]
 }

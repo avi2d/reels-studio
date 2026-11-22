@@ -11,6 +11,9 @@ const QUIET = ["-hide_banner", "-loglevel", "error", "-y"]
 export const fileProbeArgs = (file: string): ReadonlyArray<string> =>
   ["-v", "error", "-show_entries", "stream=codec_type,width,height,color_transfer:format=duration", "-of", "json", file]
 
+export const pictureProbeArgs = (file: string): ReadonlyArray<string> =>
+  ["-v", "error", "-show_entries", "stream=codec_type,width,height", "-show_frames", "-read_intervals", "%+#1", "-of", "json", file]
+
 export const pictureArgs = (source: string, target: string): ReadonlyArray<string> =>
   [...QUIET, "-i", source, "-frames:v", "1", "-vf", FIT, "-q:v", "3", target]
 

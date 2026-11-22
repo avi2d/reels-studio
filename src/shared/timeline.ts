@@ -15,10 +15,13 @@ const Step = Schema.Finite.check(Schema.isGreaterThan(0))
 const HeadSamples = Schema.Array(Schema.NullOr(Head))
 const GazeSamples = Schema.Array(Schema.Literals(["camera", "away", "hidden"]))
 
+const Aspect = Schema.Finite.check(Schema.isGreaterThan(0))
+
 export const Gaze = Schema.Struct({
   step: Step,
   samples: GazeSamples,
-  heads: Schema.optionalKey(HeadSamples)
+  heads: Schema.optionalKey(HeadSamples),
+  aspect: Schema.optionalKey(Aspect)
 })
 export type Gaze = typeof Gaze.Type
 
@@ -47,11 +50,27 @@ export type PauseRef = typeof PauseRef.Type
 
 const ClipEdge = Schema.Struct({ video: Schema.String, at: Schema.Finite })
 
-export const JoinAnswer = Schema.Literals(["trim", "leave"])
+export const JoinAnswer = Schema.Literals(["zoom", "trim", "leave"])
 export type JoinAnswer = typeof JoinAnswer.Type
 
-const AnsweredJoin = Schema.Struct({ end: ClipEdge, start: ClipEdge, answer: JoinAnswer })
+const joinEnds = { end: ClipEdge, start: ClipEdge }
+
+const AnsweredJoin = Schema.Union([
+  Schema.Struct({ ...joinEnds, answer: JoinAnswer }),
+  Schema.Struct({ ...joinEnds, answer: Schema.Literal("cover"), picture: Schema.String })
+])
 export type AnsweredJoin = typeof AnsweredJoin.Type
+export type JoinState = AnsweredJoin["answer"]
+
+export const replyKey = (answered: AnsweredJoin): string => answered.answer === "cover" ? `cover:${answered.picture}` : answered.answer
+
+export const InsertAnswer = Schema.Union([
+  Schema.Struct({ id: Schema.String, answer: Schema.Literals(["keep", "remove"]) }),
+  Schema.Struct({ id: Schema.String, answer: Schema.Literal("replace"), picture: Schema.String })
+])
+export type InsertAnswer = typeof InsertAnswer.Type
+
+export const insertKey = (answered: InsertAnswer): string => answered.answer === "replace" ? `replace:${answered.picture}` : answered.answer
 
 export const Edits = Schema.Struct({
   order: Schema.Array(Schema.String),
@@ -59,11 +78,12 @@ export const Edits = Schema.Struct({
   chosen: Schema.Array(Schema.Struct({ block: Schema.String, video: Schema.String, from: Schema.Int })),
   pauses: Schema.Array(PauseRef),
   kept: Schema.optionalKey(Schema.Array(PauseRef)),
-  joins: Schema.Array(AnsweredJoin).pipe(Schema.withDecodingDefaultKey(Effect.succeed([])))
+  joins: Schema.Array(AnsweredJoin).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  inserts: Schema.Array(InsertAnswer).pipe(Schema.withDecodingDefaultKey(Effect.succeed([])))
 })
 export type Edits = typeof Edits.Type
 
-export const NO_EDITS: Edits = { order: [], deleted: [], chosen: [], pauses: [], kept: [], joins: [] }
+export const NO_EDITS: Edits = { order: [], deleted: [], chosen: [], pauses: [], kept: [], joins: [], inserts: [] }
 
 export const GazeFailure = Schema.Literals(["no-tool", "tool-failed", "file-unreadable", "video-unreadable"])
 export type GazeFailure = typeof GazeFailure.Type
@@ -73,12 +93,32 @@ const Look = Schema.Union([
   Schema.Struct({ video: Schema.String, state: Schema.Literal("failed"), reason: GazeFailure })
 ])
 
-export const VideoFaces = Schema.Struct({ video: Schema.String, step: Step, gaze: GazeSamples, heads: HeadSamples })
+export const VideoFaces = Schema.Struct({ video: Schema.String, step: Step, gaze: GazeSamples, heads: HeadSamples, aspect: Schema.optionalKey(Aspect) })
 export type VideoFaces = typeof VideoFaces.Type
+
+export const PlannedInsert = Schema.Struct({
+  id: Schema.String,
+  picture: Schema.String,
+  video: Schema.String,
+  from: Schema.Int,
+  to: Schema.Int,
+  reason: Schema.String
+})
+export type PlannedInsert = typeof PlannedInsert.Type
+
+export const InsertsFile = Schema.Struct({ inserts: Schema.Array(PlannedInsert) })
+
+export const PlannedInserts = Schema.Union([
+  Schema.Struct({ state: Schema.Literals(["none", "unreadable"]) }),
+  Schema.Struct({ state: Schema.Literal("ready"), planned: Schema.Array(PlannedInsert), dropped: Schema.Int })
+])
+export type PlannedInserts = typeof PlannedInserts.Type
 
 export const TimelineView = Schema.Struct({
   looks: Schema.Array(Look),
   faces: Schema.Array(VideoFaces),
+  pictures: Schema.Array(Schema.String),
+  inserts: PlannedInserts,
   timeline: Schema.Union([
     Schema.Struct({ state: Schema.Literals(["none", "unreadable"]) }),
     Schema.Struct({ state: Schema.Literal("ready"), blocks: Schema.Array(Block), dropped: Schema.Int, edits: Edits })
@@ -213,9 +253,18 @@ export const within = <S extends Span>(spans: ReadonlyArray<S>, window: Span): R
     return end > start ? [{ ...span, start, end }] : []
   })
 
+// The part of the 9 by 16 picture the reel shows, enlarged by scale, in units of the picture height.
+export const Frame = Schema.Struct({
+  scale: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(1)),
+  left: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
+  top: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
+})
+export type Frame = typeof Frame.Type
+
 export interface Clip extends Span {
   readonly video: string
   readonly block: string
+  readonly frame?: Frame
 }
 
 export const clipsOf = (placed: ReadonlyArray<Placed>): ReadonlyArray<Clip> =>
@@ -264,13 +313,23 @@ export const mergeEdits = (base: Edits, local: Edits, current: Edits): Edits => 
   for (const one of [...current.joins, ...local.joins, ...base.joins]) {
     if (!ends.some((have) => sameEnds(have, one))) ends.push(one)
   }
-  const answerOf = (list: ReadonlyArray<AnsweredJoin>, one: AnsweredJoin): JoinAnswer | undefined =>
-    list.find((have) => sameEnds(have, one))?.answer
+  const answerOf = (list: ReadonlyArray<AnsweredJoin>, one: AnsweredJoin): string | undefined => {
+    const found = list.find((have) => sameEnds(have, one))
+    return found === undefined ? undefined : replyKey(found)
+  }
   const joins = ends.flatMap((one): ReadonlyArray<AnsweredJoin> => {
     const picked = answerOf(base.joins, one) === answerOf(local.joins, one)
       ? current.joins.find((have) => sameEnds(have, one))
       : local.joins.find((have) => sameEnds(have, one))
     return picked === undefined ? [] : [picked]
+  })
+  const insertOf = (list: ReadonlyArray<InsertAnswer>, id: string): InsertAnswer | undefined => list.find((one) => one.id === id)
+  const insertIds = [...new Set([...base.inserts, ...local.inserts, ...current.inserts].map((one) => one.id))]
+  const sameInsert = (left: InsertAnswer | undefined, right: InsertAnswer | undefined): boolean =>
+    left === undefined || right === undefined ? left === right : insertKey(left) === insertKey(right)
+  const inserts = insertIds.flatMap((id) => {
+    const entry = sameInsert(insertOf(base.inserts, id), insertOf(local.inserts, id)) ? insertOf(current.inserts, id) : insertOf(local.inserts, id)
+    return entry === undefined ? [] : [entry]
   })
   const choiceOf = (list: ReadonlyArray<Choice>, block: string): Choice | undefined => list.find((one) => one.block === block)
   const blocks = [...new Set([...base.chosen, ...local.chosen, ...current.chosen].map((one) => one.block))]
@@ -286,6 +345,7 @@ export const mergeEdits = (base: Edits, local: Edits, current: Edits): Edits => 
     }),
     pauses: mergePauses(local.pauses, base.pauses, current.pauses),
     kept: mergePauses(local.kept ?? [], base.kept ?? [], current.kept ?? []),
-    joins
+    joins,
+    inserts
   }
 }
