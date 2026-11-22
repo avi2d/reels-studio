@@ -2,9 +2,10 @@ import { DateTime, Effect, FileSystem, Option, Schema } from "effect"
 import type { ReelJob } from "../shared/reel.ts"
 import { TRIAL_SECONDS, type RetouchPicture, type RetouchView } from "../shared/retouch.ts"
 import type { Clip } from "../shared/timeline.ts"
-import { compareArgs, firstSeconds, partsOf, retouchArgs, retouchedFrames, secondsOf } from "./media-commands.ts"
+import { readFace, retouchVideo } from "./face.ts"
+import { compareArgs, firstSeconds, partsOf, secondsOf } from "./media-commands.ts"
 import { tool } from "./media-jobs.ts"
-import { renderParts } from "./reel.ts"
+import { builtFace, renderParts } from "./reel.ts"
 import { Settings } from "./settings.ts"
 
 const Measured = Schema.fromJsonString(Schema.Struct({ seconds: Schema.Finite, took: Schema.Finite }))
@@ -35,11 +36,7 @@ const encodeTrialRun = Effect.fnUntraced(function*(dir: string, clips: ReadonlyA
   yield* fs.makeDirectory(place.work, { recursive: true })
   const before = `${place.work}/before.mp4`
   yield* renderParts(dir, parts, [], place.work, before, (share) => onDone(share * RENDER_SHARE))
-  const looker = `${settings.root}/tools/gaze`
-  yield* tool("uv", retouchArgs(looker, before, place.work, settings.encoder), settings.heavy, (line) => {
-    const done = retouchedFrames(line)
-    return done === undefined ? Effect.void : onDone(RENDER_SHARE + Math.min(1, done / frames) * RETOUCH_SHARE)
-  })
+  yield* retouchVideo({ before, folder: place.work, frames, closeUp: true }, (share) => onDone(RENDER_SHARE + share * RETOUCH_SHARE))
   const measured = yield* decodeMeasured(yield* fs.readFileString(`${place.work}/retouch.json`))
   yield* tool("ffmpeg", compareArgs(before, `${place.work}/after.mp4`, settings.encoder, `${place.work}/compare.mp4`), settings.heavy)
   yield* fs.remove(place.record, { force: true })
@@ -57,12 +54,18 @@ export const runTrial = Effect.fn("Retouch.trial")(function*(dir: string, clips:
   yield* encodeTrialRun(dir, clips, onDone).pipe(Effect.ensuring(cleanup))
 })
 
-export const readTrial = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, job: ReelJob) {
+export const lastTrial = Effect.fnUntraced(function*(dir: string) {
   const fs = yield* FileSystem.FileSystem
   const place = trialPlaces(dir)
+  return (yield* fs.exists(place.record)) ? Option.getOrUndefined(decodeTrial(yield* fs.readFileString(place.record))) : undefined
+})
+
+export const readTrial = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, job: ReelJob) {
   const cut = secondsOf(partsOf(clips))
-  const trial = (yield* fs.exists(place.record)) ? Option.getOrUndefined(decodeTrial(yield* fs.readFileString(place.record))) : undefined
-  return (trial === undefined ? { job, cut } : { job, cut, trial }) satisfies RetouchView
+  const trial = yield* lastTrial(dir)
+  const face = yield* readFace(dir)
+  const built = yield* builtFace(dir)
+  return { job, cut, face, ...(built === undefined ? {} : { built }), ...(trial === undefined ? {} : { trial }) } satisfies RetouchView
 })
 
 export const trialPicture = Effect.fnUntraced(function*(dir: string, name: RetouchPicture) {
