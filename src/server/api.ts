@@ -1,5 +1,6 @@
 import { Effect, FileSystem, Layer, Option, Schema, Stream } from "effect"
 import { Pick } from "../shared/library.ts"
+import { PictureSide } from "../shared/reel.ts"
 import { Edits, type TimelinePage } from "../shared/timeline.ts"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { ApiError, badRequest } from "./api-error.ts"
@@ -28,8 +29,20 @@ const json = (body: unknown, status = 200) => HttpServerResponse.jsonUnsafe(body
 const param = (name: string) =>
   Effect.map(HttpRouter.params, (params) => params[name] ?? "")
 
-const madeOf = (request: HttpServerRequest.HttpServerRequest): string =>
-  new URL(request.url, "http://localhost").searchParams.get("made") ?? ""
+const queryOf = (request: HttpServerRequest.HttpServerRequest, name: string): string =>
+  new URL(request.url, "http://localhost").searchParams.get(name) ?? ""
+
+const madeOf = (request: HttpServerRequest.HttpServerRequest): string => queryOf(request, "made")
+
+const decodeSide = Schema.decodeUnknownOption(PictureSide)
+
+const pictureOf = (request: HttpServerRequest.HttpServerRequest) => {
+  const join = Number(queryOf(request, "join"))
+  const side = Option.getOrUndefined(decodeSide(queryOf(request, "side")))
+  return Number.isInteger(join) && join >= 1 && side !== undefined
+    ? Effect.succeed({ made: madeOf(request), join, side })
+    : badRequest("Такой картинки нет")
+}
 
 const body = <A>(schema: Schema.ConstraintDecoder<A>) =>
   HttpServerRequest.schemaBodyJson(schema).pipe(Effect.mapError(() => badRequest("Запрос не разобран")))
@@ -219,6 +232,11 @@ const reel = Layer.mergeAll(
     const media = yield* Media
     const target = yield* media.reelFile(yield* param("id"), madeOf(request))
     return yield* sendFile(target, "video/mp4", request.headers["range"])
+  }))),
+  HttpRouter.add("GET", "/api/projects/:id/reel/picture", (request) => reply(Effect.gen(function*() {
+    const media = yield* Media
+    const target = yield* media.reelPicture(yield* param("id"), yield* pictureOf(request))
+    return yield* sendFile(target, "image/jpeg", request.headers["range"])
   }))),
   HttpRouter.add("GET", "/api/projects/:id/reel/download", (request) => reply(Effect.gen(function*() {
     const media = yield* Media

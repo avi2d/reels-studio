@@ -82,6 +82,13 @@
 .built-facts { display: flex; flex: 1 1 220px; flex-direction: column; align-items: flex-start; gap: 10px; min-width: 0; }
 .reel-card .stale { font-size: 13px; color: var(--wa-color-warning-on-quiet); }
 .reel-card progress { width: 100%; accent-color: var(--wa-color-brand-fill-loud); }
+.colour-join { display: flex; flex-direction: column; gap: 8px; }
+.colour-join h3 { font-size: 14px; }
+.colour-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.colour-pair figure { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+.colour-pair img { width: 100%; height: auto; border-radius: 12px; }
+.colour-pair figcaption { font-size: 13px; color: var(--wa-color-text-quiet); }
+@media (max-width: 520px) { .colour-pair { grid-template-columns: minmax(0, 1fr); } }
 
 @media (max-width: 820px) {
   .reel { --bar: 52px; display: block; height: auto; padding: 0 0 calc(40px + env(safe-area-inset-bottom, 0px)); }

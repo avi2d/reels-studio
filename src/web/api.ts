@@ -3,7 +3,7 @@ import { BriefView } from "../shared/brief.ts"
 import { Message } from "../shared/chat.ts"
 import { Offer, type Pick, UploadedVideo } from "../shared/library.ts"
 import { VideoView } from "../shared/plan.ts"
-import { ReelView } from "../shared/reel.ts"
+import { ReelView, type PictureSide } from "../shared/reel.ts"
 import { Edits, TimelinePage } from "../shared/timeline.ts"
 
 export class Failed extends Data.TaggedError("Failed")<{ readonly message: string }> {}
@@ -134,6 +134,9 @@ export const cancelReel = (id: string): Effect.Effect<ReelView, Failed> =>
 
 export const reelUrl = (id: string, made: string): string =>
   `/api/projects/${id}/reel/file?made=${encodeURIComponent(made)}`
+
+export const reelPictureUrl = (id: string, made: string, join: number, side: PictureSide): string =>
+  `/api/projects/${id}/reel/picture?made=${encodeURIComponent(made)}&join=${join}&side=${side}`
 
 export const reelDownloadUrl = (id: string, made: string): string =>
   `/api/projects/${id}/reel/download?made=${encodeURIComponent(made)}`
