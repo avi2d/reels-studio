@@ -91,7 +91,7 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
       },
       edited: () => { builtPane?.edited() },
       settled: (ok) => { builtPane?.settled(ok) },
-      active: () => activeStage.now === "takes" || activeStage.now === "pauses"
+      active: () => activeStage.now !== "file" && activeStage.now !== "looks"
     })
     const built = reelPane(project.id, {
       note: (note) => { stages.note("file", note) },

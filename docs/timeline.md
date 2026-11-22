@@ -96,7 +96,7 @@ Before it encodes, the build measures the skin colour of each video in the cut, 
 It reads 15 frames with a face from the preview, spread over the video.
 In each frame it takes a box of cheeks and nose under the eyes from the gaze samples.
 The skin colour is the median red, green and blue of the pixels of all 15 boxes.
-The first video of the cut in upload order keeps its colour.
+The first video of the cut in cut order keeps its colour.
 Each later video gets a gain per channel that brings its skin colour to the first, between 0.8 and 1.25.
 A video with no face in its gaze samples keeps its colour.
 For each pair of videos, the build saves two pictures of their first join, before and after the gain.
@@ -120,6 +120,8 @@ Eye lightening lifts and whitens only the light pixels of each eye outside the i
 The stage shows a close-up of the face before and after, and a clip with the original on the left and the retouch on the right.
 It also shows how long the retouch of the 20 s took and how long a minute of video would take.
 The trial waits in the same queue as the other heavy jobs, and a new trial replaces the last one.
+The close-up comes from the first frame with a face from 3 s on.
+Without such a frame the trial fails, and the last trial stays.
 
 ## Keys
 

@@ -34,7 +34,7 @@ const picture = (caption: string, image: HTMLImageElement): HTMLElement =>
   h("figure", { class: "trial-picture" }, image, h("figcaption", {}, caption))
 
 export const retouchCard = (projectId: string): { readonly node: HTMLElement; readonly refresh: () => void; readonly pause: () => void } => {
-  const state = { timer: 0, made: "", busy: false }
+  const state = { timer: 0, made: "", busy: false, counter: 0, applied: 0 }
   const status = h("p", { class: "muted", role: "status" })
   const bar = h("progress", { max: "1", value: "0", hidden: true })
   const problem = h("p", { class: "error", role: "alert" })
@@ -68,18 +68,32 @@ export const retouchCard = (projectId: string): { readonly node: HTMLElement; re
     cost.textContent = costText(view.trial)
   }
 
+  const invalidate = (): void => {
+    state.applied = (state.counter += 1)
+  }
+
   const refresh = (): void => {
     globalThis.clearTimeout(state.timer)
     if (!node.isConnected) return
     state.timer = Number(globalThis.setTimeout(refresh, state.busy ? POLL_MS : IDLE_MS))
-    Effect.runFork(Api.getRetouch(projectId).pipe(Effect.map(show), Effect.catchTag("Failed", () => Effect.void)))
+    const seq = (state.counter += 1)
+    Effect.runFork(Api.getRetouch(projectId).pipe(
+      Effect.map((view) => {
+        if (seq <= state.applied) return
+        state.applied = seq
+        show(view)
+      }),
+      Effect.catchTag("Failed", () => Effect.void)
+    ))
   }
 
   start.addEventListener("click", () => {
     start.disabled = true
     problem.textContent = ""
+    invalidate()
     Effect.runFork(Api.startRetouch(projectId).pipe(
       Effect.map((view) => {
+        invalidate()
         show(view)
         refresh()
       }),

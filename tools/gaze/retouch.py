@@ -132,7 +132,7 @@ def retouch(frame: np.ndarray, points: np.ndarray) -> np.ndarray:
 def close_up(frame: np.ndarray, points: np.ndarray) -> np.ndarray:
     face = float(np.linalg.norm(points[BROW_TOP] - points[CHIN]))
     middle = points[FACE_OVAL, :].mean(axis=0)
-    half = int(face * 0.6)
+    half = min(int(face * 0.6), frame.shape[1] // 2, frame.shape[0] // 2)
     left = int(np.clip(middle[0] - half, 0, frame.shape[1] - 2 * half))
     top = int(np.clip(middle[1] - half, 0, frame.shape[0] - 2 * half))
     return cv2.resize(frame[top:top + 2 * half, left:left + 2 * half], (720, 720), interpolation=cv2.INTER_AREA)
@@ -200,8 +200,11 @@ def main() -> None:
     if reader.wait() != 0 or writer.wait() != 0 or frames == 0:
         print("The video cannot be read or written.", file=sys.stderr)
         raise SystemExit(65)
+    if not pictured:
+        print("No face was found after the first 3 seconds, so there is no close-up.", file=sys.stderr)
+        raise SystemExit(66)
     took = time.monotonic() - started
-    result = {"seconds": frames / RATE, "took": round(took, 2), "found": round(found / frames, 4), "pictured": pictured}
+    result = {"seconds": frames / RATE, "took": round(took, 2), "found": round(found / frames, 4)}
     (folder / "retouch.json").write_text(json.dumps(result), encoding="utf-8")
 
 
