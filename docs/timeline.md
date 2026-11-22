@@ -94,10 +94,13 @@ A part shorter than 1.2 s is measured played over until it fills 1.2 s, because 
 The gain moves from one part's value to the next only inside the two 0.06 s fades at their join.
 The sound there is near silence.
 One more constant gain over the whole reel hits -14 LUFS, and a limiter keeps the true peak under -1.5 dBTP.
-When the cut shows inserts, one more pass lays them over the levelled file and copies its sound as it is.
+When the cut shows inserts or approved on-screen text, one more pass lays the inserts and the text over the levelled file and copies its sound as it is.
+The studio draws each spoken word as a single word subtitle and the titles and key thoughts of texts.json in that pass.
+The studio draws a long subtitle word smaller to fit the Instagram box.
+A key thought that leaves the box stops the build.
 The joined file before levelling stays beside the reel as `before-<stamp>.mp4`.
 The download always serves the levelled file.
-A bar follows the parts, the levelling and the inserts.
+A bar follows the parts, the levelling, the inserts and the text.
 «Остановить сборку» stops a waiting or running build, ends its ffmpeg and removes the half-built parts, and the last finished reel stays.
 The build waits while the computer hears another video, because the studio runs one heavy job at a time.
 The originals stay untouched.
@@ -169,7 +172,7 @@ The switch turns on only after a trial, so the person sets it after comparing th
 A line under the switch says whether the built file already has the chosen face.
 When it does not, the button «Собрать ролик с выровненным лицом» or «Собрать ролик заново» opens the «Готовый ролик» stage and starts the build there.
 With the switch off, the build is the same as without the setting, and no step touches the frames.
-With the switch on, the build runs `tools/gaze/retouch.py` on the whole levelled reel, before the inserts go on, so the inserts stay as they are.
+With the switch on, the build runs `tools/gaze/retouch.py` on the whole levelled reel, before the inserts and the text go on, so the inserts and the text stay as they are.
 That retouch changes pixels only inside the face, the same way the trial does.
 The «Готовый ролик» stage names the chosen face above its build button and the face of the built file in the file facts.
 After a new choice it says the file no longer matches.
@@ -272,11 +275,12 @@ Each video folder holds these next to `plan.json`:
 | `gaze/<video>.txt` | The share of looks into the camera for each stretch of speech, which the chat model reads |
 | `blocks.json` | The blocks and their takes, written by the chat model |
 | `inserts.json` | The pictures, clips and PDF pages to show over phrases, written by the chat model |
+| `texts.json` | The titles and key thoughts to show over phrases, written by the chat model |
 | `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses and the answers to the places to check and to the inserts |
 | `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
 | `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |
-| `reel/reel.json` | The build time, the video file it published, the parts, the inserts, the face setting, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
+| `reel/reel.json` | The build time, the video file it published, the parts, the inserts, a hash of the subtitles and key thoughts, the face setting, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
 | `reel/sound.json` | The parts of the last checked cut with the heard clip inserts, its measured loudness before and after levelling, and the gain of each part over its source time, which the montage plays |
 | `reel/sound-work/` | The sound of each clip and the levelled sound while a check runs, removed when it ends |
 | `looks.json` | The face setting of the reel, `off` or `light`, written when the person picks it |

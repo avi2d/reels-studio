@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import { clipFrom, clipSoundArgs, insertArgs, type InsertLayer } from "../../src/server/insert-commands.ts"
+import { finishArgs } from "../../src/server/finish-commands.ts"
+import { clipFrom, clipSoundArgs, type InsertLayer } from "../../src/server/insert-commands.ts"
 
 const clip = (sound: boolean): Extract<InsertLayer, { readonly kind: "clip" }> =>
   ({ kind: "clip", file: "walk.mov", shape: "fill", width: 1080, height: 1920, start: 4, end: 7, from: 2, lasts: 6, hdr: false, sound })
@@ -28,7 +29,7 @@ test("a heard clip shorter than its phrase fades its sound out where the clip en
 
 for (const sound of [false, true]) {
   test(`the insert pass copies the levelled sound as it is for a clip ${sound ? "heard" : "left silent"}, not mixing it again after the levelling`, () => {
-    const args = insertArgs("levelled.mp4", [clip(sound)], "libx264", "out.mp4")
+    const args = finishArgs("levelled.mp4", [clip(sound)], undefined, "libx264", "out.mp4")
     expect(graphOf(args)).not.toContain("[1:a]")
     expect(args.slice(args.lastIndexOf("-map"), args.lastIndexOf("-map") + 2)).toEqual(["-map", "0:a:0"])
     expect(args.slice(args.indexOf("-c:a"), args.indexOf("-c:a") + 2)).toEqual(["-c:a", "copy"])
@@ -46,13 +47,13 @@ test("a clip planned to start inside its length keeps the planned moment, not on
 })
 
 test("a clip insert plays from the moment the plan names and lasts only its phrase, not from the clip's first second to its end", () => {
-  const args = insertArgs("reel.mp4", [clip(false)], "libx264", "out.mp4")
+  const args = finishArgs("reel.mp4", [clip(false)], undefined, "libx264", "out.mp4")
   const at = args.indexOf("walk.mov")
   expect(args.slice(at - 5, at + 1)).toEqual(["-ss", "2.000", "-t", "3.000", "-i", "walk.mov"])
 })
 
 test("a still picture insert still drifts closer, while a clip insert does not zoom over its own motion", () => {
   const still: InsertLayer = { kind: "still", file: "a.png", shape: "fill", width: 1080, height: 1920, start: 4, end: 7 }
-  expect(graphOf(insertArgs("reel.mp4", [still], "libx264", "out.mp4"))).toContain("zoompan")
-  expect(graphOf(insertArgs("reel.mp4", [clip(false)], "libx264", "out.mp4"))).not.toContain("zoompan")
+  expect(graphOf(finishArgs("reel.mp4", [still], undefined, "libx264", "out.mp4"))).toContain("zoompan")
+  expect(graphOf(finishArgs("reel.mp4", [clip(false)], undefined, "libx264", "out.mp4"))).not.toContain("zoompan")
 })

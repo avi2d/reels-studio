@@ -29,6 +29,7 @@ const soundPlaces = (dir: string): { readonly record: string; readonly work: str
   work: `${dir}/reel/sound-work`
 })
 
+// The parts carry the sound the build cuts from the originals, and levelSound is the build's own levelling, so the verdict is the built file's.
 const hearCut = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (share: number) => Effect.Effect<void>) {
   const fs = yield* FileSystem.FileSystem
   const settings = yield* Settings

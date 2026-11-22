@@ -57,7 +57,7 @@ const markPreviewFresh = Effect.fnUntraced(function*(job: Job) {
   yield* fs.writeFileString(previewFlag(job), `${KEY_FRAME_EVERY}\n`)
 })
 
-const run = Effect.fnUntraced(function*(
+export const run = Effect.fnUntraced(function*(
   command: string,
   args: ReadonlyArray<string>,
   prefix: ReadonlyArray<string>,

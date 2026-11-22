@@ -7,10 +7,13 @@ import { curveOf, gainsOf, levelArgs, partGainsOf, type PartLevel } from "./leve
 import {
   joinList, lastFrameOf, partArgs, partsOf, passagesOf, pictureArgs, progressSeconds, sameParts, secondsOf, type Part, type Span
 } from "./media-commands.ts"
-import { clipSoundArgs, insertArgs, type InsertLayer } from "./insert-commands.ts"
+import { clipSoundArgs, type InsertLayer } from "./insert-commands.ts"
 import { insertLayerOf } from "./insert-layers.ts"
 import { sampledAt } from "./loudness-meter.ts"
 import { joinArgs, type Streams } from "./sound-commands.ts"
+import { hasCaptions, type Captions } from "../shared/captions.ts"
+import { placeCaptions } from "./captions.ts"
+import { finishArgs } from "./finish-commands.ts"
 import { isHdrVideo, measureLoudness, measurePart, places, shortTermLoudness, tool } from "./media-jobs.ts"
 import { readFace, retouchVideo } from "./face.ts"
 import { Settings } from "./settings.ts"
@@ -32,6 +35,7 @@ const Record = Schema.Struct({
   parts: Schema.Array(PartRecord),
   colour: Schema.optionalKey(Colour),
   inserts: Schema.Array(ShownInsert).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  captions: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed(""))),
   face: Face.pipe(Schema.withDecodingDefaultKey(Effect.succeed("off" as const))),
   levelling: Schema.optionalKey(Levelling)
 })
@@ -43,6 +47,8 @@ export type ReelVersion = "after" | "before"
 
 const recorded = (inserts: ReadonlyArray<Shown>): ReadonlyArray<ShownInsert> =>
   inserts.map((one) => ({ picture: visualKey(one.visual), start: Number(one.start.toFixed(4)), end: Number(one.end.toFixed(4)) }))
+
+const captionsKey = (captions: Captions): string => hasCaptions(captions) ? String(Bun.hash(JSON.stringify(captions))) : ""
 
 const sameInserts = (left: ReadonlyArray<ShownInsert>, right: ReadonlyArray<ShownInsert>): boolean =>
   JSON.stringify(left) === JSON.stringify(right)
@@ -289,12 +295,14 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
   const total = secondsOf(parts)
   const pictures = yield* Effect.forEach(cut.inserts, (insert) => insertLayerOf(dir, insert))
   const face = yield* readFace(dir)
-  const insertsShare = pictures.length === 0 ? 0 : INSERTS_SHARE
+  const finishing = pictures.length > 0 || hasCaptions(cut.captions)
+  const insertsShare = finishing ? INSERTS_SHARE : 0
   const faceShare = face === "light" ? FACE_SHARE : 0
   const partsShare = 1 - SOUND_SHARE - faceShare - insertsShare
   yield* fs.remove(place.work, { recursive: true, force: true })
   yield* fs.makeDirectory(place.work, { recursive: true })
   yield* sweepReel(dir)
+  const captions = yield* placeCaptions(place.work, cut.captions, total)
   const colours = yield* measureColours(dir, parts, place.work)
   const joins = yield* makePictures(dir, parts, colours, new Map())
   yield* renderParts(dir, parts, colours, place.work, `${place.work}/joined.mp4`, (share) => onDone(share * partsShare))
@@ -302,12 +310,12 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
   for (const [index, part] of parts.entries()) {
     rendered.push(yield* renderedOf(place.work, parts, index, part, partFileOf(index, "mov")))
   }
-  const chain = videoChain(place.work, face, pictures.length > 0)
+  const chain = videoChain(place.work, face, finishing)
   const { levelling } = yield* levelSound(place.work, rendered, chain.levelled, "picture-and-sound", (step) => onDone(partsShare + SOUND_SHARE * step / SOUND_STEPS), pictures)
   const frames = parts.reduce((sum, part) => sum + part.frames, 0)
   yield* Effect.forEach(chain.steps, (step) => step.kind === "face"
     ? retouchStep(place.work, step, frames, (share) => onDone(partsShare + SOUND_SHARE + faceShare * share))
-    : tool("ffmpeg", insertArgs(step.from, pictures, settings.encoder, step.to), settings.heavy, (line) => {
+    : tool("ffmpeg", finishArgs(step.from, pictures, captions, settings.encoder, step.to), settings.heavy, (line) => {
       const seconds = progressSeconds(line)
       return seconds === undefined ? Effect.void : onDone(1 - insertsShare + insertsShare * Math.min(1, seconds / total))
     }), { discard: true })
@@ -317,6 +325,7 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
     video: videoOf(made),
     parts,
     inserts: recorded(cut.inserts),
+    captions: captionsKey(cut.captions),
     face,
     colour: { videos: colours, joins },
     levelling
@@ -357,7 +366,7 @@ export const readReel = Effect.fnUntraced(function*(dir: string, cut: Cut, job: 
     made: record.made,
     seconds: secondsOf(record.parts),
     size,
-    fresh: sameParts(record.parts, parts) && sameInserts(record.inserts, recorded(cut.inserts)) && record.face === face,
+    fresh: sameParts(record.parts, parts) && sameInserts(record.inserts, recorded(cut.inserts)) && record.captions === captionsKey(cut.captions) && record.face === face,
     face: record.face,
     ...(record.colour === undefined ? {} : { colour: colourView(record.colour) }),
     ...(record.levelling === undefined ? {} : { levelling: record.levelling })

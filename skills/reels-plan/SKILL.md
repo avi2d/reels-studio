@@ -43,7 +43,7 @@ Once your answer ends, the studio itself chooses the take ranked first in every 
 It then lists on the page what it did, with the reason of every chosen take.
 
 1. When `blocks.json` is missing or no longer matches the heard videos, gather the blocks now, without another question.
-2. Leave `plan.md` as it is, since a changed plan waits for a new yes.
+2. Leave `plan.md` and `texts.json` as they are, since a change to either waits for a new yes.
 3. Say in two or three sentences that the studio now chooses the takes and shortens the pauses, and that the list of what it did appears under the plan in the stage «Видео и задание».
 4. Ask nothing else, unless a question is about the words on the screen, outside material or the face of the speaker.
 
@@ -148,6 +148,7 @@ It shows the words of the plan struck through, and its player skips them, so the
 It gathers the blocks and takes of all videos, and the round play/stop button under the take numbers plays the chosen takes one after another on the page.
 After the yes it chooses the takes, shortens the pauses and lists what it did.
 It shows the person's attached pictures and screenshots over the phrases they belong to, as the reels-inserts skill says.
-It cannot yet cut a video, add subtitles, titles or templates, save several videos as one file, crop a video or send a file anywhere.
+After the yes it draws one-word subtitles and the titles and key thoughts of `texts.json` on the reel, as the reels-style skill says.
+It cannot yet cut a video, save several videos as one file, crop a video or send a file anywhere.
 Say so in one sentence when the person asks for any of these.
 Never say that a video is cut or ready.

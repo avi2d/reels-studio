@@ -9,6 +9,8 @@ import {
   assemble, Blocks, clipsOf, Edits, InsertsFile, NO_EDITS, soundBlocks,
   type Clip, type Gaze, type GazeFailure, type PlannedInsert, type PlannedInserts, type TimelineView, type VideoFaces
 } from "../shared/timeline.ts"
+import { NO_CAPTIONS, type Captions } from "../shared/captions.ts"
+import { readCaptions } from "./captions.ts"
 import { quoteOnPage } from "./insert-files.ts"
 import { places, readGaze, readTranscript } from "./media-jobs.ts"
 
@@ -141,12 +143,13 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
 export interface Cut {
   readonly clips: ReadonlyArray<Clip>
   readonly inserts: ReturnType<typeof shownInserts>
+  readonly captions: Captions
 }
 
 export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>) {
   const { transcripts, faces } = yield* readHeard(dir, names)
   const written = yield* readBlocks(dir)
-  if (written === "none" || written === "unreadable") return { clips: [], inserts: [] } satisfies Cut
+  if (written === "none" || written === "unreadable") return { clips: [], inserts: [], captions: NO_CAPTIONS } satisfies Cut
   const { blocks } = soundBlocks(written, transcripts, new Map())
   const edits = yield* readEdits(dir)
   const pictures = yield* readPictures(dir)
@@ -155,5 +158,5 @@ export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyA
   const clips = onFrames(base)
   const planned = yield* readInserts(dir, transcripts)
   const placesNow = insertPlaces(planned.state === "ready" ? planned.planned : [], clips, transcripts, edits, pictures)
-  return { clips, inserts: shownInserts(placesNow, clips, edits, pictures, resolved) } satisfies Cut
+  return { clips, inserts: shownInserts(placesNow, clips, edits, pictures, resolved), captions: yield* readCaptions(dir, clips, transcripts) } satisfies Cut
 })

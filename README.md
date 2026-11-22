@@ -8,13 +8,14 @@ The studio builds the chosen takes into one 1080 by 1920 file to watch and downl
 It brings the skin colour of the later videos to the first.
 The person can attach pictures, screenshots, PDF files, video and sound to a chat message, and the studio says what each holds.
 The chat model runs at its provider in the cloud, so the attached files and the pictures and text taken from them are sent there.
-It does not caption, restyle or publish a video yet.
+It draws one-word subtitles and the key thoughts of the plan on the reel.
+It does not publish a video.
 
 ## Before you begin
 
 - Bun, at the version `.bun-version` pins.
 - pi, the agent the chat runs on, signed in to at least one model provider.
-- ffmpeg and ffprobe, built with the `zscale` and `tonemap` filters, which turn iPhone HDR video into ordinary colours.
+- ffmpeg and ffprobe, built with the `zscale` and `tonemap` filters for HDR video, and libass with the `ass` and `bbox` filters for text.
 - uv, which installs and runs the speech recognizer in `tools/transcribe/`, the gaze measure in `tools/gaze/` and the PDF reader in `tools/pdf/`.
 - A computer on the home network that keeps running while the studio is in use.
 
