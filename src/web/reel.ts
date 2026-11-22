@@ -162,7 +162,7 @@ const passageRow = (pane: Pane, passage: Passage): HTMLElement => {
   return h("div", { class: "passage" },
     h("span", {}, PASSAGE_LABEL[passage.name]),
     h("span", { class: "muted" }, `${lufs(passage.before)} → ${lufs(passage.after)}`),
-    h("span", { class: "passage-plays" }, ...versions))
+    h("span", { class: "versions passage-plays" }, ...versions))
 }
 
 const showLevelling = (pane: Pane, levelling: Levelling | undefined, seconds: number): void => {

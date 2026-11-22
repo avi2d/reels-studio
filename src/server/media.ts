@@ -143,7 +143,7 @@ type Tried = Ref.Ref<ReadonlyMap<string, string>>
 
 // The task reads the cut again when it starts, which can be a later cut than the one the poll queued.
 const checkSoundOf = (tried: Tried) => (dir: string, cut: Cut, onDone: (share: number) => Effect.Effect<void>) =>
-  Ref.update(tried, (map) => new Map([...map, [dir, soundKeyOf(partsOf(cut.clips))]])).pipe(Effect.andThen(checkSound(dir, cut, onDone)))
+  Ref.update(tried, (map) => new Map([...map, [dir, soundKeyOf(partsOf(cut.clips), cut.inserts)]])).pipe(Effect.andThen(checkSound(dir, cut, onDone)))
 
 const step = Effect.fnUntraced(function*(failures: Failures, tried: Tried, work: Ref.Ref<Work>) {
   const { closed, closedJobs } = yield* Ref.get(work)
@@ -221,7 +221,7 @@ const soundHandler = (folder: (id: string) => Effect.Effect<string, ApiError>, s
     const cut = yield* readCut(dir, yield* sourceNames(dir))
     const job = (yield* Ref.get(sounds)).get(dir) ?? { state: "idle" }
     const view = yield* readSoundCheck(dir, cut, job)
-    const key = soundKeyOf(partsOf(cut.clips))
+    const key = soundKeyOf(partsOf(cut.clips), cut.inserts)
     const heard = view.heard?.fresh === true
     const busy = job.state === "waiting" || job.state === "running"
     if (cut.clips.length === 0 || heard || busy || (yield* Ref.get(tried)).get(dir) === key) return view

@@ -65,7 +65,7 @@ const blocksLine = (timeline: TimelineView["timeline"]): ReadonlyArray<string> =
 const insertsLine = (inserts: TimelineView["inserts"]): ReadonlyArray<string> => {
   if (inserts.state === "unreadable") return ["inserts.json is not valid and must be rewritten in the format the reels-inserts skill gives."]
   if (inserts.state === "ready" && inserts.dropped > 0) {
-    return [`inserts.json names ${inserts.dropped} insert(s) with a repeated id, a missing picture, a video or word numbers that do not exist, and the page leaves them out.`]
+    return [`inserts.json names ${inserts.dropped} insert(s) with a repeated id, a missing picture, clip or document, a quote that is not on its page, a video or word numbers that do not exist, and the page leaves them out.`]
   }
   return []
 }

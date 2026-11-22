@@ -1,6 +1,6 @@
 # Project agent memory
 
-This repository holds Reels studio, a home-network web page with a chat, a resumable video upload and three skills for preparing Instagram videos.
+This repository holds Reels studio, a home-network web page with a chat, a resumable video upload and four skills for preparing Instagram videos.
 README.md holds what a person reads.
 
 ## Where things are

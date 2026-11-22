@@ -7,7 +7,6 @@ class FakeEl {
   readonly dataset: Record<string, string> = {}
   readonly children: Array<FakeEl> = []
   textContent = ""
-  scrollTop = 0
   constructor(tag: string) {
     this.tag = tag
   }
@@ -82,11 +81,4 @@ test("a failed measurement is attached to the counts instead of replacing them",
   const root = placeList([place(undefined, 0.4)], [], { waiting: false, failed: ["b"] }, [], actions)
   expect(statusOf(root)).toContain("Осталось проверить 1 из 1.")
   expect(statusOf(root)).toContain("неполная")
-})
-
-test("the places panel carries a stable scroll key across redraws", () => {
-  const first = placeList([place(undefined, 0.4)], [], complete, [], actions)
-  const second = placeList([place(undefined, 0.4)], [], complete, [], actions)
-  expect(first.dataset["scrollKey"]).toBe("places")
-  expect(second.dataset["scrollKey"]).toBe(first.dataset["scrollKey"])
 })

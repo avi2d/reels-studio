@@ -15,7 +15,8 @@ The round button under the player starts playback from the open block.
 Click the stop icon on that button to stop playback.
 The chat opens as a drawer over the page.
 On a phone the player sits above the tabs.
-The take, pause and place lists scroll without moving the player or the tabs.
+The take list scrolls without moving the player or the tabs.
+The pause and place lists scroll with the stage.
 On a phone the tabs read «Видео», «Дубли», «Паузы», «Ролик» and «Лицо».
 The open tab scrolls into view.
 
@@ -86,9 +87,13 @@ The file holds the chosen takes in row order, without removed pauses, with the s
 It is 1080 by 1920 at 30 frames a second, H.264 High with AAC sound in an MP4.
 An iPhone HDR original is turned into ordinary BT.709 colours, so the reel does not look washed out in Instagram.
 The studio cuts each clip to whole frames, encodes the clips one by one through `REELS_HEAVY` with `REELS_ENCODER`, then joins them without encoding again.
-The studio then brings the joined file to -14 LUFS with one gain curve over the whole reel.
-A limiter keeps the true peak under -1.5 dBTP.
-The gain change at each join is a short ramp that ends at the join, so the levelled line stays flat there.
+When the person turned the sound of a clip insert on, the studio mixes the clip's sound under the voice of the joined file.
+The studio measures each part on its own and gives it one gain that brings it to -14 LUFS.
+So the gaps and word endings inside a part are not lifted.
+A part shorter than 1.2 s is measured played over until it fills 1.2 s, because ebur128 reads nothing under one 0.4 s block.
+The gain moves from one part's value to the next only inside the two 0.06 s fades at their join.
+The sound there is near silence.
+One more constant gain over the whole reel hits -14 LUFS, and a limiter keeps the true peak under -1.5 dBTP.
 When the cut shows inserts or approved on-screen text, one more pass lays the pictures and the text over the levelled file and copies its sound as it is.
 The studio draws each spoken word as a single word subtitle and the titles and key thoughts of texts.json in that pass.
 The studio draws a long subtitle word smaller to fit the Instagram box.
@@ -104,6 +109,7 @@ The originals stay untouched.
 
 After each change of the cut, the studio checks the sound of the cut on the home computer, without the picture.
 It cuts the sound of each clip from the original video and levels it with the same gain curve and limiter as the build.
+When the sound of a clip insert is on, the check mixes it under the voice as the build does.
 The check waits while another heavy job runs, and a failed check waits for the next change of the cut.
 Under the player, a line names the verdict of that check in the words of the «Готовый ролик» stage.
 So the owner knows the sound before the build and the download.
@@ -128,7 +134,8 @@ The «Внешность» stage shows them side by side under the skin and eye 
 The stage plays the built file and offers «Скачать».
 The stage names the measured loudness of the built file with a plain verdict word.
 It says when the peaks stay clean.
-A chart shows the loudness over time before and after the levelling, with the target as a line and the jumps marked.
+A chart shows the 3 s short-term loudness over time before and after the levelling, with the target as a line and the jumps marked.
+The first ~1.5 s of the chart has no short-term reading, because the 3 s window has not filled yet.
 The numbers sit under the «Цифры» toggle.
 When at least two parts run 1 s or more, the quietest and the loudest passages each offer «До» and «После», so the owner can hear the change.
 A reel built before the levelling keeps playing.
@@ -221,6 +228,7 @@ A place with nothing to cut offers no «Обрезать».
 The zoom only enlarges and moves the picture inside its own edges, so no black band shows.
 It enlarges by at most 15 %, and a place that needs more offers no «Выровнять».
 A place whose eyes already sit on one line offers no «Выровнять».
+«Выровнять» is on from the start at every place that offers it, so such a place counts as answered until the person picks another answer.
 The zoom holds until the next join, so the picture does not jump back in the middle of a block.
 Once a join is aligned, «Как было» plays the same seconds without the zoom.
 The page shows the zoom at once, and the built reel crops the same window from the original.
@@ -234,9 +242,10 @@ It shows the chosen picture from 1 s before the join to 1.5 s after it, and take
 
 ## Inserts
 
-An insert shows a picture or a screenshot the person attached in the chat over the video while a phrase is said.
+An insert shows a file the person attached in the chat over the video while a phrase is said: a picture or a screenshot, a video clip, or one page of a PDF.
 The chat model chooses the phrase by its meaning and writes it to `inserts.json`, as the reels-inserts skill says.
-The studio leaves out an insert with a repeated id, a picture that is not in `attached/`, or word numbers the transcript does not hold, and the page says how many it left out.
+The studio leaves out an insert with a repeated id, a file that is not in `attached/` or is not of its kind, a quote that the text of its PDF page does not hold, or word numbers the transcript does not hold, and the page says how many it left out.
+The quote is matched without regard to case, ё, line breaks and hyphens.
 An insert covers the words of its phrase that the cut plays, and at least 2 s.
 Two inserts never stand at once: the later one starts where the earlier one ends, and one left shorter than 1 s is dropped.
 
@@ -245,10 +254,15 @@ Any other picture stands as a card with a 12 px white border, as large as fits t
 The picture fades in and out over 0.3 s and grows by 6 % while it stands.
 The voice and the video sound go on under it.
 
+A clip plays from its `start` for as long as its phrase, and holds its last frame when it is shorter.
+A clip is silent until the person turns its sound on, and it does not grow.
+A PDF page is rendered 1800 px wide, its quoted lines are marked in yellow, and it is cropped around the marked lines as wide as the text of the page, at most square and no taller than the text, so it stands as a card.
+The marked page and the clip preview the page plays are kept in `attached-views/<file>/`.
+
 The row of blocks shows each insert as a mark under the blocks it covers, and the mark plays it.
-The «Паузы и склейки» stage lists every insert as a place to check, with its picture, its words and the reason the model gave.
-«Посмотреть» plays 1 s before the insert, the insert and 1 s after it, with the picture over the player as the reel shows it.
-«Оставить» keeps it, «Заменить» puts another attached picture in its place, and «Убрать» takes it out of the reel.
+The «Паузы и склейки» stage lists every insert as a place to check, with what it shows, its words and the reason the model gave.
+«Посмотреть» plays 1 s before the insert, the insert and 1 s after it, with the insert over the player as the reel shows it.
+«Оставить» keeps it, «Со звуком» keeps a clip with its sound, «Заменить» puts another attached picture in its place, and «Убрать» takes it out of the reel.
 Each answer takes the place off the count, and `timeline.json` keeps it by the insert id.
 
 ## Files
@@ -260,14 +274,14 @@ Each video folder holds these next to `plan.json`:
 | `gaze/<video>.json` | One sample per 0.2 s: `camera`, `away` or `hidden`, and where the eyes are and the face height, as shares of the frame height, and the frame shape as `aspect` |
 | `gaze/<video>.txt` | The share of looks into the camera for each stretch of speech, which the chat model reads |
 | `blocks.json` | The blocks and their takes, written by the chat model |
-| `inserts.json` | The pictures to show over phrases, written by the chat model |
+| `inserts.json` | The pictures, clips and PDF pages to show over phrases, written by the chat model |
 | `texts.json` | The titles and key thoughts to show over phrases, written by the chat model |
 | `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses and the answers to the places to check and to the inserts |
 | `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
 | `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |
 | `reel/reel.json` | The build time, the video file it published, the parts, the inserts, a hash of the subtitles and key thoughts, the face setting, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
-| `reel/sound.json` | The parts of the last checked cut, its measured loudness before and after levelling, and the gain of each part over its source time, which the montage plays |
+| `reel/sound.json` | The parts of the last checked cut with the heard clip inserts, its measured loudness before and after levelling, and the gain of each part over its source time, which the montage plays |
 | `reel/sound-work/` | The sound of each clip and the levelled sound while a check runs, removed when it ends |
 | `looks.json` | The face setting of the reel, `off` or `light`, written when the person picks it |
 | `retouch/trial.json` | The time of the last skin and eye trial, the seconds it retouched and the seconds that took |

@@ -65,7 +65,7 @@ export type JoinState = AnsweredJoin["answer"]
 export const replyKey = (answered: AnsweredJoin): string => answered.answer === "cover" ? `cover:${answered.picture}` : answered.answer
 
 export const InsertAnswer = Schema.Union([
-  Schema.Struct({ id: Schema.String, answer: Schema.Literals(["keep", "remove"]) }),
+  Schema.Struct({ id: Schema.String, answer: Schema.Literals(["keep", "sound", "remove"]) }),
   Schema.Struct({ id: Schema.String, answer: Schema.Literal("replace"), picture: Schema.String })
 ])
 export type InsertAnswer = typeof InsertAnswer.Type
@@ -96,14 +96,13 @@ const Look = Schema.Union([
 export const VideoFaces = Schema.Struct({ video: Schema.String, step: Step, gaze: GazeSamples, heads: HeadSamples, aspect: Schema.optionalKey(Aspect) })
 export type VideoFaces = typeof VideoFaces.Type
 
-export const PlannedInsert = Schema.Struct({
-  id: Schema.String,
-  picture: Schema.String,
-  video: Schema.String,
-  from: Schema.Int,
-  to: Schema.Int,
-  reason: Schema.String
-})
+const insertPhrase = { id: Schema.String, video: Schema.String, from: Schema.Int, to: Schema.Int, reason: Schema.String }
+
+export const PlannedInsert = Schema.Union([
+  Schema.Struct({ ...insertPhrase, picture: Schema.String }),
+  Schema.Struct({ ...insertPhrase, clip: Schema.String, start: Schema.optionalKey(Schema.Finite) }),
+  Schema.Struct({ ...insertPhrase, document: Schema.String, page: Schema.Int, quote: Schema.String })
+])
 export type PlannedInsert = typeof PlannedInsert.Type
 
 export const InsertsFile = Schema.Struct({ inserts: Schema.Array(PlannedInsert) })

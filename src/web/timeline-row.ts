@@ -1,5 +1,5 @@
 import { offsetIn, playedPause, type Pause, type Placed, type Take } from "../shared/timeline.ts"
-import { insertsWithin, type Shown } from "../shared/inserts.ts"
+import { insertsWithin, type Shown, type Visual } from "../shared/inserts.ts"
 import { lengthOf, type Span } from "../shared/plan.ts"
 import { icon } from "./controls.ts"
 import { h } from "./dom.ts"
@@ -12,7 +12,10 @@ export interface RowActions {
   readonly setPause: (video: string, after: number, removed: boolean) => void
   readonly showInsert: (span: Span) => void
   readonly pictureUrl: (picture: string) => string
+  readonly visualUrl: (visual: Visual) => string
 }
+
+export const visualName = (visual: Visual): string => visual.kind === "page" ? `${visual.file}, страница ${visual.page}` : visual.file
 
 const share = (part: number, whole: number): string => `${(whole <= 0 ? 0 : (part / whole) * 100).toFixed(2)}%`
 
@@ -37,7 +40,7 @@ const insertMarks = (shown: ReadonlyArray<Shown>, window: Span, actions: RowActi
   const length = window.end - window.start
   return insertsWithin(shown, window).map((piece) => {
     const whole = shown.find((one) => one.id === piece.id) ?? piece
-    const label = `Посмотреть вставку «${piece.picture}»`
+    const label = `Посмотреть вставку «${visualName(piece.visual)}»`
     return h("button", {
       type: "button",
       class: "insert-mark",
@@ -46,7 +49,7 @@ const insertMarks = (shown: ReadonlyArray<Shown>, window: Span, actions: RowActi
       title: label,
       "data-key": `insert-mark:${piece.id}:${piece.start.toFixed(2)}`,
       click: () => { actions.showInsert(whole) }
-    }, h("img", { src: actions.pictureUrl(piece.picture), alt: "" }))
+    }, h("img", { src: actions.visualUrl(piece.visual), alt: "" }))
   })
 }
 
