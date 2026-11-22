@@ -29,8 +29,8 @@ The reference reels use fonts the studio could not name, and these are the neare
 | --- | --- | --- | --- |
 | Title | `титул` | A key thought over the first phrase that names the video | as a key thought |
 | Key thought | `тезис` | Upright lines with one accent line, in the upper left of the box | 3 lines; an upright line 20 characters, the accent line 8 |
-| Subtitles | `субтитры` | The spoken words, one at a time, low in the centre | one word, 19 characters |
+| Subtitles | `субтитры` | The spoken words, one at a time, low in the centre | one word; long words are drawn smaller to fit |
 
-The limits are the average width of Russian text in these fonts across the box.
+The key-thought limits are the average width of Russian text in these fonts across the box.
 A line of wide letters such as «ж», «ш» or «ю» fits fewer.
 The studio measures every text before the render and stops it when a text leaves the box.

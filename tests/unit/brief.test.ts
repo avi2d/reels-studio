@@ -20,10 +20,22 @@ test("a yes with a full stop or another case counts, and a yes inside a longer m
 })
 
 test("a plan changed after the yes waits for a new yes instead of showing as approved", () => {
-  const approval = { plan: "старый", at: "2026-11-20T10:00:00.000Z", done: [] }
-  expect(planView("новый", approval).state).toBe("proposed")
-  expect(planView("старый", approval).state).toBe("approved")
-  expect(planView("  ", approval).state).toBe("none")
+  const approval = { plan: "старый", texts: null, at: "2026-11-20T10:00:00.000Z", done: [] }
+  expect(planView("новый", undefined, approval).state).toBe("proposed")
+  expect(planView("старый", undefined, approval).state).toBe("approved")
+  expect(planView("  ", undefined, approval).state).toBe("none")
+})
+
+test("changing, adding or removing on-screen text revokes the yes instead of keeping the plan approved", () => {
+  const texts = '{"texts":[]}'
+  const approval = { plan: "план", texts, at: "2026-11-20T10:00:00.000Z", done: [] }
+  expect(planView("план", texts, approval).state).toBe("approved")
+  for (const changed of [undefined, "", '{"texts": []}']) {
+    expect(planView("план", changed, approval).state).toBe("proposed")
+  }
+  const withoutTexts = { ...approval, texts: null }
+  expect(planView("план", undefined, withoutTexts).state).toBe("approved")
+  expect(planView("план", texts, withoutTexts).state).toBe("proposed")
 })
 
 test("after the yes the studio pins the shown take as the person chose", () => {

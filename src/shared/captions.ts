@@ -3,7 +3,7 @@ import { phraseSpan } from "./inserts.ts"
 import type { Span, Transcript } from "./plan.ts"
 import type { ShownWord } from "./subtitles.ts"
 import type { Clip } from "./timeline.ts"
-import { textAreaOf, type Rect } from "./zones.ts"
+import { fitsArea, textAreaOf, type Rect } from "./zones.ts"
 
 const TextLine = Schema.Struct({ text: Schema.String, accent: Schema.Boolean })
 type TextLine = typeof TextLine.Type
@@ -24,8 +24,12 @@ export interface ShownText extends Span {
   readonly lines: ReadonlyArray<TextLine>
 }
 
+export interface CaptionWord extends ShownWord {
+  readonly size?: number
+}
+
 export interface Captions {
-  readonly words: ReadonlyArray<ShownWord>
+  readonly words: ReadonlyArray<CaptionWord>
   readonly texts: ReadonlyArray<ShownText>
 }
 
@@ -103,12 +107,22 @@ const header = [
 const event = (span: Span, role: keyof typeof FACES, tags: string, text: string): string =>
   `Dialogue: 0,${clock(span.start)},${clock(span.end)},${role},,0,0,0,,{${tags}}${plain(text)}`
 
-const wordEvents = (words: ReadonlyArray<ShownWord>, box: Rect): ReadonlyArray<string> => {
-  const face = FACES.word
-  const baseline = box.bottom - WORD_LIFT - Math.round(face.drop * face.size)
-  const top = baseline - Math.round(face.ascent * face.size)
-  return words.map((word) => event(word, "word", `\\an8\\pos(540,${top})`, word.text))
+export const fitWord = (word: CaptionWord, ink: Rect): CaptionWord => {
+  const area = textAreaOf("Instagram")
+  if (fitsArea(ink, area)) return word
+  const right = area.buttons !== undefined && ink.bottom > area.buttons.top ? area.buttons.left : area.box.right
+  const ratio = Math.min(1, (540 - area.box.left) / (540 - ink.left), (right - 540) / (ink.right - 540))
+  return { ...word, size: Math.max(1, Math.floor((word.size ?? FACES.word.size) * ratio) - 1) }
 }
+
+const wordEvents = (words: ReadonlyArray<CaptionWord>, box: Rect): ReadonlyArray<string> =>
+  words.map((word) => {
+    const face = FACES.word
+    const size = word.size ?? face.size
+    const baseline = box.bottom - WORD_LIFT - Math.round(face.drop * size)
+    const top = baseline - Math.round(face.ascent * size)
+    return event(word, "word", `\\an8\\pos(540,${top})${word.size === undefined ? "" : `\\fs${size}`}`, word.text)
+  })
 
 const textEvents = (text: ShownText, box: Rect): ReadonlyArray<string> => {
   let baseline = box.top + TEXT_DROP

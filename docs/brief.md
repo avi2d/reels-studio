@@ -24,13 +24,15 @@ After the chat model answers that message, or the request is cut, the studio wor
 The take is the take ranked first unless the person chose another, as [docs/timeline.md](timeline.md) says.
 Before the yes the studio pins nothing.
 - It shortens the pauses of half a second or more left in the shown takes to 0.2 s, except the pauses the person returned.
-- It saves the yes with the plan text and a list of what it did to `approval.json`.
+- It saves the yes with the plan text, the `texts.json` contents captured at the yes, and a list of what it did to `approval.json`.
 Removing a reel stops this work the same way it stops a gathering.
 
 While the studio works after the yes, the card hides «Согласна» and updates itself when the list is ready.
 The card then lists every chosen take with its reason and every shortened pause in them, whenever it was shortened, with the seconds the pauses took off.
 Every change stays undoable on the stages «Дубли и блоки» and «Паузы и склейки».
-A plan the chat model changes after the yes shows as waiting for a new yes.
+A change to `plan.md` or `texts.json` after the yes makes the plan wait for a new yes.
+Adding or removing `texts.json` also requires a new yes.
+An approval saved without a text snapshot requires a new yes.
 
 ## Files
 
@@ -38,4 +40,4 @@ A plan the chat model changes after the yes shows as waiting for a new yes.
 | --- | --- |
 | `brief.md` | The brief the person wrote |
 | `plan.md` | The plan of the whole reel, written by the chat model |
-| `approval.json` | The plan text the person agreed with, the time of the yes and what the studio did |
+| `approval.json` | The approved plan, the `texts.json` snapshot or null when absent, the time of the yes, and what the studio did |

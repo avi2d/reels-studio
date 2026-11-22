@@ -357,9 +357,9 @@ export class Chat extends Context.Service<Chat, {
           yield* append(dir, names.length === 0 ? { role: "user", text: trimmed } : { role: "user", text: trimmed, files: names })
         }).pipe(Effect.onError(() => release(id, turn)))
         if (approved !== undefined) {
-          yield* brief.agree(id, approved)
+          const snapshot = yield* brief.agree(id, approved).pipe(Effect.onError(() => release(id, turn)))
           if (!(yield* brief.working(id))) {
-            yield* Effect.forkDetach(brief.workAlone(id, approved, Deferred.await(turn.finished)).pipe(
+            yield* Effect.forkDetach(brief.workAlone(id, snapshot, Deferred.await(turn.finished)).pipe(
               Effect.catchTag("ApiError", (error) => Effect.logError("the work after the yes failed", error.message))
             ))
           }

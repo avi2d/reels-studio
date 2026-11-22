@@ -11,7 +11,7 @@ export const Done = Schema.Union([
 ])
 export type Done = typeof Done.Type
 
-export const Approval = Schema.Struct({ plan: Schema.String, at: Schema.String, done: Schema.Array(Done) })
+export const Approval = Schema.Struct({ plan: Schema.String, texts: Schema.NullOr(Schema.String), at: Schema.String, done: Schema.Array(Done) })
 export type Approval = typeof Approval.Type
 
 export const PlanView = Schema.Union([
@@ -24,9 +24,9 @@ export type PlanView = typeof PlanView.Type
 export const BriefView = Schema.Struct({ brief: Schema.String, plan: PlanView, working: Schema.Boolean })
 export type BriefView = typeof BriefView.Type
 
-export const planView = (text: string | undefined, approval: Approval | undefined): PlanView => {
+export const planView = (text: string | undefined, texts: string | undefined, approval: Approval | undefined): PlanView => {
   if (text === undefined || text.trim() === "") return { state: "none" }
-  if (approval === undefined || approval.plan !== text) return { state: "proposed", text }
+  if (approval === undefined || approval.plan !== text || approval.texts !== (texts ?? null)) return { state: "proposed", text }
   return { state: "approved", text, at: approval.at, done: approval.done }
 }
 

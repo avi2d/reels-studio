@@ -15,7 +15,7 @@ It does not publish a video.
 
 - Bun, at the version `.bun-version` pins.
 - pi, the agent the chat runs on, signed in to at least one model provider.
-- ffmpeg and ffprobe, built with the `zscale` and `tonemap` filters, which turn iPhone HDR video into ordinary colours.
+- ffmpeg and ffprobe, built with the `zscale` and `tonemap` filters for HDR video, and libass with the `ass` and `bbox` filters for text.
 - uv, which installs and runs the speech recognizer in `tools/transcribe/`, the gaze measure in `tools/gaze/` and the PDF reader in `tools/pdf/`.
 - A computer on the home network that keeps running while the studio is in use.
 

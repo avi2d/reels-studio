@@ -1,6 +1,5 @@
 import { Data, Effect, FileSystem, Option, Path, Schema } from "effect"
-import { Approval, planView } from "../shared/brief.ts"
-import { assOf, hasCaptions, NO_CAPTIONS, shownTexts, TextsFile, type CaptionPart, type Captions } from "../shared/captions.ts"
+import { assOf, fitWord, hasCaptions, NO_CAPTIONS, shownTexts, TextsFile, type CaptionPart, type Captions } from "../shared/captions.ts"
 import type { Transcript } from "../shared/plan.ts"
 import { subtitleWords } from "../shared/subtitles.ts"
 import type { Clip } from "../shared/timeline.ts"
@@ -8,36 +7,21 @@ import { fitsArea, textAreaOf } from "../shared/zones.ts"
 import { REEL_RATE } from "./media-commands.ts"
 import { run } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
+import { readApproval } from "./approval.ts"
 
-const decodeApproval = Schema.decodeUnknownOption(Schema.fromJsonString(Approval))
 const decodeTexts = Schema.decodeUnknownOption(Schema.fromJsonString(TextsFile))
 
-const readText = Effect.fnUntraced(function*(file: string) {
-  const fs = yield* FileSystem.FileSystem
-  if (!(yield* fs.exists(file))) return undefined
-  return yield* fs.readFileString(file)
-})
-
-const planApproved = Effect.fnUntraced(function*(dir: string) {
-  const text = yield* readText(`${dir}/plan.md`)
-  const saved = yield* readText(`${dir}/approval.json`)
-  const approval = saved === undefined ? undefined : Option.getOrUndefined(decodeApproval(saved))
-  return planView(text, approval).state === "approved"
-})
-
-const readTexts = Effect.fnUntraced(function*(dir: string) {
-  const file = `${dir}/texts.json`
-  const written = yield* readText(file)
+const readTexts = Effect.fnUntraced(function*(written: string | undefined, file: string) {
   if (written === undefined) return []
   const decoded = Option.getOrUndefined(decodeTexts(written))
   if (decoded === undefined) yield* Effect.logError("the on-screen texts are unreadable", file)
   return decoded?.texts ?? []
 })
 
-// The words on the screen wait for the person's yes to the plan, which quotes every key thought.
 export const readCaptions = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, transcripts: ReadonlyMap<string, Transcript>) {
-  if (!(yield* planApproved(dir))) return NO_CAPTIONS
-  return { words: subtitleWords(clips, transcripts), texts: shownTexts(yield* readTexts(dir), clips, transcripts) } satisfies Captions
+  const { plan, texts } = yield* readApproval(dir)
+  if (plan.state !== "approved") return NO_CAPTIONS
+  return { words: subtitleWords(clips, transcripts), texts: shownTexts(yield* readTexts(texts, `${dir}/texts.json`), clips, transcripts) } satisfies Captions
 })
 
 // Two levels: the option value inside the filter, then the filter inside the graph.
@@ -76,14 +60,26 @@ export const placeCaptions = Effect.fnUntraced(function*(work: string, captions:
   const fs = yield* FileSystem.FileSystem
   const fonts = yield* fontsDir()
   const area = textAreaOf("Instagram")
+  const { heavy } = yield* Settings
+  let placed = captions
   for (const part of ["words", "texts"] as const) {
     const file = `${work}/ink-${part}.ass`
-    yield* fs.writeFileString(file, assOf(captions, [part]))
-    const { stderr } = yield* run("ffmpeg", inkArgs(file, fonts, seconds), [])
-    const outside = inkOf(stderr).find((ink) => !fitsArea(ink.rect, area))
-    if (outside !== undefined) return yield* new TextOutside({ part, ink: outside })
+    for (;;) {
+      yield* fs.writeFileString(file, assOf(placed, [part]))
+      const { stderr } = yield* run("ffmpeg", inkArgs(file, fonts, seconds), heavy)
+      const outside = inkOf(stderr).filter((ink) => !fitsArea(ink.rect, area))
+      const first = outside[0]
+      if (first === undefined) break
+      if (part === "texts") return yield* new TextOutside({ part, ink: first })
+      const words = placed.words.map((word) => {
+        const ink = outside.find((one) => one.at >= Math.round(word.start * 100) / 100 && one.at < Math.round(word.end * 100) / 100)
+        return ink === undefined ? word : fitWord(word, ink.rect)
+      })
+      if (words.every((word, index) => word.size === placed.words[index]?.size)) return yield* new TextOutside({ part, ink: first })
+      placed = { ...placed, words }
+    }
   }
   const file = `${work}/captions.ass`
-  yield* fs.writeFileString(file, assOf(captions))
+  yield* fs.writeFileString(file, assOf(placed))
   return captionFilter(file, fonts)
 })
