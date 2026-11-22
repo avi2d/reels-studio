@@ -16,8 +16,19 @@ export type Look = keyof typeof LOOKS
 export const icon = (name: IconName, label?: string): HTMLElement =>
   h("wa-icon", label === undefined ? { name } : { name, label })
 
-export const button = (look: Look, props: Props, ...children: ReadonlyArray<Child>): WaButton =>
-  h("wa-button", { ...LOOKS[look], ...props }, ...children)
+export const setPressed = (target: WaButton, pressed: boolean): void => {
+  target.setAttribute("aria-pressed", String(pressed))
+  void target.updateComplete.then(() => { target.button.ariaPressed = String(pressed) })
+}
+
+export const button = (look: Look, props: Props, ...children: ReadonlyArray<Child>): WaButton => {
+  const node = h("wa-button", { ...LOOKS[look], ...props }, ...children)
+  const pressed = props["aria-pressed"]
+  // The inner button is what the screen reader and the pressed query read, and it does not inherit the host attribute.
+  if (pressed === true || pressed === "true") setPressed(node, true)
+  else if (pressed === false || pressed === "false") setPressed(node, false)
+  return node
+}
 
 export const spoken = (visible: string, name: string): ReadonlyArray<Child> =>
   [h("span", { "aria-hidden": "true" }, visible), h("span", { class: "visually-hidden" }, name)]

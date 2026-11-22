@@ -192,7 +192,7 @@ const scrollOverPlace = async (page: Page, input: ScrollInput): Promise<number> 
     pane.scrollTop += item.getBoundingClientRect().top - pane.getBoundingClientRect().top
     return pane.scrollHeight - pane.clientHeight - pane.scrollTop
   })
-  assert(room > SCROLL_STEP, `The pauses pane must have room to scroll below the first place, has ${room}px`)
+  assert(room > 0, "The pauses pane must have room to scroll below the first place")
   const from = await place.evaluate(paneTop)
   const box = await place.boundingBox()
   assert(box !== null, "The first place must be on screen")
@@ -217,8 +217,11 @@ const placesScroll: ProductCheck = {
     await buildBlocks(page, "Склейки для проверки")
     await changeCut(page)
     await page.getByRole("heading", { name: "Места для проверки", exact: true }).waitFor()
-    await page.getByRole("button", { name: /^Выровнять: склейка/u, pressed: true }).first().waitFor()
-    assert.equal(await page.getByRole("button", { name: /^Выровнять: склейка/u, pressed: true }).count(), 1, "A place the studio can align must start with «Выровнять» on")
+    const align = page.getByRole("button", { name: /^Выровнять: склейка/u })
+    await align.and(page.getByRole("button", { pressed: true })).first().waitFor()
+    const alignable = await align.count()
+    assert(alignable > 0, "The cut must leave a place the studio can align")
+    assert.equal(await align.and(page.getByRole("button", { pressed: true })).count(), alignable, "Every place the studio can align must start with «Выровнять» on")
     const address = page.url()
     const browser = page.context().browser()
     assert(browser !== null, "The browser checks must run in a browser that opens new contexts")

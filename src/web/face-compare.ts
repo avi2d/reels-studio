@@ -1,4 +1,4 @@
-import { button } from "./controls.ts"
+import { button, setPressed } from "./controls.ts"
 import { h } from "./dom.ts"
 
 const STEP = 5
@@ -67,7 +67,7 @@ export const faceCompare = (): FaceCompare => {
     const on = !frame.classList.contains("zoomed")
     frame.classList.toggle("zoomed", on)
     frame.style.setProperty("--zoom", on ? String(ZOOM) : "1")
-    zoom.setAttribute("aria-pressed", String(on))
+    setPressed(zoom, on)
     zoom.textContent = on ? "Всё лицо" : "Крупнее"
   })
 
