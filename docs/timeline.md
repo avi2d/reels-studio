@@ -95,6 +95,18 @@ On an iPhone, save the downloaded file to «Фото», and the Instagram reel s
 After a change of the cut, the stage says the file no longer matches the cut, and «Собрать заново» builds it again.
 A server restart forgets a build in progress, and the person presses the button again.
 
+## The skin and eye trial
+
+«Сделать пробу» on the «Готовый ролик» stage tries a retouch on the first 20 s of the cut, on the home computer.
+The studio builds those 20 s the way it builds the reel, then `tools/gaze/retouch.py` reads them frame by frame.
+In each frame, the Face Landmarker model finds the face, and the retouch changes pixels only inside it.
+It evens the skin tone and lightens the eye whites, and it draws no new frame.
+Skin evening removes small tone steps between fine detail and broad shading, so pores, the nose and the cheekbones stay.
+Eye lightening lifts and whitens only the light pixels of each eye outside the iris.
+The stage shows a close-up of the face before and after, and a clip with the original on the left and the retouch on the right.
+It also shows how long the retouch of the 20 s took and how long a minute of video would take.
+The trial waits in the same queue as the other heavy jobs, and a new trial replaces the last one.
+
 ## Keys
 
 | Key | What it does |
@@ -157,4 +169,7 @@ Each video folder holds these next to `plan.json`:
 | `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses and the answers to the places to check |
 | `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
 | `reel/reel.json` | The build time, the video file it published and the parts it holds, so the stage can tell whether the cut changed since |
+| `retouch/trial.json` | The time of the last skin and eye trial, the seconds it retouched and the seconds that took |
+| `retouch/before.jpg`, `retouch/after.jpg` | The face close-up of the trial before and after |
+| `retouch/compare.mp4` | The 20 s of the trial with the original on the left and the retouch on the right |
 | `gathered.json` | The heard videos and the settled gaze the studio last asked the chat model to gather blocks from, with a failed mark, the hash of the `blocks.json` the failed attempt saw, and the hash of the `blocks.json` it last shortened pauses for |

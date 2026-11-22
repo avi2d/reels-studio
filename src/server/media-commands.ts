@@ -79,6 +79,31 @@ export const partArgs = (source: string, part: Part, hdr: boolean, encoder: stri
   ]
 }
 
+export const firstSeconds = (parts: ReadonlyArray<Part>, seconds: number): ReadonlyArray<Part> => {
+  let left = Math.round(seconds * REEL_RATE)
+  return parts.flatMap((part) => {
+    const frames = Math.min(part.frames, left)
+    left -= frames
+    return frames > 0 ? [{ ...part, frames }] : []
+  })
+}
+
+export const retouchArgs = (looker: string, before: string, folder: string, encoder: string): ReadonlyArray<string> => [
+  "run", "--project", looker, "python", `${looker}/retouch.py`, "--encoder", encoder, before, folder
+]
+
+export const retouchedFrames = (line: string): number | undefined => {
+  const match = /^frames=(\d+)$/.exec(line.trim())
+  return match?.[1] === undefined ? undefined : Number(match[1])
+}
+
+export const compareArgs = (before: string, after: string, encoder: string, output: string): ReadonlyArray<string> => [
+  "-hide_banner", "-loglevel", "error", "-y", "-i", before, "-i", after,
+  "-filter_complex", "[0:v][1:v]hstack=inputs=2,format=yuv420p[v]", "-map", "[v]", "-map", "0:a:0",
+  "-c:v", encoder, "-b:v", "16M", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
+  "-c:a", "copy", "-movflags", "+faststart", "-f", "mp4", output
+]
+
 export const joinList = (names: ReadonlyArray<string>): string =>
   ["ffconcat version 1.0", ...names.map((name) => `file '${name}'`)].join("\n") + "\n"
 

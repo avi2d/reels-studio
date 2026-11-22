@@ -1,7 +1,7 @@
 import { DateTime, Effect, FileSystem, Option, Schema } from "effect"
 import type { Clip } from "../shared/timeline.ts"
 import type { ReelView } from "../shared/reel.ts"
-import { joinArgs, joinList, partArgs, partsOf, progressSeconds, sameParts, secondsOf } from "./media-commands.ts"
+import { joinArgs, joinList, partArgs, partsOf, progressSeconds, sameParts, secondsOf, type Part } from "./media-commands.ts"
 import { isHdrVideo, places, tool } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
 
@@ -55,15 +55,10 @@ const sweepReel = Effect.fnUntraced(function*(dir: string) {
       : Effect.void, { discard: true })
 })
 
-const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, onDone: (share: number) => Effect.Effect<void>) {
+export const renderParts = Effect.fnUntraced(function*(dir: string, parts: ReadonlyArray<Part>, work: string, output: string, onDone: (share: number) => Effect.Effect<void>) {
   const fs = yield* FileSystem.FileSystem
   const settings = yield* Settings
-  const place = reelPlaces(dir)
-  const parts = partsOf(clips)
   const total = secondsOf(parts)
-  yield* fs.remove(place.work, { recursive: true, force: true })
-  yield* fs.makeDirectory(place.work, { recursive: true })
-  yield* sweepReel(dir)
   const hdr = new Map<string, boolean>()
   const names: Array<string> = []
   for (const part of parts) {
@@ -72,14 +67,24 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray
     hdr.set(part.video, tone)
     const before = secondsOf(parts.slice(0, names.length))
     const name = `part-${String(names.length + 1).padStart(3, "0")}.mov`
-    yield* tool("ffmpeg", partArgs(source, part, tone, settings.encoder, `${place.work}/${name}`), settings.heavy, (line) => {
+    yield* tool("ffmpeg", partArgs(source, part, tone, settings.encoder, `${work}/${name}`), settings.heavy, (line) => {
       const seconds = progressSeconds(line)
       return seconds === undefined ? Effect.void : onDone(Math.min(1, (before + seconds) / total))
     })
     names.push(name)
   }
-  yield* fs.writeFileString(`${place.work}/parts.txt`, joinList(names))
-  yield* tool("ffmpeg", joinArgs(`${place.work}/parts.txt`, `${place.work}/reel.mp4`), settings.heavy)
+  yield* fs.writeFileString(`${work}/parts.txt`, joinList(names))
+  yield* tool("ffmpeg", joinArgs(`${work}/parts.txt`, output), settings.heavy)
+})
+
+const encodeReel = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, onDone: (share: number) => Effect.Effect<void>) {
+  const fs = yield* FileSystem.FileSystem
+  const place = reelPlaces(dir)
+  const parts = partsOf(clips)
+  yield* fs.remove(place.work, { recursive: true, force: true })
+  yield* fs.makeDirectory(place.work, { recursive: true })
+  yield* sweepReel(dir)
+  yield* renderParts(dir, parts, place.work, `${place.work}/reel.mp4`, onDone)
   const made = DateTime.formatIso(yield* DateTime.now)
   const video = videoOf(made)
   yield* fs.writeFileString(`${place.work}/reel.json`, yield* encodeRecord({ made, video, parts }))

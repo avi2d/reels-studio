@@ -1,8 +1,9 @@
 import { Effect, FileSystem, Layer, Option, Schema, Stream } from "effect"
 import { Pick } from "../shared/library.ts"
+import { RetouchPicture } from "../shared/retouch.ts"
 import { Edits, type TimelinePage } from "../shared/timeline.ts"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
-import { ApiError, badRequest } from "./api-error.ts"
+import { ApiError, badRequest, notFound } from "./api-error.ts"
 import { Attachments } from "./attachments.ts"
 import { Brief } from "./brief.ts"
 import { Chat } from "./chat.ts"
@@ -230,6 +231,23 @@ const reel = Layer.mergeAll(
   })))
 )
 
+const retouch = Layer.mergeAll(
+  HttpRouter.add("GET", "/api/projects/:id/retouch", reply(Effect.gen(function*() {
+    const media = yield* Media
+    return json(yield* media.trial(yield* param("id")))
+  }))),
+  HttpRouter.add("POST", "/api/projects/:id/retouch", reply(Effect.gen(function*() {
+    const media = yield* Media
+    return json(yield* media.startTrial(yield* param("id")), 202)
+  }))),
+  HttpRouter.add("GET", "/api/projects/:id/retouch/:name", (request) => reply(Effect.gen(function*() {
+    const media = yield* Media
+    const name = yield* Schema.decodeUnknownEffect(RetouchPicture)(yield* param("name")).pipe(Effect.mapError(() => notFound("Такого файла в пробе нет")))
+    const target = yield* media.trialFile(yield* param("id"), name)
+    return yield* sendFile(target, name.endsWith(".jpg") ? "image/jpeg" : "video/mp4", request.headers["range"])
+  })))
+)
+
 const NewVideos = Schema.Struct({ videos: Schema.Array(Pick).check(Schema.isMinLength(1)) })
 
 const videos = Layer.mergeAll(
@@ -296,4 +314,4 @@ const homeOnly = HttpRouter.middleware(
   { global: true }
 )
 
-export const apiRoutes = Layer.mergeAll(projects, brief, chat, uploads, videos, reel, homeOnly)
+export const apiRoutes = Layer.mergeAll(projects, brief, chat, uploads, videos, reel, retouch, homeOnly)

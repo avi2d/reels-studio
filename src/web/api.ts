@@ -4,6 +4,7 @@ import { Message } from "../shared/chat.ts"
 import { Offer, type Pick, UploadedVideo } from "../shared/library.ts"
 import { VideoView } from "../shared/plan.ts"
 import { ReelView } from "../shared/reel.ts"
+import { RetouchView, type RetouchPicture } from "../shared/retouch.ts"
 import { Edits, TimelinePage } from "../shared/timeline.ts"
 
 export class Failed extends Data.TaggedError("Failed")<{ readonly message: string }> {}
@@ -137,6 +138,15 @@ export const reelUrl = (id: string, made: string): string =>
 
 export const reelDownloadUrl = (id: string, made: string): string =>
   `/api/projects/${id}/reel/download?made=${encodeURIComponent(made)}`
+
+export const getRetouch = (id: string): Effect.Effect<RetouchView, Failed> =>
+  call(RetouchView, `/api/projects/${id}/retouch`)
+
+export const startRetouch = (id: string): Effect.Effect<RetouchView, Failed> =>
+  call(RetouchView, `/api/projects/${id}/retouch`, { method: "POST" })
+
+export const retouchUrl = (id: string, name: RetouchPicture, made: string): string =>
+  `/api/projects/${id}/retouch/${name}?made=${encodeURIComponent(made)}`
 
 export const removeProject = (id: string): Effect.Effect<{ readonly removed: string }, Failed> =>
   call(Schema.Struct({ removed: Schema.String }), `/api/projects/${id}`, { method: "DELETE" })

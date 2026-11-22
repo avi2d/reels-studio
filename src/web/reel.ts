@@ -4,6 +4,7 @@ import * as Api from "./api.ts"
 import { button } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatLength, formatSize } from "./format.ts"
+import { retouchCard } from "./retouch.ts"
 import type { StageNote } from "./stages.ts"
 
 const POLL_MS = 1000
@@ -152,7 +153,8 @@ export const reelPane = (projectId: string, hooks: ReelHooks): {
   const make = button("primary", {}, "Собрать ролик")
   const cancel = button("quiet", { hidden: true }, "Остановить сборку")
   const actions = h("div", { class: "row" }, make, cancel)
-  const node = h("div", { class: "pane" }, h("section", { class: "card reel-card" }, h("h2", {}, "Готовый ролик"), h("p", { class: "muted" }, ABOUT), actions, status, bar, stale, problem), file)
+  const trial = retouchCard(projectId)
+  const node = h("div", { class: "pane" }, h("section", { class: "card reel-card" }, h("h2", {}, "Готовый ролик"), h("p", { class: "muted" }, ABOUT), actions, status, bar, stale, problem), file, trial.node)
   const pane: Pane = { projectId, hooks, state, ui: { status, bar, problem, player, facts, stale, save, file, make, cancel, node } }
   player.addEventListener("play", hooks.playing)
 
@@ -193,5 +195,17 @@ export const reelPane = (projectId: string, hooks: ReelHooks): {
     })
   })
 
-  return { node, refresh: () => refresh(pane), pause: () => { player.pause() }, edited, settled }
+  return {
+    node,
+    refresh: () => {
+      refresh(pane)
+      trial.refresh()
+    },
+    pause: () => {
+      player.pause()
+      trial.pause()
+    },
+    edited,
+    settled
+  }
 }
