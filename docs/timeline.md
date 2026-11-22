@@ -15,7 +15,8 @@ The round button under the player starts playback from the open block.
 Click the stop icon on that button to stop playback.
 The chat opens as a drawer over the page.
 On a phone the player sits above the tabs.
-The take, pause and place lists scroll without moving the player or the tabs.
+The take list scrolls without moving the player or the tabs.
+The pause and place lists scroll with the stage.
 On a phone the tabs read «Видео», «Дубли», «Паузы», «Ролик» and «Лицо».
 The open tab scrolls into view.
 
