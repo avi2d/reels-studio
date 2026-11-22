@@ -85,6 +85,7 @@ The file holds the chosen takes in row order, without removed pauses, with the s
 It is 1080 by 1920 at 30 frames a second, H.264 High with AAC sound in an MP4.
 An iPhone HDR original is turned into ordinary BT.709 colours, so the reel does not look washed out in Instagram.
 The studio cuts each clip to whole frames, encodes the clips one by one through `REELS_HEAVY` with `REELS_ENCODER`, then joins them without encoding again.
+When the cut shows inserts, one more pass lays the pictures over the joined file and copies its sound as it is.
 A bar shows how much of the reel is encoded.
 «Остановить сборку» stops a waiting or running build, ends its ffmpeg and removes the half-built parts, and the last finished reel stays.
 The build waits while the computer hears another video, because the studio runs one heavy job at a time.
@@ -144,6 +145,27 @@ A place with nothing to cut offers only «Оставить как есть».
 The answer is kept in `timeline.json` with the two ends of the join, so a change of the cut that moves the join opens it again.
 The studio re-measures by itself, in the background, a video whose gaze file holds no head positions.
 This runs on the home computer and does not ask the chat model.
+When the person has attached pictures in the chat, each place also offers «Закрыть картинкой».
+It shows the chosen picture from 1 s before the join to 1.5 s after it, and takes the place off the count.
+
+## Inserts
+
+An insert shows a picture or a screenshot the person attached in the chat over the video while a phrase is said.
+The chat model chooses the phrase by its meaning and writes it to `inserts.json`, as the reels-inserts skill says.
+The studio leaves out an insert with a repeated id, a picture that is not in `attached/`, or word numbers the transcript does not hold, and the page says how many it left out.
+An insert covers the words of its phrase that the cut plays, and at least 2 s.
+Two inserts never stand at once: the later one starts where the earlier one ends, and one left shorter than 1 s is dropped.
+
+A picture at least 1.3 times as tall as it is wide fills the whole frame.
+Any other picture stands as a card with a 12 px white border, as large as fits the text box of the reels-safe-area skill, in the middle of it.
+The picture fades in and out over 0.3 s and grows by 6 % while it stands.
+The voice and the video sound go on under it.
+
+The row of blocks shows each insert as a mark under the blocks it covers, and the mark plays it.
+The «Паузы и склейки» stage lists every insert as a place to check, with its picture, its words and the reason the model gave.
+«Посмотреть» plays 1 s before the insert, the insert and 1 s after it, with the picture over the player as the reel shows it.
+«Оставить» keeps it, «Заменить» puts another attached picture in its place, and «Убрать» takes it out of the reel.
+Each answer takes the place off the count, and `timeline.json` keeps it by the insert id.
 
 ## Files
 
@@ -154,7 +176,8 @@ Each video folder holds these next to `plan.json`:
 | `gaze/<video>.json` | One sample per 0.2 s: `camera`, `away` or `hidden`, and where the eyes are and the face height, as shares of the frame height |
 | `gaze/<video>.txt` | The share of looks into the camera for each stretch of speech, which the chat model reads |
 | `blocks.json` | The blocks and their takes, written by the chat model |
-| `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses and the answers to the places to check |
+| `inserts.json` | The pictures to show over phrases, written by the chat model |
+| `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses and the answers to the places to check and to the inserts |
 | `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
-| `reel/reel.json` | The build time, the video file it published and the parts it holds, so the stage can tell whether the cut changed since |
+| `reel/reel.json` | The build time, the video file it published, the parts and the inserts it holds, so the stage can tell whether the cut changed since |
 | `gathered.json` | The heard videos and the settled gaze the studio last asked the chat model to gather blocks from, with a failed mark, the hash of the `blocks.json` the failed attempt saw, and the hash of the `blocks.json` it last shortened pauses for |

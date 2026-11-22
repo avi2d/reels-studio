@@ -28,6 +28,8 @@ const loaded = (blocks: ReadonlyArray<Block>, names: ReadonlyArray<string>, look
     view: {
       looks: names.map((video) => ({ video, state: looks })),
       faces: [],
+      pictures: [],
+      inserts: { state: "none" },
       timeline: { state: "ready", blocks: [...blocks], dropped: 0, edits: NO_EDITS },
       gathering: false,
       gatherFailed: false
@@ -61,7 +63,7 @@ test("a poll answer that started before an undo is kept out", () => {
 })
 
 test("the edits check does not depend on the order of the fields", () => {
-  const reordered = { joins: [], pauses: [], chosen: [], deleted: [], order: [], kept: [] }
+  const reordered = { inserts: [], joins: [], pauses: [], chosen: [], deleted: [], order: [], kept: [] }
   expect(takeServer(NO_EDITS, NO_EDITS, reordered, idle, 5, false)).toBe(true)
 })
 

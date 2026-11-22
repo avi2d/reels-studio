@@ -62,13 +62,21 @@ const blocksLine = (timeline: TimelineView["timeline"]): ReadonlyArray<string> =
   return []
 }
 
-export const videoLines = (videos: ReadonlyArray<VideoView>, view: TimelineView): string => {
+const insertsLine = (inserts: TimelineView["inserts"]): ReadonlyArray<string> => {
+  if (inserts.state === "unreadable") return ["inserts.json is not valid and must be rewritten in the format the reels-inserts skill gives."]
+  if (inserts.state === "ready" && inserts.dropped > 0) {
+    return [`inserts.json names ${inserts.dropped} insert(s) with a repeated id, a missing picture, a video or word numbers that do not exist, and the page leaves them out.`]
+  }
+  return []
+}
+
+export const videoLines = (videos: ReadonlyArray<VideoView>, view: Pick<TimelineView, "looks" | "timeline" | "inserts">): string => {
   if (videos.length === 0) return "No video is uploaded yet."
   const lines = videos.flatMap((video) => {
     const look = view.looks.find((one) => one.video === video.name)
     return look === undefined ? [videoLine(video)] : [videoLine(video), LOOK_NOTES[look.state](video.name)]
   })
-  return [...lines, ...blocksLine(view.timeline)].join("\n")
+  return [...lines, ...blocksLine(view.timeline), ...insertsLine(view.inserts)].join("\n")
 }
 
 const orBroken = orUnavailable("the chat failed", UNAVAILABLE)
