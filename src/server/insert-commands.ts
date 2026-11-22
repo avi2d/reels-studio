@@ -1,5 +1,6 @@
 import { INSERT_DRIFT, INSERT_FADE, type Shape } from "../shared/inserts.ts"
 import { even, REEL_RATE, TO_SDR } from "./media-commands.ts"
+import type { Streams } from "./sound-commands.ts"
 
 interface InsertPlacement {
   readonly file: string
@@ -73,7 +74,7 @@ const clipInput = (layer: ClipLayer): ReadonlyArray<string> =>
 
 const inputOf = (layer: InsertLayer): ReadonlyArray<string> => layer.kind === "clip" ? clipInput(layer) : ["-i", layer.file]
 
-export const clipSoundArgs = (voice: string, layers: ReadonlyArray<InsertLayer>, output: string): ReadonlyArray<string> | undefined => {
+export const clipSoundArgs = (voice: string, layers: ReadonlyArray<InsertLayer>, output: string, streams: Streams): ReadonlyArray<string> | undefined => {
   const heard = layers.flatMap((layer) => layer.kind === "clip" && layer.sound ? [layer] : [])
   if (heard.length === 0) return undefined
   const lanes = heard.map((layer, lane) => {
@@ -84,7 +85,8 @@ export const clipSoundArgs = (voice: string, layers: ReadonlyArray<InsertLayer>,
   const mixed = `[0:a]${heard.map((_, lane) => `[s${lane}]`).join("")}amix=inputs=${heard.length + 1}:duration=first:normalize=0[aout]`
   return [
     "-hide_banner", "-loglevel", "error", "-y", "-i", voice, ...heard.flatMap(clipInput),
-    "-filter_complex", [...lanes, mixed].join(";"), "-map", "0:v:0", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+    "-filter_complex", [...lanes, mixed].join(";"),
+    ...(streams === "sound" ? [] : ["-map", "0:v:0", "-c:v", "copy"]), "-map", "[aout]", "-c:a", "aac", "-b:a", "192k",
     "-map_metadata", "-1", "-movflags", "+faststart", "-f", "mp4", output
   ]
 }

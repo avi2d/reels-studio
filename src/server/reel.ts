@@ -219,14 +219,14 @@ export const SOUND_STEPS = 5
 
 const joinSound = Effect.fnUntraced(function*(work: string, rendered: ReadonlyArray<Rendered>, layers: ReadonlyArray<InsertLayer>, streams: Streams) {
   const joined = `${work}/joined.mp4`
-  const mix = clipSoundArgs(`${work}/voice.mp4`, layers, joined)
+  const mix = clipSoundArgs(`${work}/voice.mp4`, layers, joined, streams)
   yield* concatParts(work, rendered.map((part) => part.name), mix === undefined ? joined : `${work}/voice.mp4`, streams)
   if (mix !== undefined) yield* tool("ffmpeg", mix, (yield* Settings).heavy)
 })
 
 export const levelSound = Effect.fnUntraced(function*(
   work: string, rendered: ReadonlyArray<Rendered>, levelledFile: string, streams: Streams, soundDone: (step: number) => Effect.Effect<void>,
-  layers: ReadonlyArray<InsertLayer> = []
+  layers: ReadonlyArray<InsertLayer>
 ) {
   const total = secondsOf(rendered)
   yield* joinSound(work, rendered, layers, streams)

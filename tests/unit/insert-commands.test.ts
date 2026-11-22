@@ -7,11 +7,11 @@ const clip = (sound: boolean): Extract<InsertLayer, { readonly kind: "clip" }> =
 const graphOf = (args: ReadonlyArray<string>): string => args[args.indexOf("-filter_complex") + 1] ?? ""
 
 test("a clip insert left silent adds none of its own sound, so the voice goes to the levelling without a mix pass", () => {
-  expect(clipSoundArgs("voice.mp4", [clip(false)], "joined.mp4")).toBeUndefined()
+  expect(clipSoundArgs("voice.mp4", [clip(false)], "joined.mp4", "picture-and-sound")).toBeUndefined()
 })
 
 test("a clip insert with its sound turned on mixes that sound in from the phrase's start, and does not drop the reel's voice", () => {
-  const args = clipSoundArgs("voice.mp4", [clip(true)], "joined.mp4") ?? []
+  const args = clipSoundArgs("voice.mp4", [clip(true)], "joined.mp4", "picture-and-sound") ?? []
   const graph = graphOf(args)
   expect(graph).toContain("[1:a]")
   expect(graph).toContain("adelay=4000:all=1")
@@ -22,7 +22,7 @@ test("a clip insert with its sound turned on mixes that sound in from the phrase
 
 test("a heard clip shorter than its phrase fades its sound out where the clip ends, not at the phrase end after the sound has already stopped", () => {
   const short: InsertLayer = { ...clip(true), start: 1, end: 5, from: 0, lasts: 2 }
-  const graph = graphOf(clipSoundArgs("voice.mp4", [short], "joined.mp4") ?? [])
+  const graph = graphOf(clipSoundArgs("voice.mp4", [short], "joined.mp4", "picture-and-sound") ?? [])
   expect(graph).toContain("afade=t=out:st=1.7000:d=0.3000")
 })
 
