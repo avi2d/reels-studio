@@ -3,7 +3,7 @@ import { aroundInsert, insertPlaces, lookAt, reelWithin, shiftedBy, shownInserts
 import { AROUND_JOIN_SECONDS, aroundJoin, facesByVideo, trimmed, withAnswer, withCover } from "../shared/joins.ts"
 import { lengthOf } from "../shared/plan.ts"
 import {
-  assemble, clipsOf, insertKey, mergeEdits, NO_EDITS, playedSpans, replyKey, withChoice, withDeleted, withManualPauses, within,
+  assemble, clipsOf, mergeEdits, NO_EDITS, playedSpans, withChoice, withDeleted, withManualPauses, within,
   type Clip, type Edits, type Placed, type Take
 } from "../shared/timeline.ts"
 import * as Api from "./api.ts"
@@ -17,7 +17,7 @@ import {
   type Actions, type Frame, type Hooks, type Loaded, type Panels, type Parts
 } from "./timeline-draw.ts"
 import { onKeys } from "./timeline-keys.ts"
-import { POLL_MS, saver } from "./timeline-save.ts"
+import { POLL_MS, saver, takeServer, type Ticket } from "./timeline-save.ts"
 
 export type { Status } from "./timeline-draw.ts"
 
@@ -43,23 +43,7 @@ const clipsFrom = (clips: ReadonlyArray<Clip>, block: string): ReadonlyArray<Cli
   return first === -1 ? [] : clips.slice(first)
 }
 
-const editKey = (edits: Edits): string => JSON.stringify([
-  edits.order,
-  edits.deleted,
-  edits.chosen.map((one) => [one.block, one.video, one.from]),
-  edits.pauses.map((one) => [one.video, one.after]),
-  (edits.kept ?? []).map((one) => [one.video, one.after]),
-  edits.joins.map((one) => [one.end.video, one.end.at, one.start.video, one.start.at, replyKey(one)]),
-  edits.inserts.map((one) => [one.id, insertKey(one)])
-])
-
-const adoptServer = (local: Edits, acked: Edits, server: Edits): boolean =>
-  editKey(server) === editKey(local) || editKey(local) === editKey(acked)
-
-export interface Ticket { readonly changes: number; readonly busy: boolean }
-
-export const takeServer = (local: Edits, acked: Edits, server: Edits, ticket: Ticket, changes: number, busy: boolean): boolean =>
-  !busy && !ticket.busy && ticket.changes === changes && adoptServer(local, acked, server)
+export { takeServer, type Ticket }
 
 const reelOf = (loaded: Loaded, edits: Edits): ReadonlyArray<Clip> =>
   trimmed(clipsOf(placedOf(loaded, edits)), facesByVideo(loaded.view.faces), loaded.transcripts, edits)
@@ -301,6 +285,17 @@ const showLoaded = (card: Card, draw: () => void, loaded: Loaded, ticket: Ticket
   draw()
 }
 
+const hearOn = (
+  hold: { base: number | undefined; overlay: ReadonlyArray<Shown> },
+  play: (clips: ReadonlyArray<Clip>) => void,
+  clips: ReadonlyArray<Clip>,
+  shown: ReadonlyArray<Shown>
+): void => {
+  hold.base = undefined
+  hold.overlay = shown
+  play(clips)
+}
+
 export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels: Panels; readonly refresh: () => void; readonly stop: () => void; readonly flush: () => Promise<boolean>; readonly busy: () => boolean } => {
   const parts = partsOf()
   const ui = frameOf(parts)
@@ -332,11 +327,8 @@ export const timelineCard = (projectId: string, hooks: Hooks): { readonly panels
     show(deferred.loaded, deferred.ticket)
   }
 
-  const hear = (clips: ReadonlyArray<Clip>, shown: ReadonlyArray<Shown>): void => {
-    state.base = undefined
-    state.overlay = shown
-    player.play(clips)
-  }
+  const hear = (clips: ReadonlyArray<Clip>, shown: ReadonlyArray<Shown>): void =>
+    hearOn(state, (cut) => player.play(cut), clips, shown)
 
   const watch = (from: string): void => {
     const clips = view.reelNow()
