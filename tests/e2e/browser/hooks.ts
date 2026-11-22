@@ -128,8 +128,10 @@ const buildBlocks = async (page: Page): Promise<void> => {
 const changeCut = async (page: Page): Promise<void> => {
   const timeline = page.getByRole("region", { name: "Монтаж" })
   await saveEdit(page, () => page.getByRole("radio", { name: /^Дубль 2/u }).check())
+  await page.locator("li.take.chosen", { hasText: "Дубль 2" }).waitFor()
   await timeline.getByRole("button", { name: "Блок 2. Конец" }).click()
   await saveEdit(page, () => timeline.getByRole("button", { name: /^Переместить блок «Конец»/u }).press("ArrowLeft"))
+  await timeline.getByRole("button", { name: "Блок 1. Конец" }).waitFor()
   await page.locator('wa-tab[panel="pauses"]').click()
   await page.getByText("Блоков: 2 · ролик 0:05 · пауз: 1 на 0:02", { exact: true }).waitFor()
   await saveEdit(page, () => page.getByRole("button", { name: /^Убрать паузу 1,5 с в блоке 2$/u }).click())
