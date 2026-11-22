@@ -114,6 +114,7 @@ The stage plays the built file and offers «Скачать».
 The stage names the measured loudness of the built file with a plain verdict word.
 It says when the peaks stay clean.
 A chart shows the 3 s short-term loudness over time before and after the levelling, with the target as a line and the jumps marked.
+The first ~1.5 s of the chart has no short-term reading, because the 3 s window has not filled yet.
 The numbers sit under the «Цифры» toggle.
 When at least two parts run 1 s or more, the quietest and the loudest passages each offer «До» and «После», so the owner can hear the change.
 A reel built before the levelling keeps playing.
