@@ -190,6 +190,7 @@ A place with nothing to cut offers no «Обрезать».
 The zoom only enlarges and moves the picture inside its own edges, so no black band shows.
 It enlarges by at most 15 %, and a place that needs more offers no «Выровнять».
 A place whose eyes already sit on one line offers no «Выровнять».
+«Выровнять» is on from the start at every place that offers it, so such a place counts as answered until the person picks another answer.
 The zoom holds until the next join, so the picture does not jump back in the middle of a block.
 Once a join is aligned, «Как было» plays the same seconds without the zoom.
 The page shows the zoom at once, and the built reel crops the same window from the original.
