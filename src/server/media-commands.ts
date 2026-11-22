@@ -113,7 +113,7 @@ export interface Look {
 const lookFilter = (look: Look, frame: Frame | undefined): string =>
   [look.hdr ? TO_SDR : "format=yuv420p", ...(look.gain === undefined ? [] : [gainFilter(look.gain)]), reelVideo(frame)].join(",")
 
-const fadesOf = (seconds: number): string => {
+export const fadesOf = (seconds: number): string => {
   const fade = Math.min(FADE, seconds / 2)
   return `afade=t=in:d=${fade},afade=t=out:st=${(seconds - fade).toFixed(4)}:d=${fade}`
 }
@@ -173,12 +173,6 @@ export const pictureArgs = (left: Shot, right: Shot, output: string): ReadonlyAr
 
 export const joinList = (names: ReadonlyArray<string>): string =>
   ["ffconcat version 1.0", ...names.map((name) => `file '${name}'`)].join("\n") + "\n"
-
-export const joinArgs = (list: string, output: string): ReadonlyArray<string> => [
-  "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-i", list,
-  "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-  "-map_metadata", "-1", "-movflags", "+faststart", "-f", "mp4", output
-]
 
 export const progressSeconds = (line: string): number | undefined => {
   const match = /^out_time_us=(\d+)$/.exec(line.trim())

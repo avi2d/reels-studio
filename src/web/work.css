@@ -49,6 +49,12 @@
 .transport .go { grid-area: 1 / 4; }
 .transport .next { grid-area: 1 / 5; }
 .transport .gear { grid-area: 1 / 6; }
+.sound-line { font-size: 12.5px; }
+.sound-line summary { cursor: pointer; }
+.sound-line p { margin: 4px 0 0; }
+.sound-line[data-level="good"] strong { color: var(--wa-color-success-on-quiet); }
+.sound-line[data-level="check"] strong { color: var(--wa-color-warning-on-quiet); }
+.sound-line[data-level="bad"] strong { color: var(--wa-color-danger-on-quiet); }
 .zone-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; color: var(--wa-color-text-quiet); font-size: 12.5px; }
 .zone-bar wa-select { width: 180px; }
 .settings { width: min(340px, calc(100vw - 32px)); padding: 16px 18px; border: 0; border-radius: 12px; background: var(--wa-color-surface-default); color: var(--wa-color-text-normal); }
@@ -147,13 +153,14 @@
   }
   .reel:not([data-stage="brief"], [data-stage="file"], [data-stage="looks"]) .viewbox {
     display: grid;
-    grid-template: "stage map" auto "stage transport" auto / minmax(52px, 1fr) minmax(0, 3fr);
+    grid-template: "stage map" auto "stage transport" auto "stage sound" auto / minmax(52px, 1fr) minmax(0, 3fr);
     align-items: center;
     gap: 4px 8px;
   }
   .reel:not([data-stage="brief"], [data-stage="file"], [data-stage="looks"]) .stage { grid-area: stage; height: clamp(108px, 18dvh, 168px); }
   .reel:not([data-stage="brief"], [data-stage="file"], [data-stage="looks"]) .overview { grid-area: map; }
   .reel:not([data-stage="brief"], [data-stage="file"], [data-stage="looks"]) .transport { grid-area: transport; gap: 4px; }
+  .reel:not([data-stage="brief"], [data-stage="file"], [data-stage="looks"]) .sound-line { grid-area: sound; }
   .reel:not([data-stage="brief"], [data-stage="file"], [data-stage="looks"]) .board { padding-bottom: 8px; }
   .stages .long { display: none; }
   .stages .short { display: inline; }
@@ -178,7 +185,7 @@
   }
   .viewer.mini .stage { grid-area: thumb; width: 36px; height: 64px; border-radius: 6px; background: none; cursor: pointer; }
   .viewer.mini .frame { border-radius: 6px; }
-  .viewer.mini .tag, .viewer.mini .zones { display: none; }
+  .viewer.mini .tag, .viewer.mini .zones, .viewer.mini .sound-line { display: none; }
   .viewer.mini .overview { grid-area: strip; }
   .viewer.mini .transport { display: contents; }
   .viewer.mini .transport > :not(.clock, .go, .gear) { display: none; }
