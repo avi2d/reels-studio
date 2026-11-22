@@ -80,6 +80,11 @@ test("a moment at the silence floor is left at unity gain, not boosted", () => {
   expect(Number(curve.split(" ").at(-1))).toBe(1)
 })
 
+test("a silent moment stays at unity gain when the whole reel is shifted toward the target, not shifted with it", () => {
+  const curve = curveOf([{ time: 1, lufs: -70 }], 3)
+  expect(Number(curve.split(" ").at(-1))).toBe(1)
+})
+
 test("the defect reel at -12 LUFS with a 22.7 LU range is never judged good", () => {
   const verdict = judgeSound({ lufs: -12, lra: 22.7, truePeak: -2 })
   expect(verdict.level).not.toBe("good")
@@ -102,14 +107,14 @@ test("a sample takes the last moment at or before its time, never a later one, a
 
 test("a run more than 3 LU from the target is one jump, and a silent sample is never part of one", () => {
   const after = [-14, -14, -20, -20, -14, -70, -20, -14]
-  expect(jumpsOf(after)).toEqual([
+  expect(jumpsOf(after, 3.6)).toEqual([
     { from: 1, to: 2 },
     { from: 3, to: 3.5 }
   ])
 })
 
-test("a jump that runs to the end of the reel ends at the reel's length, not one sample short", () => {
-  expect(jumpsOf([-14, -20])).toEqual([{ from: 0.5, to: 1 }])
+test("a jump that runs to the end of a 1.2 s reel ends at 1.2 s, not a sample step past the reel", () => {
+  expect(jumpsOf([-14, -20, -20], 1.2)).toEqual([{ from: 0.5, to: 1.2 }])
 })
 
 test("a gain reading covers the 0.4 s before its time, so each part holds its level and the change runs across the join's fade", () => {
@@ -124,6 +129,22 @@ test("a gain reading covers the 0.4 s before its time, so each part holds its le
     { time: 1.5, lufs: -20 },
     { time: 1.6, lufs: -20 }
   ]
-  const levelled = gainMomentsOf(moments, [1])
+  const levelled = gainMomentsOf(moments, [{ from: 0, to: 1, lufs: -14 }, { from: 1, to: 1.6, lufs: -20 }])
   expect(levelled.map((moment) => Math.round(moment.lufs * 100) / 100)).toEqual([-14, -14, -14, -14, -14, -15, -20, -20, -20])
+})
+
+const powerMean = (levels: ReadonlyArray<number>): number =>
+  10 * Math.log10(levels.reduce((sum, lufs) => sum + 10 ** (lufs / 10), 0) / levels.length)
+
+test("a half-second part between two longer ones holds its own level, not one mixed from its neighbours", () => {
+  const parts = [{ from: 0, to: 3, lufs: -20 }, { from: 3, to: 3.5, lufs: -30 }, { from: 3.5, to: 6.5, lufs: -14 }]
+  const levelAt = (time: number): number => parts.find((one) => time < one.to)?.lufs ?? -14
+  const moments = Array.from({ length: 62 }, (_, index) => {
+    const time = (index + 4) / 10
+    const window = Array.from({ length: 40 }, (_sample, step) => levelAt(time - 0.4 + (step + 0.5) * 0.01))
+    return { time, lufs: powerMean(window) }
+  })
+  const held = gainMomentsOf(moments, parts).filter((moment) => moment.time >= 3 - 1e-6 && moment.time < 3.38)
+  expect(held.length).toBeGreaterThan(0)
+  for (const moment of held) expect(moment.lufs).toBeCloseTo(-30, 6)
 })

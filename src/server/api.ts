@@ -228,7 +228,7 @@ const reel = Layer.mergeAll(
     const media = yield* Media
     const store = yield* Projects
     const id = yield* param("id")
-    const target = yield* media.reelFile(id, madeOf(request), versionOf(request))
+    const target = yield* media.reelFile(id, madeOf(request), "after")
     const { title } = yield* store.get(id)
     return yield* sendFile(target, "video/mp4", request.headers["range"], { "content-disposition": attachment(title) })
   })))

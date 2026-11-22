@@ -22,9 +22,7 @@ const element = (tag: string, attrs: Readonly<Record<string, string>>, text?: st
   return node
 }
 
-export const loudnessChart = (series: Series, jumps: ReadonlyArray<Jump>, label: string): Element => {
-  const count = Math.max(series.before.length, series.after.length, 2)
-  const seconds = (count - 1) * SERIES_STEP
+export const loudnessChart = (series: Series, jumps: ReadonlyArray<Jump>, seconds: number, label: string): Element => {
   const x = (time: number): number => LEFT + (time / seconds) * PLOT_WIDTH
   const y = (lufs: number): number => TOP + ((LOUDEST - Math.min(Math.max(lufs, QUIETEST), LOUDEST)) / (LOUDEST - QUIETEST)) * PLOT_HEIGHT
   const line = (values: ReadonlyArray<number>, className: string): Element => {

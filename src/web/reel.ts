@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { judgeSound, jumpsOf, LOUDNESS_TARGET, type Jump, type Passage, type ReelView, type Sound, type Verdict } from "../shared/reel.ts"
+import { judgeSound, jumpsOf, LOUDNESS_TARGET, type Jump, type Levelling, type Passage, type ReelView, type Sound, type Verdict } from "../shared/reel.ts"
 import * as Api from "./api.ts"
 import { button } from "./controls.ts"
 import { h } from "./dom.ts"
@@ -15,6 +15,7 @@ const NO_CUT = "В монтаже нет ни одного блока. Собе�
 const FAILED = "Ролик не собрался. Подробности в журнале студии. Нажмите «Собрать ролик», чтобы попробовать ещё раз."
 const NOT_SAVED = "Монтаж ещё не сохранился. Проверьте Wi-Fi: студия сохраняет его сама."
 const STALE = "Монтаж изменился после сборки. Соберите ролик заново, чтобы файл совпал с монтажом."
+const UNLEVELLED = "Этот ролик собран до выравнивания громкости. Соберите его заново, чтобы выровнять звук."
 const PASSAGE_LABEL = { quiet: "Тихий отрывок", loud: "Громкий отрывок" } as const
 const VERSION_LABEL = { before: "До", after: "После" } as const
 
@@ -59,6 +60,8 @@ const verdictNotes = (sound: Sound, jumps: ReadonlyArray<Jump>): ReadonlyArray<H
     h("p", { class: "muted" }, peakLine(verdict))
   ]
 }
+
+const beforeLine = (before: number): string => `До выравнивания: громкость ${decimal(before)}\u00a0LUFS.`
 
 const measuredLine = (sound: Sound): string =>
   `Измерено: громкость ${decimal(sound.lufs)}\u00a0LUFS при цели ${decimal(LOUDNESS_TARGET)}, диапазон ${decimal(sound.lra)}\u00a0LU, пик ${decimal(sound.truePeak)}\u00a0dBTP.`
@@ -109,6 +112,7 @@ interface ReelUi {
   readonly measured: HTMLParagraphElement
   readonly numbers: HTMLDetailsElement
   readonly passages: HTMLDivElement
+  readonly unlevelled: HTMLParagraphElement
   readonly stale: HTMLParagraphElement
   readonly save: ReturnType<typeof button>
   readonly file: HTMLDivElement
@@ -141,6 +145,13 @@ const playPassage = (pane: Pane, passage: Passage, version: keyof typeof VERSION
   ui.player.addEventListener("loadedmetadata", start, { once: true })
 }
 
+const playAfter = (pane: Pane, made: string): void => {
+  const src = Api.reelUrl(pane.projectId, made, "after")
+  if (pane.state.src === src) return
+  pane.state.src = src
+  pane.ui.player.src = src
+}
+
 const passageRow = (pane: Pane, passage: Passage): HTMLElement => {
   const versions = (["before", "after"] as const).map((version) => {
     const play = button("quiet", {}, VERSION_LABEL[version])
@@ -151,6 +162,22 @@ const passageRow = (pane: Pane, passage: Passage): HTMLElement => {
     h("span", {}, PASSAGE_LABEL[passage.name]),
     h("span", { class: "muted" }, `${lufs(passage.before)} → ${lufs(passage.after)}`),
     ...versions)
+}
+
+const showLevelling = (pane: Pane, levelling: Levelling | undefined, seconds: number): void => {
+  const { ui } = pane
+  ui.unlevelled.hidden = levelling !== undefined
+  ui.chart.hidden = levelling === undefined
+  ui.verdict.hidden = levelling === undefined
+  ui.numbers.hidden = levelling === undefined
+  ui.passages.hidden = levelling === undefined || levelling.passages.length === 0
+  if (levelling === undefined) return
+  ui.passages.replaceChildren(...levelling.passages.map((passage) => passageRow(pane, passage)))
+  const jumps = jumpsOf(levelling.series.after, seconds)
+  ui.chart.replaceChildren(loudnessChart(levelling.series, jumps, seconds, CHART_LABEL), h("p", { class: "muted" }, CHART_KEY))
+  ui.verdict.replaceChildren(...verdictNotes(levelling.after, jumps))
+  ui.measured.textContent = measuredLine(levelling.after)
+  ui.loudness.textContent = beforeLine(levelling.before)
 }
 
 const invalidate = (pane: Pane): void => {
@@ -174,18 +201,11 @@ const show = (pane: Pane, view: ReelView): void => {
   if (view.file !== undefined) {
     if (state.made !== view.file.made) {
       state.made = view.file.made
-      state.src = Api.reelUrl(pane.projectId, view.file.made, "after")
-      ui.player.src = state.src
+      playAfter(pane, view.file.made)
       ui.save.setAttribute("href", Api.reelDownloadUrl(pane.projectId, view.file.made))
-      ui.passages.replaceChildren(...view.file.passages.map((passage) => passageRow(pane, passage)))
-      ui.passages.hidden = view.file.passages.length === 0
-      const jumps = jumpsOf(view.file.series.after)
-      ui.chart.replaceChildren(loudnessChart(view.file.series, jumps, CHART_LABEL), h("p", { class: "muted" }, CHART_KEY))
-      ui.verdict.replaceChildren(...verdictNotes(view.file.sound, jumps))
-      ui.measured.textContent = measuredLine(view.file.sound)
+      showLevelling(pane, view.file.levelling, view.file.seconds)
     }
     ui.facts.textContent = `Длина ${formatLength(view.file.seconds)} · ${formatSize(view.file.size)} · собран ${madeAt(view.file.made)}`
-    ui.loudness.textContent = `Громкость ролика: до ${lufs(view.file.loudness.before)}, после ${lufs(view.file.loudness.after)}, цель ${lufs(LOUDNESS_TARGET)}`
     ui.stale.hidden = state.busy || (view.file.fresh && !state.dirty)
   }
   hooks.note({ note: "", done: view.file?.fresh === true && !state.dirty })
@@ -246,19 +266,21 @@ export const reelPane = (projectId: string, hooks: ReelHooks): {
   const measured = h("p", { class: "muted" })
   const numbers = h("details", { class: "numbers" }, h("summary", {}, "Цифры"), measured, loudness)
   const passages = h("div", { class: "passages", hidden: true })
+  const unlevelled = h("p", { class: "muted", hidden: true }, UNLEVELLED)
   const stale = h("p", { class: "stale", hidden: true }, STALE)
   const save = button("normal", { download: "" }, "Скачать")
-  const file = h("div", { class: "built", hidden: true }, player, h("div", { class: "built-facts" }, facts, chart, verdict, passages, numbers, save, h("p", { class: "muted" }, SAVE_HINT)))
+  const file = h("div", { class: "built", hidden: true }, player, h("div", { class: "built-facts" }, facts, unlevelled, chart, verdict, passages, numbers, save, h("p", { class: "muted" }, SAVE_HINT)))
   const make = button("primary", {}, "Собрать ролик")
   const cancel = button("quiet", { hidden: true }, "Остановить сборку")
   const actions = h("div", { class: "row" }, make, cancel)
   const node = h("div", { class: "pane" }, h("section", { class: "card reel-card" }, h("h2", {}, "Готовый ролик"), h("p", { class: "muted" }, ABOUT), actions, status, bar, stale, problem), file)
-  const pane: Pane = { projectId, hooks, state, ui: { status, bar, problem, player, facts, loudness, verdict, chart, measured, numbers, passages, stale, save, file, make, cancel, node } }
+  const pane: Pane = { projectId, hooks, state, ui: { status, bar, problem, player, facts, loudness, verdict, chart, measured, numbers, passages, unlevelled, stale, save, file, make, cancel, node } }
   player.addEventListener("play", hooks.playing)
   player.addEventListener("timeupdate", () => {
     if (state.stopAt !== undefined && player.currentTime >= state.stopAt) {
       player.pause()
       state.stopAt = undefined
+      if (state.made !== undefined) playAfter(pane, state.made)
     }
   })
 

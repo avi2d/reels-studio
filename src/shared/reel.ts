@@ -15,9 +15,6 @@ export const SERIES_STEP = 0.5
 const LRA_LIMIT = 11
 const PEAK_LIMIT = -1.5
 
-export const Loudness = Schema.Struct({ before: Schema.Finite, after: Schema.Finite })
-export type Loudness = typeof Loudness.Type
-
 export const Series = Schema.Struct({ before: Schema.Array(Schema.Finite), after: Schema.Array(Schema.Finite) })
 export type Series = typeof Series.Type
 
@@ -57,7 +54,7 @@ export interface Jump {
 }
 
 // A run of samples more than JUMP_LU from the target is one jump. Silence ends a run, so a gap is not a jump.
-export const jumpsOf = (after: ReadonlyArray<number>): ReadonlyArray<Jump> => {
+export const jumpsOf = (after: ReadonlyArray<number>, seconds: number): ReadonlyArray<Jump> => {
   const jumps: Array<Jump> = []
   let start: number | undefined
   after.forEach((lufs, index) => {
@@ -68,9 +65,17 @@ export const jumpsOf = (after: ReadonlyArray<number>): ReadonlyArray<Jump> => {
       start = undefined
     }
   })
-  if (start !== undefined) jumps.push({ from: start * SERIES_STEP, to: after.length * SERIES_STEP })
+  if (start !== undefined) jumps.push({ from: start * SERIES_STEP, to: seconds })
   return jumps
 }
+
+export const Levelling = Schema.Struct({
+  before: Schema.Finite,
+  after: Sound,
+  series: Series,
+  passages: Schema.Array(Passage)
+})
+export type Levelling = typeof Levelling.Type
 
 export const ReelView = Schema.Struct({
   job: ReelJob,
@@ -80,10 +85,7 @@ export const ReelView = Schema.Struct({
     seconds: Schema.Finite,
     size: Schema.Finite,
     fresh: Schema.Boolean,
-    loudness: Loudness,
-    sound: Sound,
-    series: Series,
-    passages: Schema.Array(Passage)
+    levelling: Schema.optionalKey(Levelling)
   }))
 })
 export type ReelView = typeof ReelView.Type
