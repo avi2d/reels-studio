@@ -16,7 +16,8 @@ Click the stop icon on that button to stop playback.
 The chat opens as a drawer over the page.
 On a phone the player sits above the tabs.
 The take, pause and place lists scroll without moving the player or the tabs.
-On a phone the tabs read «Видео», «Дубли», «Паузы» and «Ролик», so all four fit on one line.
+On a phone the tabs read «Видео», «Дубли», «Паузы», «Ролик» and «Лицо».
+The open tab scrolls into view.
 
 ## Terms
 
@@ -93,13 +94,13 @@ The originals stay untouched.
 ## Skin colour across videos
 
 Before it encodes, the build measures the skin colour of each video in the cut, on the home computer and without the chat model.
-It reads 15 frames with a face from the preview, spread over the video.
+It reads up to 15 frames with a face from the preview, spread over the video.
 In each frame it takes a box of cheeks and nose under the eyes from the gaze samples.
-The skin colour is the median red, green and blue of the pixels of all 15 boxes.
+The skin colour is the median red, green and blue of the pixels of all boxes.
 The first video of the cut in cut order keeps its colour.
 Each later video gets a gain per channel that brings its skin colour to the first, between 0.8 and 1.25.
 A video with no face in its gaze samples keeps its colour.
-For each pair of videos, the build saves two pictures of their first join, before and after the gain.
+For each joined pair of videos, the build saves two pictures of their first join, before and after the gain.
 The «Внешность» stage shows them side by side under the skin and eye trial.
 
 The stage plays the built file and offers «Скачать».
@@ -112,7 +113,7 @@ A server restart forgets a build in progress, and the person presses the button 
 The «Внешность» stage holds the edits to how the speaker looks.
 Its «Сделать пробу» tries a retouch on the first 20 s of the cut, on the home computer.
 The trial runs only when the person presses that button, and a reel build never runs it.
-The studio builds those 20 s the way it builds the reel, then `tools/gaze/retouch.py` reads them frame by frame.
+The studio builds those 20 s the way it builds the reel, but without the skin colour gain, then `tools/gaze/retouch.py` reads them frame by frame.
 In each frame, the Face Landmarker model finds the face, and the retouch changes pixels only inside it.
 It evens the skin tone and lightens the eye whites, and it draws no new frame.
 Skin evening removes small tone steps between fine detail and broad shading, so pores, the nose and the cheekbones stay.
