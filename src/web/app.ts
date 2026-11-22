@@ -117,7 +117,7 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
     const back = iconButton("plain", "back", "Все ролики", { class: "back", href: HOME_PATH })
     const { panels } = timeline
     const stages = stageRail(
-      { brief: h("div", { class: "pane" }, videoCard(project, refresh), ...brief.nodes, videos.node, remove), takes: panels.takes, pauses: panels.pauses, file: built.node, looks: h("div", { class: "pane" }, looks.node) },
+      { brief: h("div", { class: "pane" }, videoCard(project, refresh), ...brief.nodes, videos.node, remove), takes: panels.takes, pauses: panels.pauses, file: built.node, looks: h("div", { class: "pane" }, looks.node, built.colour) },
       panels.tracks,
       (stage) => {
         activeStage.now = stage
@@ -127,8 +127,8 @@ const projectView = (id: string): Effect.Effect<void, Api.Failed> =>
         if (stage !== "file" && stage !== "looks") return
         timeline.stop()
         void timeline.flush().then(() => {
-          if (stage === "file") built.refresh()
-          else looks.refresh()
+          built.refresh()
+          if (stage === "looks") looks.refresh()
         })
       })
     reel.append(

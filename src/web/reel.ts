@@ -168,6 +168,7 @@ const mutate = (pane: Pane, run: () => Effect.Effect<ReelView, Api.Failed>, fail
 
 export const reelPane = (projectId: string, hooks: ReelHooks): {
   readonly node: HTMLElement
+  readonly colour: HTMLElement
   readonly refresh: () => void
   readonly pause: () => void
   readonly edited: () => void
@@ -186,7 +187,7 @@ export const reelPane = (projectId: string, hooks: ReelHooks): {
   const cancel = button("quiet", { hidden: true }, "Остановить сборку")
   const actions = h("div", { class: "row" }, make, cancel)
   const colour = h("section", { class: "card colour-card", hidden: true })
-  const node = h("div", { class: "pane" }, h("section", { class: "card reel-card" }, h("h2", {}, "Готовый ролик"), h("p", { class: "muted" }, ABOUT), actions, status, bar, stale, problem), file, colour)
+  const node = h("div", { class: "pane" }, h("section", { class: "card reel-card" }, h("h2", {}, "Готовый ролик"), h("p", { class: "muted" }, ABOUT), actions, status, bar, stale, problem), file)
   const pane: Pane = { projectId, hooks, state, ui: { status, bar, problem, player, facts, stale, save, file, make, cancel, colour, node } }
   player.addEventListener("play", hooks.playing)
 
@@ -227,5 +228,5 @@ export const reelPane = (projectId: string, hooks: ReelHooks): {
     })
   })
 
-  return { node, refresh: () => refresh(pane), pause: () => { player.pause() }, edited, settled }
+  return { node, colour, refresh: () => refresh(pane), pause: () => { player.pause() }, edited, settled }
 }

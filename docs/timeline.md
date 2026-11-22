@@ -100,7 +100,7 @@ The first video of the cut in upload order keeps its colour.
 Each later video gets a gain per channel that brings its skin colour to the first, between 0.8 and 1.25.
 A video with no face in its gaze samples keeps its colour.
 For each pair of videos, the build saves two pictures of their first join, before and after the gain.
-The «Готовый ролик» stage shows them side by side under the file.
+The «Внешность» stage shows them side by side under the skin and eye trial.
 
 The stage plays the built file and offers «Скачать».
 On an iPhone, save the downloaded file to «Фото», and the Instagram reel screen finds it there.
