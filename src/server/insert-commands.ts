@@ -69,8 +69,6 @@ export const overlayGraph = (layers: ReadonlyArray<InsertLayer>, tail: string): 
     return `${layer};${over}${index === layers.length - 1 ? tail : `[v${index + 1}]`}`
   }).join(";")
 
-const pictureGraph = (layers: ReadonlyArray<InsertLayer>): string => overlayGraph(layers, ",format=yuv420p[out]")
-
 const clipInput = (layer: ClipLayer): ReadonlyArray<string> =>
   ["-ss", layer.from.toFixed(3), "-t", (layer.end - layer.start).toFixed(3), "-i", layer.file]
 
@@ -99,12 +97,3 @@ const LAST_FRAME_BACK = 0.5
 
 export const clipFrom = (start: number, duration: number | undefined): number =>
   duration === undefined ? start : Math.min(start, Math.max(0, duration - LAST_FRAME_BACK))
-
-export const insertArgs = (reel: string, layers: ReadonlyArray<InsertLayer>, encoder: string, output: string): ReadonlyArray<string> => [
-  "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y", "-i", reel,
-  ...layers.flatMap(inputOf),
-  "-filter_complex", pictureGraph(layers), "-map", "[out]", "-map", "0:a:0",
-  "-c:v", encoder, "-profile:v", "high", "-b:v", "10M", "-maxrate", "12M", "-bufsize", "24M", "-g", String(REEL_RATE * 2),
-  "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
-  "-c:a", "copy", "-map_metadata", "-1", "-movflags", "+faststart", "-f", "mp4", output
-]
