@@ -102,10 +102,12 @@ The originals stay untouched.
 After each change of the cut, the studio checks the sound of the cut on the home computer, without the picture.
 It cuts the sound of each clip from the original video and levels it with the same gain curve and limiter as the build.
 The check waits while another heavy job runs, and a failed check waits for the next change of the cut.
-Under the player, a line names the verdict of that check with the words of the «Готовый ролик» stage, so the owner knows the sound before building and downloading.
+Under the player, a line names the verdict of that check in the words of the «Готовый ролик» stage.
+So the owner knows the sound before the build and the download.
 The line opens to the same notes on jumps, average loudness and peaks.
 While the check runs, the line says so with its share done.
-The montage plays each clip with the gain the build gives that moment, through a limiter at −2.5 dBFS, so a quiet part sounds as loud as it does in the built file.
+The montage plays each clip with the gain the build gives that moment, through a limiter at −2.5 dBFS.
+So a quiet part sounds as loud as it does in the built file.
 A take outside the cut plays with the gain of the nearest clip from the same video.
 
 ## Skin colour across videos
