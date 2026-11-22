@@ -38,6 +38,14 @@ The page shows the videos as tiles with covers and a button that starts the next
 The studio answers only addresses of a private network and has no password.
 Do not forward its port to the internet.
 
+## Share a demo
+
+On the computer running the demo:
+
+1. Start the demo on a free port and note the server process ID.
+1. Run `local-apps register <name> --port <port> --pid <server pid>`.
+1. Give the owner the printed address and the path to the demo.
+
 ## Change the settings
 
 Each setting is an environment variable read at start.
