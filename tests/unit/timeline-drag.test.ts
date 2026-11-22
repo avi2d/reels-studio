@@ -257,7 +257,7 @@ const setup = (blocks: number): { readonly card: ReturnType<typeof timelineCard>
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) })
     }
   })
-  const card = timelineCard("p1", { ask: () => {}, openTakes: () => {}, status: () => {} })
+  const card = timelineCard("p1", { ask: () => {}, openTakes: () => {}, status: () => {} }, () => 0)
   return { card, puts, swapBlocks: (next: number) => { count = next } }
 }
 

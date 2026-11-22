@@ -233,6 +233,10 @@ const reel = Layer.mergeAll(
     const media = yield* Media
     return json(yield* media.cancelReel(yield* param("id")))
   }))),
+  HttpRouter.add("GET", "/api/projects/:id/sound", reply(Effect.gen(function*() {
+    const media = yield* Media
+    return json(yield* media.sound(yield* param("id")))
+  }))),
   HttpRouter.add("GET", "/api/projects/:id/reel/file", (request) => reply(Effect.gen(function*() {
     const media = yield* Media
     const target = yield* media.reelFile(yield* param("id"), madeOf(request), versionOf(request))

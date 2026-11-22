@@ -1,10 +1,11 @@
 import { Effect } from "effect"
-import { judgeSound, jumpsOf, LOUDNESS_TARGET, type ColourView, type Jump, type Levelling, type Passage, type PictureSide, type ReelView, type Sound, type Verdict } from "../shared/reel.ts"
+import { jumpsOf, LOUDNESS_TARGET, type ColourView, type Jump, type Levelling, type Passage, type PictureSide, type ReelView, type Sound } from "../shared/reel.ts"
 import * as Api from "./api.ts"
 import { button } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatLength, formatSize } from "./format.ts"
 import { loudnessChart } from "./loudness-chart.ts"
+import { lufs, verdictWords } from "./sound-verdict.ts"
 import type { StageNote } from "./stages.ts"
 
 const POLL_MS = 1000
@@ -19,46 +20,14 @@ const UNLEVELLED = "Этот ролик собран до выравнивани
 const PASSAGE_LABEL = { quiet: "Тихий отрывок", loud: "Громкий отрывок" } as const
 const VERSION_LABEL = { before: "До", after: "После" } as const
 
-const lufs = (value: number): string => `${String(Math.round(value)).replace("-", "−")}\u00a0LUFS`
-
 const decimal = (value: number): string => value.toFixed(1).replace("-", "−").replace(".", ",")
 
-const SOUND_LABEL = { good: "Звук хороший", check: "Звук можно публиковать, но есть замечания", bad: "Звук плохой" } as const
-const ISSUE_NOTE = {
-  "off-target": "Громкость далеко от цели.",
-  uneven: "Громкость меняется: тихие и громкие места звучат по-разному.",
-  "over-peak": "Пики выше −1,5 dBTP.",
-  clipping: "Срывы: пики выше 0 dBTP, звук будет обрезаться."
-} as const
-
-const JUMP_LIST = 5
 const CHART_LABEL = "График громкости по времени: до и после выравнивания"
 const CHART_KEY = "Серая линия — до выравнивания, оранжевая — после. Пунктир — цель. Красные полосы — скачки громкости."
 
-const jumpLine = (jumps: ReadonlyArray<Jump>, uneven: boolean): string => {
-  if (jumps.length === 0) return uneven ? ISSUE_NOTE.uneven : "Скачков громкости нет."
-  const spans = jumps.slice(0, JUMP_LIST).map((jump) => `${formatLength(jump.from)}–${formatLength(jump.to)}`)
-  const rest = jumps.length - spans.length
-  return `Скачки громкости: ${spans.join(", ")}${rest > 0 ? ` и ещё ${rest}` : ""}.`
-}
-
-const averageLine = (offTarget: boolean): string =>
-  offTarget ? `Средняя громкость далеко от цели ${lufs(LOUDNESS_TARGET)}.` : `Средняя громкость хорошая: цель ${lufs(LOUDNESS_TARGET)}.`
-
-const peakLine = (verdict: Verdict): string => {
-  if (verdict.issues.includes("clipping")) return ISSUE_NOTE.clipping
-  if (verdict.issues.includes("over-peak")) return ISSUE_NOTE["over-peak"]
-  return "Срывов нет."
-}
-
 const verdictNotes = (sound: Sound, jumps: ReadonlyArray<Jump>): ReadonlyArray<HTMLElement> => {
-  const verdict = judgeSound(sound)
-  return [
-    h("p", {}, h("strong", {}, SOUND_LABEL[verdict.level])),
-    h("p", { class: "muted" }, jumpLine(jumps, verdict.issues.includes("uneven"))),
-    h("p", { class: "muted" }, averageLine(verdict.issues.includes("off-target"))),
-    h("p", { class: "muted" }, peakLine(verdict))
-  ]
+  const words = verdictWords(sound, jumps)
+  return [h("p", {}, h("strong", {}, words.label)), ...words.notes.map((note) => h("p", { class: "muted" }, note))]
 }
 
 const beforeLine = (before: number): string => `До выравнивания: громкость ${decimal(before)}\u00a0LUFS.`

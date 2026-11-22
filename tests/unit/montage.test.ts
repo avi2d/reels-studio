@@ -60,7 +60,7 @@ const setup = (): { player: ReturnType<typeof montage>; srcSets: () => number; f
   }
   Object.assign(globalThis, { document: { createElement } })
   Object.assign(globalThis, { requestAnimationFrame: () => 0 })
-  const player = montage("project", () => {})
+  const player = montage("project", () => {}, () => 0)
   return {
     player,
     srcSets: () => videos.reduce((sum, video) => sum + video.srcSets, 0),

@@ -93,6 +93,36 @@ export const Levelling = Schema.Struct({
 })
 export type Levelling = typeof Levelling.Type
 
+export const Gain = Schema.Struct({ time: Schema.Finite, db: Schema.Finite })
+export type Gain = typeof Gain.Type
+
+export const PartGains = Schema.Struct({ video: Schema.String, from: Schema.Finite, to: Schema.Finite, gains: Schema.Array(Gain) })
+export type PartGains = typeof PartGains.Type
+
+export const SoundCheck = Schema.Struct({
+  job: ReelJob,
+  heard: Schema.optionalKey(Schema.Struct({
+    fresh: Schema.Boolean,
+    seconds: Schema.Finite,
+    levelling: Levelling,
+    parts: Schema.Array(PartGains)
+  }))
+})
+export type SoundCheck = typeof SoundCheck.Type
+
+// A gain holds from its time until the next one, as ffmpeg's asendcmd applies it.
+export const gainAt = (gains: ReadonlyArray<Gain>, time: number): number =>
+  (gains.findLast((gain) => gain.time <= time) ?? gains[0])?.db ?? 0
+
+const distanceTo = (part: PartGains, time: number): number => Math.max(0, part.from - time, time - part.to)
+
+// Sound of a video outside every part, such as a take the cut does not use, takes the nearest part of the same video.
+export const previewDb = (parts: ReadonlyArray<PartGains>, video: string, time: number): number => {
+  const nearest = parts.filter((part) => part.video === video).reduce<PartGains | undefined>((best, part) =>
+    best === undefined || distanceTo(part, time) < distanceTo(best, time) ? part : best, undefined)
+  return nearest === undefined ? 0 : gainAt(nearest.gains, time)
+}
+
 export const ReelView = Schema.Struct({
   job: ReelJob,
   cut: Schema.Finite,

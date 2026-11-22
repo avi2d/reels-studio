@@ -97,6 +97,17 @@ A bar follows the parts, the levelling and the inserts.
 The build waits while the computer hears another video, because the studio runs one heavy job at a time.
 The originals stay untouched.
 
+## Sound in the montage
+
+After each change of the cut, the studio checks the sound of the cut on the home computer, without the picture.
+It cuts the sound of each clip from the original video and levels it with the same gain curve and limiter as the build.
+The check waits while another heavy job runs, and a failed check waits for the next change of the cut.
+Under the player, a line names the verdict of that check with the words of the «Готовый ролик» stage, so the owner knows the sound before building and downloading.
+The line opens to the same notes on jumps, average loudness and peaks.
+While the check runs, the line says so with its share done.
+The montage plays each clip with the gain the build gives that moment, through a limiter at −2.5 dBFS, so a quiet part sounds as loud as it does in the built file.
+A take outside the cut plays with the gain of the nearest clip from the same video.
+
 ## Skin colour across videos
 
 Before it encodes, the build measures the skin colour of each video in the cut, on the home computer and without the chat model.
@@ -234,6 +245,8 @@ Each video folder holds these next to `plan.json`:
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
 | `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |
 | `reel/reel.json` | The build time, the video file it published, the parts, the inserts, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
+| `reel/sound.json` | The parts of the last checked cut, its measured loudness before and after levelling, and the gain of each part over its source time, which the montage plays |
+| `reel/sound-work/` | The sound of each clip and the levelled sound while a check runs, removed when it ends |
 | `retouch/trial.json` | The time of the last skin and eye trial, the seconds it retouched and the seconds that took |
 | `retouch/before.jpg`, `retouch/after.jpg` | The face close-up of the trial before and after |
 | `retouch/compare.mp4` | The 20 s of the trial with the original on the left and the retouch on the right

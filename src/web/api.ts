@@ -3,7 +3,7 @@ import { BriefView } from "../shared/brief.ts"
 import { Message } from "../shared/chat.ts"
 import { Offer, type Pick, UploadedVideo } from "../shared/library.ts"
 import { VideoView } from "../shared/plan.ts"
-import { ReelView, type PictureSide } from "../shared/reel.ts"
+import { ReelView, SoundCheck, type PictureSide } from "../shared/reel.ts"
 import { RetouchView, type RetouchPicture } from "../shared/retouch.ts"
 import { Edits, TimelinePage } from "../shared/timeline.ts"
 
@@ -132,6 +132,9 @@ export const buildReel = (id: string): Effect.Effect<ReelView, Failed> =>
 
 export const cancelReel = (id: string): Effect.Effect<ReelView, Failed> =>
   call(ReelView, `/api/projects/${id}/reel/build`, { method: "DELETE" })
+
+export const getSound = (id: string): Effect.Effect<SoundCheck, Failed> =>
+  call(SoundCheck, `/api/projects/${id}/sound`)
 
 export const reelUrl = (id: string, made: string, version: "after" | "before"): string =>
   `/api/projects/${id}/reel/file?made=${encodeURIComponent(made)}&version=${version}`
