@@ -3,7 +3,7 @@ export type Platform = (typeof PLATFORMS)[number]
 
 export const FRAME = { width: 1080, height: 1920 } as const
 
-export interface Column {
+interface Column {
   readonly left: number
   readonly top: number
 }

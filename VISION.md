@@ -20,7 +20,7 @@ It owns the path from an uploaded original to a separate video for each platform
 ## A text outside the clear zone stops the render
 
 - A text that leaves the zone its player keeps clear stops the render, with no softer warning, at the cost of a late failure.
-- The clear zone of an ordinary reel is measured from the player, and Meta's stricter ads zone applies only to a reel for ads, at the cost of measuring again when the player changes.
+- Each player's clear zone comes from numbers it publishes or from measuring it, at the cost of measuring again when a player changes.
 
 ## A program comes first, and the chat model may see video
 
