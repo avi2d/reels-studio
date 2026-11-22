@@ -5,6 +5,7 @@ import { h } from "./dom.ts"
 
 export interface PlaceActions {
   readonly hearJoin: (join: Join) => void
+  readonly hearUnaligned: (join: Join) => void
   readonly answer: (join: Join, answer: JoinAnswer) => void
 }
 
@@ -20,6 +21,11 @@ interface AnswerText {
 }
 
 const ANSWERS: ReadonlyArray<readonly [JoinAnswer, AnswerText]> = [
+  ["zoom", {
+    label: "Выровнять",
+    does: "Студия чуть приближает картинку после склейки, чтобы глаза остались на той же высоте.",
+    done: "картинка после склейки приближена"
+  }],
   ["trim", {
     label: "Обрезать",
     does: "Студия убирает кадры с опущенным взглядом у склейки. Она режет только картинку над тишиной, а слова не трогает.",
@@ -30,8 +36,23 @@ const ANSWERS: ReadonlyArray<readonly [JoinAnswer, AnswerText]> = [
 
 const seconds = (value: number): string => `${value.toFixed(1).replace(".", ",")} с`
 
-const doneOf = ({ answer, trim }: Place): ReadonlyArray<string> =>
-  ANSWERS.flatMap(([one, text]) => one !== answer ? [] : [one === "trim" ? `${text.done}: ${seconds(trim.cut)}` : text.done])
+const percent = (scale: number): string => `${Math.max(1, Math.round((scale - 1) * 100))} %`
+
+const doneText = ({ answer, trim, align }: Place, text: AnswerText): string => {
+  if (answer === "trim") return `${text.done}: ${seconds(trim.cut)}`
+  if (answer === "zoom" && align.kind === "zoom") return `${text.done} на ${percent(align.frame.scale)}`
+  return text.done
+}
+
+const doneOf = (place: Place): ReadonlyArray<string> =>
+  ANSWERS.flatMap(([one, text]) => one !== place.answer ? [] : [doneText(place, text)])
+
+const alignNote = ({ align, answer }: Place): string => {
+  if (answer !== undefined) return ""
+  if (align.kind === "zoom") return `глаза можно выровнять: картинка после склейки станет крупнее на ${percent(align.frame.scale)}`
+  if (align.kind === "far") return "выровнять нельзя: картинку пришлось бы приблизить так сильно, что она станет нечёткой"
+  return "студия ещё измеряет кадр, выровнять можно будет позже"
+}
 
 const bare = (word: string): string => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")
 
@@ -47,7 +68,7 @@ const trimNote = (place: Place): string => {
 }
 
 const offered = (place: Place): ReadonlyArray<readonly [JoinAnswer, AnswerText]> =>
-  ANSWERS.filter(([answer]) => answer !== "trim" || place.trim.cut > 0)
+  ANSWERS.filter(([answer]) => answer === "leave" || (answer === "trim" ? place.trim.cut > 0 : place.align.kind === "zoom"))
 
 const blockNumber = (placed: ReadonlyArray<Placed>, block: string): number => placed.findIndex((one) => one.block.id === block) + 1
 
@@ -66,13 +87,20 @@ const placeItem = (place: Place, number: number, placed: ReadonlyArray<Placed>, 
     h("span", { class: "where" },
       h("b", {}, `Склейка ${number}`),
       h("span", {}, [where, ...doneOf(place)].join(" · ")),
-      ...[trimNote(place)].filter((note) => note !== "").map((note) => h("span", { class: "muted" }, note))),
+      ...[alignNote(place), trimNote(place)].filter((note) => note !== "").map((note) => h("span", { class: "muted" }, note))),
     h("div", { class: "take-acts" },
       button("normal", {
         title: "Полторы секунды до склейки и полторы после, как в ролике",
         "data-key": `hear-join:${key}`,
         click: () => { actions.hearJoin(place.join) }
       }, ...spoken("Посмотреть", `Посмотреть склейку ${number}, ${where}`)),
+      ...(place.answer === "zoom"
+        ? [button("normal", {
+          title: "Те же секунды без выравнивания",
+          "data-key": `hear-unaligned:${key}`,
+          click: () => { actions.hearUnaligned(place.join) }
+        }, ...spoken("Как было", `Посмотреть склейку ${number} без выравнивания`))]
+        : []),
       ...offered(place).map(([answer, { label, does }]) => button(place.answer === answer ? "primary" : "quiet", {
         title: does,
         "data-key": `answer-join:${answer}:${key}`,
@@ -95,10 +123,10 @@ const countOf = (places: ReadonlyArray<Place>, coverage: PlaceCoverage): string 
 }
 
 export const placeList = (places: ReadonlyArray<Place>, placed: ReadonlyArray<Placed>, coverage: PlaceCoverage, actions: PlaceActions): HTMLElement =>
-  h("div", { class: "detail" },
+  h("div", { class: "detail places-detail", "data-scroll-key": "places" },
     h("h3", {}, "Места для проверки"),
     h("p", { class: "did" }, `На этих склейках голова заметно сдвигается. Посмотрите каждую: студия покажет ${String(AROUND_JOIN_SECONDS).replace(".", ",")} с до склейки и столько же после, так, как склейка будет в ролике.`),
     h("ul", { class: "answers-said" }, ...ANSWERS.map(([, { label, does }]) => h("li", {}, h("b", {}, `«${label}».`), ` ${does}`))),
     ...(coverage.waiting ? [h("p", { class: "muted", role: "status" }, "Студия ещё измеряет, где голова в кадре. Места появятся, когда она закончит.")] : []),
     h("p", { class: "muted", role: "status" }, countOf(places, coverage)),
-    h("ol", { class: "place-list", "data-scroll-key": "places" }, ...places.map((place, index) => placeItem(place, index + 1, placed, actions))))
+    h("ol", { class: "place-list" }, ...places.map((place, index) => placeItem(place, index + 1, placed, actions))))

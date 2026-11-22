@@ -1,6 +1,7 @@
 import { Effect, FileSystem, Option, Result, Schema } from "effect"
 import type { Transcript, VideoView } from "../shared/plan.ts"
 import { Gathered } from "../shared/gather.ts"
+import { cutOf, facesByVideo } from "../shared/joins.ts"
 import { assemble, Blocks, clipsOf, Edits, NO_EDITS, soundBlocks, type Gaze, type GazeFailure, type TimelineView, type VideoFaces } from "../shared/timeline.ts"
 import { places, readGaze, readTranscript } from "./media-jobs.ts"
 
@@ -71,7 +72,7 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
       if (Result.isSuccess(decoded)) {
         measured = decoded.success
         gazes.set(name, measured)
-        if (measured.heads !== undefined) faces.push({ video: name, step: measured.step, gaze: measured.samples, heads: measured.heads })
+        faces.push(...facesOf(name, measured))
       } else {
         yield* Effect.logError("the gaze is unreadable", place.gaze, decoded.failure)
       }
@@ -83,14 +84,27 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
   return { looks, faces, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir) } } satisfies TimelineView
 })
 
+const facesOf = (name: string, measured: Gaze): ReadonlyArray<VideoFaces> => {
+  if (measured.heads === undefined) return []
+  const faces = { video: name, step: measured.step, gaze: measured.samples, heads: measured.heads }
+  return [measured.aspect === undefined ? faces : { ...faces, aspect: measured.aspect }]
+}
+
 export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>) {
   const fs = yield* FileSystem.FileSystem
   const transcripts = new Map<string, Transcript>()
+  const faces: Array<VideoFaces> = []
   for (const name of names) {
-    if (yield* fs.exists(places({ dir, name }).transcript)) transcripts.set(name, yield* readTranscript({ dir, name }))
+    const place = places({ dir, name })
+    if (!(yield* fs.exists(place.transcript))) continue
+    transcripts.set(name, yield* readTranscript({ dir, name }))
+    if (!(yield* fs.exists(place.gaze))) continue
+    const measured = yield* Effect.option(readGaze({ dir, name }))
+    if (Option.isSome(measured)) faces.push(...facesOf(name, measured.value))
   }
   const written = yield* readBlocks(dir)
   if (written === "none" || written === "unreadable") return []
   const { blocks } = soundBlocks(written, transcripts, new Map())
-  return clipsOf(assemble(blocks, yield* readEdits(dir), transcripts))
+  const edits = yield* readEdits(dir)
+  return cutOf(clipsOf(assemble(blocks, edits, transcripts)), facesByVideo(faces), transcripts, edits)
 })

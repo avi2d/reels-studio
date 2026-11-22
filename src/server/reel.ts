@@ -1,5 +1,5 @@
 import { DateTime, Effect, FileSystem, Option, Schema } from "effect"
-import type { Clip } from "../shared/timeline.ts"
+import { Frame, type Clip } from "../shared/timeline.ts"
 import type { ReelView } from "../shared/reel.ts"
 import { joinArgs, joinList, partArgs, partsOf, progressSeconds, sameParts, secondsOf } from "./media-commands.ts"
 import { isHdrVideo, places, tool } from "./media-jobs.ts"
@@ -8,7 +8,7 @@ import { Settings } from "./settings.ts"
 const Record = Schema.Struct({
   made: Schema.String,
   video: Schema.String,
-  parts: Schema.Array(Schema.Struct({ video: Schema.String, start: Schema.Finite, frames: Schema.Int }))
+  parts: Schema.Array(Schema.Struct({ video: Schema.String, start: Schema.Finite, frames: Schema.Int, frame: Schema.optionalKey(Frame) }))
 })
 const RecordFile = Schema.fromJsonString(Record)
 const decodeRecord = Schema.decodeUnknownOption(RecordFile)
