@@ -89,6 +89,11 @@ const seenAt = (faces: VideoFaces | undefined, time: number, side: "before" | "a
   return faces?.aspect === undefined ? { head, measured: false } : { head: inView(head, faces.aspect), measured: true }
 }
 
+const answerOf = (given: JoinState | undefined, align: Align): JoinState | undefined => {
+  if (given !== undefined && given !== "zoom") return given
+  return align.kind === "zoom" ? "zoom" : undefined
+}
+
 const alignOf = (before: Head, after: Seen, measured: boolean): Align => {
   if (!measured) return { kind: "unmeasured" }
   const frame = frameToward(before, after.head)
@@ -117,8 +122,7 @@ const passOf = (clips: ReadonlyArray<Clip>, faces: Faces, transcripts: Transcrip
     const shift = headShift(shown, after.head)
     if (shift <= JUMP_STEP) return undefined
     const align = alignOf(shown, after, before.measured && after.measured)
-    const given = answerAt(edits, join)
-    const answer = given === "zoom" && align.kind !== "zoom" ? undefined : given
+    const answer = answerOf(answerAt(edits, join), align)
     places.push({ join, shift, trim: trimOf(join, faces, transcripts), align, answer, answered: answeredAt(edits, join) })
     return answer === "zoom" && align.kind === "zoom" ? align.frame : undefined
   }

@@ -143,7 +143,7 @@ const countOf = (places: ReadonlyArray<Place>, coverage: PlaceCoverage): string 
 export const placeList = (
   places: ReadonlyArray<Place>, placed: ReadonlyArray<Placed>, coverage: PlaceCoverage, pictures: ReadonlyArray<string>, actions: PlaceActions
 ): HTMLElement =>
-  h("div", { class: "detail places-detail", "data-scroll-key": "places" },
+  h("div", { class: "detail places-detail" },
     h("h3", {}, "Места для проверки"),
     h("p", { class: "did" }, `На этих склейках голова заметно сдвигается. Посмотрите каждую: студия покажет ${String(AROUND_JOIN_SECONDS).replace(".", ",")} с до склейки и столько же после, так, как склейка будет в ролике.`),
     h("ul", { class: "answers-said" }, ...[...ANSWERS.map(([, text]) => text), ...(pictures.length === 0 ? [] : [COVER])]

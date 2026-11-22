@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { curveOf, gainsOf } from "../../src/server/level-curve.ts"
-import { momentsOf, passagesOf, readingOf, sampledAt } from "../../src/server/media-commands.ts"
+import { measureArgs, momentsOf, readingOf, repeatsFor, sampledAt } from "../../src/server/loudness-meter.ts"
+import { passagesOf } from "../../src/server/media-commands.ts"
 import { judgeSound, jumpsOf } from "../../src/shared/reel.ts"
 
 const part = (frames: number) => ({ video: "a.mov", start: 0, frames })
@@ -35,17 +36,21 @@ test("a silent measurement reads as the -70 LUFS gate floor, not as a loud value
   expect(readingOf(silent)).toEqual({ lufs: -70, lra: 0, truePeak: -70 })
 })
 
-test("each momentary value is read at its own timestamp, not the one before it", () => {
+test("each short-term value stands at the middle of the 3 s it covers, not at the end of it or at the stamp before it", () => {
   const metadata = [
-    "frame:0    pts:0       pts_time:0",
-    "lavfi.r128.M=-120.691",
-    "frame:1    pts:4800    pts_time:0.1",
-    "lavfi.r128.M=-43.739"
+    "frame:0    pts:144000  pts_time:3",
+    "lavfi.r128.S=-120.691",
+    "frame:1    pts:148800  pts_time:3.1",
+    "lavfi.r128.S=-43.739"
   ].join("\n")
   expect(momentsOf(metadata)).toEqual([
-    { time: 0, lufs: -120.691 },
-    { time: 0.1, lufs: -43.739 }
+    { time: 1.5, lufs: -120.691 },
+    { time: 1.6, lufs: -43.739 }
   ])
+})
+
+test("a momentary reading is not taken for the short-term level the chart draws", () => {
+  expect(momentsOf("frame:0    pts:144000  pts_time:3\nlavfi.r128.M=-20")).toEqual([])
 })
 
 test("a part under one second is never a passage, even when it is the quietest", () => {
@@ -71,18 +76,18 @@ test("a silent part is never the quiet passage", () => {
   ])
 })
 
-test("a moment 37.8 dB under the -14 LUFS target is lifted by 37.8 dB, not clamped at 20 dB", () => {
-  const curve = curveOf(gainsOf([{ time: 1, lufs: -51.8 }], [{ from: 0, to: 2, lufs: -51.8 }], 0))
+test("a part 37.8 dB under the -14 LUFS target is lifted by 37.8 dB, not clamped at 20 dB", () => {
+  const curve = curveOf(gainsOf([{ from: 0, to: 2, lufs: -51.8 }], 0))
   expect(Number(curve.split(" ").at(-1))).toBeCloseTo(10 ** (37.8 / 20), 4)
 })
 
-test("a moment at the silence floor is left at unity gain, not boosted", () => {
-  const curve = curveOf(gainsOf([{ time: 1, lufs: -70 }], [{ from: 0, to: 2, lufs: -70 }], 0))
+test("a part at the silence floor is left at unity gain, not boosted", () => {
+  const curve = curveOf(gainsOf([{ from: 0, to: 2, lufs: -70 }], 0))
   expect(Number(curve.split(" ").at(-1))).toBe(1)
 })
 
-test("a silent moment stays at unity gain when the whole reel is shifted toward the target, not shifted with it", () => {
-  const curve = curveOf(gainsOf([{ time: 1, lufs: -70 }], [{ from: 0, to: 2, lufs: -70 }], 3))
+test("a silent part stays at unity gain when the whole reel is shifted toward the target, not shifted with it", () => {
+  const curve = curveOf(gainsOf([{ from: 0, to: 2, lufs: -70 }], 3))
   expect(Number(curve.split(" ").at(-1))).toBe(1)
 })
 
@@ -118,42 +123,50 @@ test("a jump that runs to the end of a 1.2 s reel ends at 1.2 s, not a sample st
   expect(jumpsOf([-14, -20, -20], 1.2)).toEqual([{ from: 0.5, to: 1.2 }])
 })
 
-test("a gain reading covers the 0.4 s before its time, so each part holds its level and the change runs across the join's fade", () => {
-  const moments = [
-    { time: 0.8, lufs: -14 },
-    { time: 0.9, lufs: -14 },
-    { time: 1, lufs: -14 },
-    { time: 1.1, lufs: -14 },
-    { time: 1.2, lufs: -14 },
-    { time: 1.3, lufs: -14 },
-    { time: 1.4, lufs: -20 },
-    { time: 1.5, lufs: -20 },
-    { time: 1.6, lufs: -20 }
-  ]
-  const gains = gainsOf(moments, [{ from: 0, to: 1, lufs: -14 }, { from: 1, to: 1.6, lufs: -20 }], 0)
-  expect(gains.map((gain) => Math.round(gain.db * 100) / 100)).toEqual([0, 0, 0, 0, 0, 1, 6, 6, 6])
+const FADE = 0.06
+
+// The volume filter keeps each value from its time until the next one, as asendcmd sends it.
+const gainAt = (gains: ReadonlyArray<{ readonly time: number; readonly db: number }>, time: number): number =>
+  gains.findLast((gain) => gain.time <= time + 1e-9)?.db ?? 0
+
+const levelOut = (parts: ReadonlyArray<{ readonly from: number; readonly to: number; readonly lufs: number }>, time: number): number => {
+  const gains = gainsOf(parts, 0)
+  return (parts.find((one) => time < one.to)?.lufs ?? 0) + gainAt(gains, time)
+}
+
+test("a join between a -20 and a -30 LUFS part leaves no step in the levelled sound outside the fades, not a level that jumps or swells at the join", () => {
+  const parts = [{ from: 0, to: 3, lufs: -20 }, { from: 3, to: 6, lufs: -30 }]
+  const times = Array.from({ length: 600 }, (_, index) => index / 100).filter((time) => Math.abs(time - 3) > FADE)
+  for (const time of times) expect(levelOut(parts, time)).toBeCloseTo(-14, 6)
 })
 
-const powerMean = (levels: ReadonlyArray<number>): number =>
-  10 * Math.log10(levels.reduce((sum, lufs) => sum + 10 ** (lufs / 10), 0) / levels.length)
-
-test("a half-second part between two longer ones holds its own level, not one mixed from its neighbours", () => {
-  const parts = [{ from: 0, to: 3, lufs: -20 }, { from: 3, to: 3.5, lufs: -30 }, { from: 3.5, to: 6.5, lufs: -14 }]
-  const levelAt = (time: number): number => parts.find((one) => time < one.to)?.lufs ?? -14
-  const moments = Array.from({ length: 62 }, (_, index) => {
-    const time = (index + 4) / 10
-    const window = Array.from({ length: 40 }, (_sample, step) => levelAt(time - 0.4 + (step + 0.5) * 0.01))
-    return { time, lufs: powerMean(window) }
-  })
-  const held = gainsOf(moments, parts, 0).filter((gain) => gain.time >= 3 - 1e-6 && gain.time < 3.38)
-  expect(held.length).toBeGreaterThan(0)
-  for (const gain of held) expect(gain.db).toBeCloseTo(16, 6)
+test("the gain between a -20 and a -30 LUFS part moves only inside the two fades and never past either part's gain, not in one jump outside them", () => {
+  const gains = gainsOf([{ from: 0, to: 3, lufs: -20 }, { from: 3, to: 6, lufs: -30 }], 0)
+  const moving = gains.slice(1)
+  expect(moving.length).toBeGreaterThan(10)
+  for (const gain of moving) {
+    expect(gain.time).toBeGreaterThan(3 - FADE)
+    expect(gain.time).toBeLessThanOrEqual(3 + FADE + 1e-9)
+    expect(gain.db).toBeGreaterThanOrEqual(6)
+    expect(gain.db).toBeLessThanOrEqual(16)
+  }
+  for (const [index, gain] of moving.entries()) expect(gain.db - (gains[index]?.db ?? 0)).toBeLessThan(1)
 })
 
-test("a word under one 0.4 s block, which ebur128 reads as -70, is lifted with its equally loud neighbours, not left at unity or pushed toward the 40 dB clamp", () => {
-  const parts = [{ from: 0, to: 3, lufs: -30 }, { from: 3, to: 3.267, lufs: -70 }, { from: 3.267, to: 6.267, lufs: -30 }]
-  const moments = Array.from({ length: 59 }, (_, index) => ({ time: (index + 4) / 10, lufs: -30 }))
-  const gains = gainsOf(moments, parts, 0)
-  expect(gains.length).toBe(59)
-  for (const gain of gains) expect(gain.db).toBeCloseTo(16, 6)
+test("a 0.3 s word between two removed pauses lands within 2 LU of -14 from its own level, not at a level taken from its neighbours", () => {
+  const parts = [{ from: 0, to: 3, lufs: -30 }, { from: 3, to: 3.3, lufs: -24 }, { from: 3.3, to: 6.3, lufs: -36 }]
+  expect(Math.abs(levelOut(parts, 3.15) + 14)).toBeLessThan(2)
+})
+
+test("a 0.3 s part is measured on its own, played over to 1.2 s, not read as silence for falling under one 0.4 s block", () => {
+  const repeats = repeatsFor(0.3)
+  expect((repeats + 1) * 0.3).toBeGreaterThanOrEqual(1.2 - 1e-9)
+  const args = measureArgs("part-002.mov", undefined, repeats)
+  expect(args.slice(args.indexOf("-stream_loop"), args.indexOf("-stream_loop") + 2)).toEqual(["-stream_loop", String(repeats)])
+  expect(args.indexOf("-stream_loop")).toBeLessThan(args.indexOf("-i"))
+})
+
+test("a part longer than 1.2 s is measured once, not played over", () => {
+  expect(repeatsFor(2)).toBe(0)
+  expect(measureArgs("part-001.mov", undefined, repeatsFor(2))).not.toContain("-stream_loop")
 })

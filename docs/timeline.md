@@ -15,7 +15,8 @@ The round button under the player starts playback from the open block.
 Click the stop icon on that button to stop playback.
 The chat opens as a drawer over the page.
 On a phone the player sits above the tabs.
-The take, pause and place lists scroll without moving the player or the tabs.
+The take list scrolls without moving the player or the tabs.
+The pause and place lists scroll with the stage.
 On a phone the tabs read «Видео», «Дубли», «Паузы», «Ролик» and «Лицо».
 The open tab scrolls into view.
 
@@ -86,9 +87,12 @@ The file holds the chosen takes in row order, without removed pauses, with the s
 It is 1080 by 1920 at 30 frames a second, H.264 High with AAC sound in an MP4.
 An iPhone HDR original is turned into ordinary BT.709 colours, so the reel does not look washed out in Instagram.
 The studio cuts each clip to whole frames, encodes the clips one by one through `REELS_HEAVY` with `REELS_ENCODER`, then joins them without encoding again.
-The studio then brings the joined file to -14 LUFS with one gain curve over the whole reel.
-A limiter keeps the true peak under -1.5 dBTP.
-The gain change at each join is a short ramp that ends at the join, so the levelled line stays flat there.
+The studio measures each part on its own and gives it one gain that brings it to -14 LUFS.
+So the gaps and word endings inside a part are not lifted.
+A part shorter than 1.2 s is measured played over until it fills 1.2 s, because ebur128 reads nothing under one 0.4 s block.
+The gain moves from one part's value to the next only inside the two 0.06 s fades at their join.
+The sound there is near silence.
+One more constant gain over the whole reel hits -14 LUFS, and a limiter keeps the true peak under -1.5 dBTP.
 When the cut shows inserts, one more pass lays the pictures over the levelled file and copies its sound as it is.
 The joined file before levelling stays beside the reel as `before-<stamp>.mp4`.
 The download always serves the levelled file.
@@ -125,7 +129,8 @@ The «Внешность» stage shows them side by side under the skin and eye 
 The stage plays the built file and offers «Скачать».
 The stage names the measured loudness of the built file with a plain verdict word.
 It says when the peaks stay clean.
-A chart shows the loudness over time before and after the levelling, with the target as a line and the jumps marked.
+A chart shows the 3 s short-term loudness over time before and after the levelling, with the target as a line and the jumps marked.
+The first ~1.5 s of the chart has no short-term reading, because the 3 s window has not filled yet.
 The numbers sit under the «Цифры» toggle.
 When at least two parts run 1 s or more, the quietest and the loudest passages each offer «До» and «После», so the owner can hear the change.
 A reel built before the levelling keeps playing.
@@ -218,6 +223,7 @@ A place with nothing to cut offers no «Обрезать».
 The zoom only enlarges and moves the picture inside its own edges, so no black band shows.
 It enlarges by at most 15 %, and a place that needs more offers no «Выровнять».
 A place whose eyes already sit on one line offers no «Выровнять».
+«Выровнять» is on from the start at every place that offers it, so such a place counts as answered until the person picks another answer.
 The zoom holds until the next join, so the picture does not jump back in the middle of a block.
 Once a join is aligned, «Как было» plays the same seconds without the zoom.
 The page shows the zoom at once, and the built reel crops the same window from the original.
