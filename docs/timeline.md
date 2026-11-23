@@ -101,6 +101,7 @@ One more constant gain over the whole reel hits -14 LUFS, and a limiter keeps th
 When the cut shows inserts or approved on-screen text, one more pass lays them over the levelled file.
 That pass copies the sound as it is.
 The studio draws each spoken word as a single word subtitle and the titles and key thoughts of texts.json in that pass.
+The subtitles carry the person's corrections.
 The studio draws a long subtitle word smaller to fit the Instagram box.
 A key thought that leaves the box stops the build.
 The joined file before levelling stays beside the reel as `before-<stamp>.mp4`.
