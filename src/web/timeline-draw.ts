@@ -247,11 +247,22 @@ const drawChrome = (
   parts.facts.textContent = open === undefined ? "" : `дубль ${open.block.takes.indexOf(open.take) + 1} из ${open.block.takes.length}`
 }
 
+const holdsSubtitleEdit = (holder: HTMLElement): boolean =>
+  [...holder.querySelectorAll<HTMLInputElement>(".subtitle-row input")].some((input) => input === document.activeElement || input.value !== input.defaultValue)
+
 const drawRows = (parts: Parts, displayed: ReadonlyArray<Placed>, open: Placed | undefined, shown: ReadonlyArray<Shown>, actions: Actions): void => {
-  const scrollLeft = parts.rowHolder.firstElementChild?.scrollLeft ?? 0
-  const row = blockRow(displayed, open?.block.id, shown, actions)
-  parts.rowHolder.replaceChildren(row)
-  row.scrollLeft = scrollLeft
+  if (!holdsSubtitleEdit(parts.rowHolder)) {
+    const scrollLeft = parts.rowHolder.firstElementChild?.scrollLeft ?? 0
+    const subtitleScroll = new Map([...parts.rowHolder.querySelectorAll<HTMLElement>(".slot[data-id]")].map((slot) =>
+      [slot.dataset.id, slot.querySelector(".subtitle-row")?.scrollLeft ?? 0]))
+    const row = blockRow(displayed, open?.block.id, shown, actions)
+    parts.rowHolder.replaceChildren(row)
+    row.scrollLeft = scrollLeft
+    for (const slot of row.querySelectorAll<HTMLElement>(".slot[data-id]")) {
+      const subtitles = slot.querySelector(".subtitle-row")
+      if (subtitles instanceof HTMLElement) subtitles.scrollLeft = subtitleScroll.get(slot.dataset.id) ?? 0
+    }
+  }
   parts.map.replaceChildren(...cutMap(displayed, open?.block.id, actions.select))
 }
 
@@ -351,7 +362,7 @@ export const frameOf = (parts: Parts): Frame => {
   const problem = h("p", { class: "error", role: "alert" })
   const empty = h("p", { class: "muted lane-empty" }, NO_ROW)
   const noPauses = h("p", { class: "muted" }, NO_PAUSES)
-  const ready = h("div", { class: "lanes", hidden: true }, parts.rowHolder)
+  const ready = h("div", { class: "lanes", hidden: true }, parts.rowHolder, h("p", { class: "subtitle-hint" }, "Субтитры: нажмите на слово, чтобы исправить его."))
   const frame = h("div", { class: "frame" }, parts.tag, parts.zones.overlay)
   const overview = h("nav", { class: "overview", "aria-label": "Весь ролик", hidden: true }, parts.map)
   const panels: Panels = {

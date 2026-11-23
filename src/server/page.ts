@@ -29,6 +29,7 @@ export const pageRoutes = Layer.unwrap(Effect.gen(function*() {
   const fonts = yield* Effect.forEach(FONTS, (name) =>
     Effect.map(fs.readFile(path.join(web, "fonts", name)), (bytes) =>
       HttpRouter.add("GET", `/fonts/${name}`, HttpServerResponse.uint8Array(bytes, { contentType: "font/woff2", headers: KEEP_A_DAY }))))
+  const subtitleFont = yield* fs.readFile(path.join(settings.root, "brands", "azalia", "fonts", "NotoSerifDisplay-Regular.ttf"))
   const page = HttpServerResponse.text(html, { contentType: "text/html; charset=utf-8", headers: NO_STORE })
   return Layer.mergeAll(
     HttpRouter.add("GET", HOME_PATH, page),
@@ -36,6 +37,7 @@ export const pageRoutes = Layer.unwrap(Effect.gen(function*() {
     HttpRouter.add("GET", `${PROJECT_PREFIX}:id`, page),
     HttpRouter.add("GET", "/app.css", HttpServerResponse.text(css, { contentType: "text/css; charset=utf-8", headers: NO_STORE })),
     HttpRouter.add("GET", "/app.js", HttpServerResponse.text(script, { contentType: "text/javascript; charset=utf-8", headers: NO_STORE })),
+    HttpRouter.add("GET", "/fonts/subtitle.ttf", HttpServerResponse.uint8Array(subtitleFont, { contentType: "font/ttf", headers: KEEP_A_DAY })),
     ...fonts
   )
 }))

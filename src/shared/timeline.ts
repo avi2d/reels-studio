@@ -73,6 +73,9 @@ export type InsertAnswer = typeof InsertAnswer.Type
 
 export const insertKey = (answered: InsertAnswer): string => answered.answer === "replace" ? `replace:${answered.picture}` : answered.answer
 
+const WordCorrection = Schema.Struct({ block: Schema.String, video: Schema.String, index: Schema.Int, text: Schema.String })
+export type WordCorrection = typeof WordCorrection.Type
+
 export const Edits = Schema.Struct({
   order: Schema.Array(Schema.String),
   deleted: Schema.Array(Schema.String),
@@ -80,7 +83,8 @@ export const Edits = Schema.Struct({
   pauses: Schema.Array(PauseRef),
   kept: Schema.optionalKey(Schema.Array(PauseRef)),
   joins: Schema.Array(AnsweredJoin).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
-  inserts: Schema.Array(InsertAnswer).pipe(Schema.withDecodingDefaultKey(Effect.succeed([])))
+  inserts: Schema.Array(InsertAnswer).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  subtitles: Schema.optionalKey(Schema.Array(WordCorrection))
 })
 export type Edits = typeof Edits.Type
 
@@ -332,6 +336,17 @@ export const mergeEdits = (base: Edits, local: Edits, current: Edits): Edits => 
     const entry = sameInsert(insertOf(base.inserts, id), insertOf(local.inserts, id)) ? insertOf(current.inserts, id) : insertOf(local.inserts, id)
     return entry === undefined ? [] : [entry]
   })
+  const corrections = [...(base.subtitles ?? []), ...(local.subtitles ?? []), ...(current.subtitles ?? [])]
+  const sameWord = (left: WordCorrection, right: WordCorrection): boolean =>
+    left.block === right.block && left.video === right.video && left.index === right.index
+  const keys = corrections.filter((one, index) => corrections.findIndex((other) => sameWord(one, other)) === index)
+  const findWord = (list: ReadonlyArray<WordCorrection>, key: WordCorrection): WordCorrection | undefined => list.find((one) => sameWord(one, key))
+  const subtitles = keys.flatMap((key) => {
+    const before = findWord(base.subtitles ?? [], key)
+    const mine = findWord(local.subtitles ?? [], key)
+    const chosen = before?.text === mine?.text ? findWord(current.subtitles ?? [], key) : mine
+    return chosen === undefined ? [] : [chosen]
+  })
   const choiceOf = (list: ReadonlyArray<Choice>, block: string): Choice | undefined => list.find((one) => one.block === block)
   const blocks = [...new Set([...base.chosen, ...local.chosen, ...current.chosen].map((one) => one.block))]
   const reordered = base.order.length !== local.order.length || base.order.some((id, index) => local.order[index] !== id)
@@ -347,6 +362,7 @@ export const mergeEdits = (base: Edits, local: Edits, current: Edits): Edits => 
     pauses: mergePauses(local.pauses, base.pauses, current.pauses),
     kept: mergePauses(local.kept ?? [], base.kept ?? [], current.kept ?? []),
     joins,
-    inserts
+    inserts,
+    ...(subtitles.length === 0 ? {} : { subtitles })
   }
 }
