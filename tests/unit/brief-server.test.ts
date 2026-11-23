@@ -21,7 +21,7 @@ test("a yes waits for a listening video instead of omitting it from the approved
     let videos: ReadonlyArray<VideoView> = [{ name: "a", state: "waiting" }]
     const timeline: TimelineView = {
       looks: [{ video: "a", state: "measured" }], faces: [],
-      pictures: [], inserts: { state: "none" },
+      pictures: [], inserts: { state: "none" }, texts: { state: "none" },
       timeline: { state: "ready", dropped: 0, edits: NO_EDITS, blocks: [{ id: "one", title: "One", takes: [{ video: "a", from: 0, to: 0, reason: "Clear" }] }] }
     }
     const media = mediaWith(() => videos, timeline)
@@ -56,7 +56,7 @@ test("a view after work completes reads the approval instead of returning a stal
       }),
       withoutGather: (_id, use) => use
     })
-    const timeline: TimelineView = { looks: [], faces: [], pictures: [], inserts: { state: "none" }, timeline: { state: "none" } }
+    const timeline: TimelineView = { looks: [], faces: [], pictures: [], inserts: { state: "none" }, texts: { state: "none" }, timeline: { state: "none" } }
     const dependencies = Layer.mergeAll(BunServices.layer, Layer.succeed(GatherState, state), Layer.succeed(Media, mediaWith(() => [], timeline).service), Layer.succeed(Projects, projectAt(dir)))
     const view = await Effect.runPromise(Effect.gen(function*() {
       const brief = yield* Brief
