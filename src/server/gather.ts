@@ -9,6 +9,13 @@ import { readGathered, readyTranscripts } from "./timeline-files.ts"
 
 const encodeGathered = Schema.encodeEffect(Schema.fromJsonString(Gathered))
 
+const remember = Effect.fnUntraced(function*(dir: string, videos: ReadonlyArray<string>, settled: ReadonlyArray<string>, failed: boolean, hash: string | undefined, shortened: string | undefined) {
+  const fs = yield* FileSystem.FileSystem
+  const file = `${dir}/gathered.json`
+  yield* fs.writeFileString(`${file}.new`, yield* encodeGathered({ videos, gazed: [...settled], failed, ...(hash === undefined ? {} : { hash }), ...(shortened === undefined ? {} : { shortened }) }))
+  yield* fs.rename(`${file}.new`, file)
+})
+
 export class Gather extends Context.Service<Gather, {
   readonly running: (id: string) => Effect.Effect<boolean>
   readonly failed: (id: string) => Effect.Effect<boolean>
@@ -28,12 +35,6 @@ export class Gather extends Context.Service<Gather, {
         const file = path.join(dir, "blocks.json")
         if (!(yield* fs.exists(file))) return undefined
         return yield* fs.readFileString(file)
-      })
-
-      const remember = Effect.fnUntraced(function*(dir: string, videos: ReadonlyArray<string>, settled: ReadonlyArray<string>, failed: boolean, hash: string | undefined, shortened: string | undefined) {
-        const file = path.join(dir, "gathered.json")
-        yield* fs.writeFileString(`${file}.new`, yield* encodeGathered({ videos, gazed: [...settled], failed, ...(hash === undefined ? {} : { hash }), ...(shortened === undefined ? {} : { shortened }) }))
-        yield* fs.rename(`${file}.new`, file)
       })
 
       const stepOf = Effect.fnUntraced(function*(id: string) {
@@ -93,17 +94,20 @@ export class Gather extends Context.Service<Gather, {
           Effect.tap((exit) => Exit.isFailure(exit) ? Effect.logError("the gathering failed", project.id, exit.cause) : Effect.void)
         ), { discard: true })
       })
-
       const guarded = Effect.exit(round).pipe(
         Effect.tap((exit) => Exit.isFailure(exit) ? Effect.logError("the gathering round failed", exit.cause) : Effect.void),
         Effect.andThen(Effect.sleep("3 seconds"))
       )
       yield* Effect.forkScoped(Effect.forever(guarded))
-
       const running = (id: string): Effect.Effect<boolean> => Effect.gen(function*() {
         if (yield* state.running(id)) return true
-        const { step } = yield* stepOf(id).pipe(Effect.orElseSucceed(() => ({ step: { kind: "wait" } as const })))
-        return step.kind !== "wait"
+        return yield* Effect.gen(function*() {
+          const { dir, step, heard, listening, gathered } = yield* stepOf(id)
+          if (step.kind !== "wait") return true
+          if (listening || heard.length === 0) return false
+          if (!shortenDue(yield* readBlocks(dir), gathered?.shortened)) return false
+          return (yield* media.timeline(id)).timeline.state === "ready"
+        }).pipe(Effect.orElseSucceed(() => false))
       })
       const failed = (id: string): Effect.Effect<boolean> => Effect.gen(function*() {
         const dir = yield* projects.folder(id).pipe(Effect.orElseSucceed(() => undefined))

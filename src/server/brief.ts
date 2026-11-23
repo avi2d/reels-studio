@@ -47,7 +47,8 @@ export class Brief extends Context.Service<Brief, {
       const view = Effect.fn("Brief.view")(function*(id: string) {
         const dir = yield* projects.folder(id)
         const brief = (yield* readText(path.join(dir, "brief.md")).pipe(Effect.provideService(FileSystem.FileSystem, fs), orBroken)) ?? ""
-        return { brief, plan: yield* plan(id), working: yield* state.working(id) }
+        const working = yield* state.working(id)
+        return { brief, plan: yield* plan(id), working }
       })
 
       const write = Effect.fn("Brief.write")(function*(id: string, text: string) {
@@ -67,7 +68,7 @@ export class Brief extends Context.Service<Brief, {
             const listening = videos.some((video) => video.state === "waiting")
             const settled = timelineView.looks.flatMap((look) => look.state === "waiting" ? [] : [look.video])
             const gathered = yield* readGathered(dir).pipe(Effect.provideService(FileSystem.FileSystem, fs), orBroken)
-            if (gatherStep(heard, settled, listening, gathered).kind === "wait" && !gazePending(heard, settled)) return
+            if (!listening && gatherStep(heard, settled, listening, gathered).kind === "wait" && !gazePending(heard, settled)) return
           }
           yield* Effect.sleep("1 second")
         }
