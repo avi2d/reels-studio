@@ -5,7 +5,7 @@ import { Effect } from "effect"
 import { filterPath, inkOf, readCaptions, readTexts } from "../../src/server/captions.ts"
 import { fitWord, NO_CAPTIONS, shownTexts, textPlaces } from "../../src/shared/captions.ts"
 import { readApproval } from "../../src/server/approval.ts"
-import { NO_EDITS } from "../../src/shared/timeline.ts"
+import { NO_EDITS, type Block } from "../../src/shared/timeline.ts"
 
 test("a long subtitle word shrinks instead of reaching under the Instagram button column", () => {
   const word = { text: "высокопрофессиональный", start: 0, end: 1 }
@@ -54,6 +54,23 @@ test("changed or newly added text cannot reach captions under an older approval"
     await writeFile(`${dir}/approval.json`, JSON.stringify({ plan: approval.plan, at: approval.at, done: [] }))
     expect(await read()).toEqual(NO_CAPTIONS)
     expect(await state()).toBe("proposed")
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("the built subtitles carry a stored word correction instead of the transcript spelling", async () => {
+  await mkdir("node_modules/.cache", { recursive: true })
+  const dir = await mkdtemp("node_modules/.cache/caption-correction-")
+  const clips = [{ block: "a", video: "a.mov", start: 0, end: 3 }]
+  const transcripts = new Map([["a.mov", { duration: 3, words: [{ text: "А", start: 0, end: 1 }, { text: "вас", start: 1, end: 2 }, { text: "тоже", start: 2, end: 3 }] }]])
+  const blocks: ReadonlyArray<Block> = [{ id: "a", title: "a", takes: [{ video: "a.mov", from: 0, to: 2, reason: "" }] }]
+  const edits = { ...NO_EDITS, subtitles: [{ block: "a", video: "a.mov", index: 1, text: "вашим" }] }
+  try {
+    await writeFile(`${dir}/plan.md`, "план")
+    await writeFile(`${dir}/approval.json`, JSON.stringify({ plan: "план", texts: null, at: "2026-11-20T10:00:00.000Z", done: [] }))
+    const captions = await Effect.runPromise(readCaptions(dir, clips, transcripts, blocks, edits).pipe(Effect.provide(BunFileSystem.layer)))
+    expect(captions.words.map((word) => word.text)).toEqual(["А", "вашим", "тоже"])
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

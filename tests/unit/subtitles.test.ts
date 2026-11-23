@@ -48,12 +48,6 @@ test("subtitle correction does not process words outside the cut", () => {
   expect(words.map((word) => word.text)).toEqual(["two"])
 })
 
-test("a corrected word appears in the cut instead of the transcript spelling", () => {
-  const clips = [{ video: "a.mov", start: 1, end: 2 }]
-  const words = subtitleWords(clips, transcripts, (_clip, index, text) => index === 1 ? "вашим" : text)
-  expect(words.map((word) => word.text)).toEqual(["А", "вашим"])
-})
-
 test("a word the cut removed never shows, and the words after the cut move earlier by the removed stretch", () => {
   const clips = [{ video: "a.mov", start: 1.0, end: 1.95 }, { video: "a.mov", start: 2.9, end: 3.8 }]
   expect(subtitleWords(clips, transcripts, (_clip, _index, text) => text).map((word) => word.text)).toEqual(["А", "вас", "бесит"])
