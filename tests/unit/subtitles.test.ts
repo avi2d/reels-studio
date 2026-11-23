@@ -33,6 +33,21 @@ test("a correction reaches an unambiguous matching take but not repeated words",
   expect(correctedWord(blocks, speech, corrections, "b", "c", 1)).toBe("мир")
 })
 
+test("subtitle correction does not process words outside the cut", () => {
+  const speech = new Map([["a", { duration: 3, words: [
+    { start: 0, end: 1, text: "one" },
+    { start: 1, end: 2, text: "two" },
+    { start: 2, end: 3, text: "three" }
+  ] }]])
+  const seen: Array<number> = []
+  const words = subtitleWords([{ video: "a", start: 1, end: 2 }], speech, (_clip, index, text) => {
+    seen.push(index)
+    return text
+  })
+  expect(seen).toEqual([1])
+  expect(words.map((word) => word.text)).toEqual(["two"])
+})
+
 test("a corrected word appears in the cut instead of the transcript spelling", () => {
   const clips = [{ video: "a.mov", start: 1, end: 2 }]
   const words = subtitleWords(clips, transcripts, (_clip, index, text) => index === 1 ? "вашим" : text)

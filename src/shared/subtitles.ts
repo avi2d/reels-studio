@@ -9,6 +9,7 @@ export const correctedWord = (
   const original = words[index]?.text ?? ""
   const direct = corrections.find((one) => one.block === block && one.video === video && one.index === index)
   if (direct !== undefined) return direct.text
+  if (!corrections.some((one) => one.block === block)) return original
   const takes = blocks.find((one) => one.id === block)?.takes ?? []
   const key = bareWord(original).toLocaleLowerCase()
   const uniqueInContainingTakes = (source: string, at: number): boolean => {
@@ -49,8 +50,10 @@ export const subtitleWords = <T extends Placed>(
   let at = 0
   for (const clip of clips) {
     const words = (transcripts.get(clip.video)?.words ?? [])
-      .map((word, index) => ({ ...word, text: bareWord(textOf(clip, index, word.text)) }))
-      .filter((word) => word.end > clip.start && word.start < clip.end && word.text !== "")
+      .map((word, index) => ({ word, index }))
+      .filter(({ word }) => word.end > clip.start && word.start < clip.end)
+      .map(({ word, index }) => ({ ...word, text: bareWord(textOf(clip, index, word.text)) }))
+      .filter((word) => word.text !== "")
     words.forEach((word, index) => {
       const next = words[index + 1]
       const from = Math.max(word.start, clip.start)
