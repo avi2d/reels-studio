@@ -1,36 +1,46 @@
 import { Data, Effect, FileSystem, Option, Path, Schema } from "effect"
-import { assOf, fitWord, hasCaptions, NO_CAPTIONS, shownTexts, TextsFile, type CaptionPart, type Captions } from "../shared/captions.ts"
+import { assOf, fitWord, hasCaptions, NO_CAPTIONS, shownTexts, type CaptionPart, type Captions } from "../shared/captions.ts"
 import type { Transcript } from "../shared/plan.ts"
 import { subtitleWords } from "../shared/subtitles.ts"
+import { TextsFile, type PlannedTexts } from "../shared/texts.ts"
 import type { Clip } from "../shared/timeline.ts"
 import { fitsArea, textAreaOf } from "../shared/zones.ts"
 import { REEL_RATE } from "./media-commands.ts"
 import { run } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
-import { readApproval } from "./approval.ts"
+import { readApproval, readText } from "./approval.ts"
 
 const decodeTexts = Schema.decodeUnknownOption(Schema.fromJsonString(TextsFile))
 const unreadableTexts = new Map<string, string>()
 
-const readTexts = Effect.fnUntraced(function*(written: string | undefined, file: string) {
-  if (written === undefined) {
+const textsOf = Effect.fnUntraced(function*(texts: string | undefined, dir: string) {
+  const file = `${dir}/texts.json`
+  if (texts === undefined) {
     unreadableTexts.delete(file)
-    return []
+    return { state: "none" } satisfies PlannedTexts
   }
-  const decoded = Option.getOrUndefined(decodeTexts(written))
-  if (decoded !== undefined) unreadableTexts.delete(file)
-  else if (unreadableTexts.get(file) !== written) {
+  const decoded = Option.getOrUndefined(decodeTexts(texts))
+  if (decoded !== undefined) {
+    unreadableTexts.delete(file)
+    return { state: "ready", planned: decoded.texts } satisfies PlannedTexts
+  }
+  if (unreadableTexts.get(file) !== texts) {
     if (unreadableTexts.size >= 100) unreadableTexts.delete(unreadableTexts.keys().next().value ?? "")
-    unreadableTexts.set(file, written)
+    unreadableTexts.set(file, texts)
     yield* Effect.logError("the on-screen texts are unreadable", file)
   }
-  return decoded?.texts ?? []
+  return { state: "unreadable" } satisfies PlannedTexts
+})
+
+export const readTexts = Effect.fnUntraced(function*(dir: string) {
+  return yield* textsOf(yield* readText(`${dir}/texts.json`), dir)
 })
 
 export const readCaptions = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, transcripts: ReadonlyMap<string, Transcript>) {
-  const { plan, texts } = yield* readApproval(dir)
-  if (plan.state !== "approved") return NO_CAPTIONS
-  return { words: subtitleWords(clips, transcripts), texts: shownTexts(yield* readTexts(texts, `${dir}/texts.json`), clips, transcripts) } satisfies Captions
+  const approval = yield* readApproval(dir)
+  if (approval.plan.state !== "approved") return NO_CAPTIONS
+  const texts = yield* textsOf(approval.texts, dir)
+  return { words: subtitleWords(clips, transcripts), texts: texts.state === "ready" ? shownTexts(texts.planned, clips, transcripts) : [] } satisfies Captions
 })
 
 // Two levels: the option value inside the filter, then the filter inside the graph.

@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect"
 import type { Span, Transcript } from "./plan.ts"
+import { PlannedTexts } from "./texts.ts"
 
 export const MIN_PAUSE = 0.5
 export const PAUSE_REST = 0.2
@@ -118,6 +119,7 @@ export const TimelineView = Schema.Struct({
   faces: Schema.Array(VideoFaces),
   pictures: Schema.Array(Schema.String),
   inserts: PlannedInserts,
+  texts: PlannedTexts,
   timeline: Schema.Union([
     Schema.Struct({ state: Schema.Literals(["none", "unreadable"]) }),
     Schema.Struct({ state: Schema.Literal("ready"), blocks: Schema.Array(Block), dropped: Schema.Int, edits: Edits })

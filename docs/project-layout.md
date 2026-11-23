@@ -20,8 +20,9 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/shared/inserts.ts` | Where each insert stands in the cut, its shape, and what the page and the build show of it: a picture, a clip or a PDF page |
 | `src/shared/zones.ts` | The pixels of the frame each player covers and the box where text stays visible |
 | `src/shared/subtitles.ts` | When each spoken word of the cut shows as a one-word subtitle |
-| `src/shared/captions.ts` | The key thoughts of `texts.json` in the cut, and the subtitle file libass draws |
-| `src/server/captions.ts` | Reads the approved texts, shrinks long subtitle words, and measures the ink against the box before the build |
+| `src/shared/texts.ts` | The format of `texts.json` and the read key thoughts the page gets, used by the server and the page |
+| `src/shared/captions.ts` | The key thoughts of `texts.json` in the cut, the reason each dropped one is not shown, and the subtitle file libass draws |
+| `src/server/captions.ts` | Reads `texts.json` for the page and the approved texts for the build, shrinks long subtitle words, and measures the ink against the box before the build |
 | `src/server/approval.ts` | Reads the saved yes and checks it against the plan and the on-screen texts |
 | `src/shared/reel.ts` | The state of a reel build and of the built file, used by the server and the page |
 | `src/shared/gather.ts` | When the studio asks the chat model to gather the blocks by itself |
