@@ -5,7 +5,14 @@ import { icon } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatLength, formatPause } from "./format.ts"
 
+export interface EditableSubtitle {
+  readonly index: number
+  readonly text: string
+}
+
 export interface RowActions {
+  readonly subtitlesOf: (one: Placed) => ReadonlyArray<EditableSubtitle>
+  readonly correctSubtitle: (block: string, video: string, index: number, text: string) => void
   readonly select: (block: string) => void
   readonly textOf: (take: Take) => string
   readonly reorder: (blocks: ReadonlyArray<string>) => void
@@ -174,7 +181,20 @@ const slotOf = (row: HTMLElement, one: Placed, at: At, selected: string | undefi
     h("span", { class: "said", title: actions.textOf(take) }, actions.textOf(take)),
     h("div", { class: block.id === selected ? "clip selected" : "clip" }, dragHandle(row, slot, block.title, block.id, selected, actions), pick),
     h("div", { class: "gaps" }, ...one.pauses.flatMap((pause) => pauseMark(one, pause, length, actions) ?? [])),
-    h("div", { class: "inserts" }, ...insertMarks(shown, { start: at.start, end: at.start + length }, actions)))
+    h("div", { class: "inserts" }, ...insertMarks(shown, { start: at.start, end: at.start + length }, actions)),
+    h("div", { class: "subtitle-row", "aria-label": "Субтитры" }, ...actions.subtitlesOf(one).map((word) => h("input", {
+      type: "text",
+      value: word.text,
+      size: String(Math.max(2, Math.min(16, word.text.length))),
+      "aria-label": `Субтитр «${word.text}»`,
+      "data-key": `subtitle:${block.id}:${take.video}:${word.index}`,
+      change: (event) => {
+        const input = event.currentTarget
+        if (!(input instanceof HTMLInputElement)) return
+        if (input.value.trim() === "") input.value = word.text
+        else if (input.value.trim() !== word.text) actions.correctSubtitle(block.id, take.video, word.index, input.value)
+      }
+    }))))
   return slot
 }
 
@@ -182,5 +202,5 @@ export const blockRow = (placed: ReadonlyArray<Placed>, selected: string | undef
   const row = h("ol", { class: shown.length === 0 ? "blocks" : "blocks with-inserts" })
   const starts = placed.map((_, index) => lengthOf(placed.slice(0, index).flatMap((one) => one.spans)))
   row.append(...placed.map((one, index) => slotOf(row, one, { index, start: starts[index] ?? 0 }, selected, shown, actions)))
-  return row
+  return h("div", {}, row, h("p", { class: "subtitle-hint" }, "Субтитры: нажмите на слово, чтобы исправить его."))
 }

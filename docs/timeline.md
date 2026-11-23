@@ -67,6 +67,10 @@ A pause the person returns stays in the `kept` list of `timeline.json`, and the 
 Removing the pause by hand drops it from that list.
 A deleted block and a removed pause stay listed on the page, and one tap returns each.
 The player shows the chosen takes in order and skips the removed pauses and the cuts at answered places.
+The subtitle row shows the words of those takes, and each word can be corrected by typing over it.
+A correction stays with its original word and appears in another take of the same block only when that word occurs once in each take.
+If more than one correction matches the same word, the other take keeps its transcript spelling.
+The player shows the corrected words over the picture as the reel plays.
 Each preview holds a key frame every half second.
 The studio re-encodes a preview made with the old key frame distance by itself in the background.
 The old preview stays playable until the new one is complete.
@@ -276,7 +280,7 @@ Each video folder holds these next to `plan.json`:
 | `blocks.json` | The blocks and their takes, written by the chat model |
 | `inserts.json` | The pictures, clips and PDF pages to show over phrases, written by the chat model |
 | `texts.json` | The titles and key thoughts to show over phrases, written by the chat model |
-| `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses and the answers to the places to check and to the inserts |
+| `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses, the subtitle corrections and the answers to the places to check and to the inserts |
 | `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
 | `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |

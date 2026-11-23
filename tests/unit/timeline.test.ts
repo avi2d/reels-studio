@@ -8,6 +8,13 @@ import {
   type Block, type Edits, type Gaze, type Pause, type Placed
 } from "../../src/shared/timeline.ts"
 
+test("merging subtitle edits does not discard another editor's word", () => {
+  const first = { block: "b", video: "v", index: 1, text: "one" }
+  const second = { block: "b", video: "v", index: 2, text: "two" }
+  const merged = mergeEdits(NO_EDITS, { ...NO_EDITS, subtitles: [first] }, { ...NO_EDITS, subtitles: [second] })
+  expect(merged.subtitles?.toSorted((left, right) => left.index - right.index)).toEqual([first, second])
+})
+
 const word = (start: number, end: number, text: string) => ({ start, end, text })
 
 const first: Transcript = {

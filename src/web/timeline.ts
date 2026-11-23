@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { aroundInsert, insertPlaces, lookAt, reelWithin, shiftedBy, shownInserts, withInsert, type InsertLook, type Shown } from "../shared/inserts.ts"
 import { AROUND_JOIN_SECONDS, aroundJoin, cutOf, facesByVideo, withAnswer, withCover } from "../shared/joins.ts"
 import { lengthOf } from "../shared/plan.ts"
+import type { ShownWord } from "../shared/subtitles.ts"
 import {
   assemble, clipsOf, mergeEdits, NO_EDITS, playedSpans, withChoice, withDeleted, withManualPauses, within,
   type Clip, type Edits, type Placed, type Take
@@ -18,6 +19,7 @@ import {
 } from "./timeline-draw.ts"
 import { onKeys } from "./timeline-keys.ts"
 import { POLL_MS, saver, takeServer, type Ticket } from "./timeline-save.ts"
+import { correctSubtitle, editableSubtitles, paintSubtitle, playback } from "./timeline-subtitles.ts"
 
 export type { Status } from "./timeline-draw.ts"
 
@@ -36,11 +38,6 @@ const takeClips = (loaded: Loaded | undefined, edits: Edits, block: string, take
 const neighbourOf = (placed: ReadonlyArray<Placed>, block: string): string | undefined => {
   const at = placed.findIndex((one) => one.block.id === block)
   return (placed[at + 1] ?? placed[at - 1])?.block.id
-}
-
-const clipsFrom = (clips: ReadonlyArray<Clip>, block: string): ReadonlyArray<Clip> => {
-  const first = clips.findIndex((clip) => clip.block === block)
-  return first === -1 ? [] : clips.slice(first)
 }
 
 export { takeServer, type Ticket }
@@ -69,6 +66,7 @@ interface State {
   playing: Playing | undefined
   shown: ReadonlyArray<Shown>
   overlay: ReadonlyArray<Shown>
+  words: ReadonlyArray<ShownWord>
   drawn: string
   content: string
   pending: { readonly loaded: Loaded; readonly ticket: Ticket } | undefined
@@ -84,7 +82,7 @@ const revealWithinStrip = (root: HTMLElement, selector: string): void => {
   else if (right > bounds.right) strip.scrollLeft += right - bounds.right
 }
 
-const display = (parts: Parts, state: State, paint: (look: InsertLook | undefined) => void) => {
+const display = (parts: Parts, state: State, paint: (look: InsertLook | undefined) => void, subtitle: HTMLElement) => {
   const placedNow = (): ReadonlyArray<Placed> => placedOf(state.loaded, state.edits)
   const reelNow = (): ReadonlyArray<Clip> => state.loaded === undefined ? [] : reelOf(state.loaded, state.edits)
 
@@ -120,6 +118,7 @@ const display = (parts: Parts, state: State, paint: (look: InsertLook | undefine
     const before = state.playing?.clip.block
     state.playing = playing
     paint(playing === undefined ? undefined : lookAt(state.overlay, playing.elapsed))
+    paintSubtitle(subtitle, playing === undefined ? "" : state.words.find((word) => playing.elapsed >= word.start && playing.elapsed < word.end)?.text ?? "")
     showClock()
     const now = playing?.clip.block
     if (before === now) return
@@ -228,6 +227,8 @@ const actionsOf = (
   const { hooks, projectId, state, view } = card
   return {
     change,
+    subtitlesOf: (one) => editableSubtitles(state.loaded, state.edits, one),
+    correctSubtitle: (block, video, index, text) => { change(correctSubtitle(state.edits, block, video, index, text)) },
     textOf: (take) => textOf(state.loaded?.transcripts ?? new Map(), take),
     select: (block) => {
       select(block)
@@ -288,26 +289,16 @@ const showLoaded = (card: Card, draw: () => void, loaded: Loaded, ticket: Ticket
   draw()
 }
 
-const hearOn = (
-  hold: { base: number | undefined; overlay: ReadonlyArray<Shown> },
-  play: (clips: ReadonlyArray<Clip>) => void,
-  clips: ReadonlyArray<Clip>,
-  shown: ReadonlyArray<Shown>
-): void => {
-  hold.base = undefined
-  hold.overlay = shown
-  play(clips)
-}
-
 export const timelineCard = (projectId: string, hooks: Hooks, levelAt: LevelAt): { readonly panels: Panels; readonly refresh: () => void; readonly stop: () => void; readonly flush: () => Promise<boolean>; readonly busy: () => boolean } => {
   const parts = partsOf()
   const ui = frameOf(parts)
   const state: State =
-    { loaded: undefined, edits: NO_EDITS, acked: NO_EDITS, changes: 0, history: [], undone: [], selected: undefined, open: undefined, base: undefined, playing: undefined, shown: [], overlay: [], drawn: "", content: "", pending: undefined }
+    { loaded: undefined, edits: NO_EDITS, acked: NO_EDITS, changes: 0, history: [], undone: [], selected: undefined, open: undefined, base: undefined, playing: undefined, shown: [], overlay: [], words: [], drawn: "", content: "", pending: undefined }
   const overlay = insertView(Api.insertUrls(projectId))
-  const view = display(parts, state, overlay.paint)
+  const subtitle = h("div", { class: "subtitle-preview", "aria-hidden": "true" })
+  const view = display(parts, state, overlay.paint, subtitle)
   const player = montage(projectId, view.markPlaying, levelAt)
-  ui.frame.prepend(player.node, overlay.node)
+  ui.frame.prepend(player.node, overlay.node, subtitle)
   const saving = saver(projectId, ui.problem, () => state.edits, () => state.acked, (sent, merged) => {
     state.acked = merged
     state.edits = mergeEdits(sent, state.edits, merged)
@@ -330,16 +321,7 @@ export const timelineCard = (projectId: string, hooks: Hooks, levelAt: LevelAt):
     show(deferred.loaded, deferred.ticket)
   }
 
-  const hear = (clips: ReadonlyArray<Clip>, shown: ReadonlyArray<Shown>): void =>
-    hearOn(state, (cut) => player.play(cut), clips, shown)
-
-  const watch = (from: string): void => {
-    const clips = view.reelNow()
-    const cut = clipsFrom(clips, from)
-    state.base = lengthOf(clips) - lengthOf(cut)
-    state.overlay = shiftedBy(state.shown, state.base)
-    player.play(cut)
-  }
+  const { hear, watch } = playback(state, view.reelNow, player)
 
   const apply = (edits: Edits): void => {
     player.stop()

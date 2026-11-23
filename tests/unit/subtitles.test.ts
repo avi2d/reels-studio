@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { bareWord, subtitleWords } from "../../src/shared/subtitles.ts"
+import { bareWord, correctedWord, subtitleWords } from "../../src/shared/subtitles.ts"
 
 const transcript = {
   duration: 10,
@@ -12,6 +12,32 @@ const transcript = {
   ]
 }
 const transcripts = new Map([["a.mov", transcript]])
+
+test("a correction reaches an unambiguous matching take but not repeated words", () => {
+  const speech = new Map([
+    ["a", { duration: 3, words: [{ start: 0, end: 1, text: "привет" }, { start: 1, end: 2, text: "мир" }, { start: 2, end: 3, text: "мир" }] }],
+    ["b", { duration: 3, words: [{ start: 0, end: 1, text: "привет" }, { start: 1, end: 2, text: "мир" }] }],
+    ["c", { duration: 3, words: [{ start: 0, end: 1, text: "мир" }, { start: 1, end: 2, text: "мир" }] }]
+  ])
+  const blocks = [{ id: "b", title: "b", takes: [
+    { video: "a", from: 0, to: 1, reason: "" },
+    { video: "a", from: 2, to: 2, reason: "" },
+    { video: "b", from: 0, to: 1, reason: "" },
+    { video: "c", from: 0, to: 1, reason: "" }
+  ] }] as const
+  const corrections = [{ block: "b", video: "a", index: 1, text: "свет" }]
+  expect(correctedWord(blocks, speech, corrections, "b", "a", 1)).toBe("свет")
+  expect(correctedWord(blocks, speech, corrections, "b", "a", 2)).toBe("свет")
+  expect(correctedWord(blocks, speech, corrections, "b", "b", 1)).toBe("свет")
+  expect(correctedWord(blocks, speech, corrections, "b", "c", 0)).toBe("мир")
+  expect(correctedWord(blocks, speech, corrections, "b", "c", 1)).toBe("мир")
+})
+
+test("a corrected word appears in the cut instead of the transcript spelling", () => {
+  const clips = [{ video: "a.mov", start: 1, end: 2 }]
+  const words = subtitleWords(clips, transcripts, (_clip, index, text) => index === 1 ? "вашим" : text)
+  expect(words.map((word) => word.text)).toEqual(["А", "вашим"])
+})
 
 test("a word the cut removed never shows, and the words after the cut move earlier by the removed stretch", () => {
   const clips = [{ video: "a.mov", start: 1.0, end: 1.95 }, { video: "a.mov", start: 2.9, end: 3.8 }]

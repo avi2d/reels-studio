@@ -246,10 +246,17 @@ const drawChrome = (
 }
 
 const drawRows = (parts: Parts, displayed: ReadonlyArray<Placed>, open: Placed | undefined, shown: ReadonlyArray<Shown>, actions: Actions): void => {
-  const scrollLeft = parts.rowHolder.firstElementChild?.scrollLeft ?? 0
+  const scrollLeft = parts.rowHolder.querySelector(".blocks")?.scrollLeft ?? 0
+  const subtitleScroll = new Map([...parts.rowHolder.querySelectorAll<HTMLElement>(".slot[data-id]")].map((slot) =>
+    [slot.dataset.id, slot.querySelector(".subtitle-row")?.scrollLeft ?? 0]))
   const row = blockRow(displayed, open?.block.id, shown, actions)
   parts.rowHolder.replaceChildren(row)
-  row.scrollLeft = scrollLeft
+  const blocks = row.querySelector(".blocks")
+  if (blocks instanceof HTMLElement) blocks.scrollLeft = scrollLeft
+  for (const slot of row.querySelectorAll<HTMLElement>(".slot[data-id]")) {
+    const subtitles = slot.querySelector(".subtitle-row")
+    if (subtitles instanceof HTMLElement) subtitles.scrollLeft = subtitleScroll.get(slot.dataset.id) ?? 0
+  }
   parts.map.replaceChildren(...cutMap(displayed, open?.block.id, actions.select))
 }
 
