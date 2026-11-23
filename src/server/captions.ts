@@ -11,12 +11,24 @@ import { Settings } from "./settings.ts"
 import { readApproval, readText } from "./approval.ts"
 
 const decodeTexts = Schema.decodeUnknownOption(Schema.fromJsonString(TextsFile))
+const unreadableTexts = new Map<string, string>()
 
 const textsOf = Effect.fnUntraced(function*(texts: string | undefined, dir: string) {
-  if (texts === undefined) return { state: "none" } satisfies PlannedTexts
+  const file = `${dir}/texts.json`
+  if (texts === undefined) {
+    unreadableTexts.delete(file)
+    return { state: "none" } satisfies PlannedTexts
+  }
   const decoded = Option.getOrUndefined(decodeTexts(texts))
-  if (decoded !== undefined) return { state: "ready", planned: decoded.texts } satisfies PlannedTexts
-  yield* Effect.logError("the on-screen texts are unreadable", `${dir}/texts.json`)
+  if (decoded !== undefined) {
+    unreadableTexts.delete(file)
+    return { state: "ready", planned: decoded.texts } satisfies PlannedTexts
+  }
+  if (unreadableTexts.get(file) !== texts) {
+    if (unreadableTexts.size >= 100) unreadableTexts.delete(unreadableTexts.keys().next().value ?? "")
+    unreadableTexts.set(file, texts)
+    yield* Effect.logError("the on-screen texts are unreadable", file)
+  }
   return { state: "unreadable" } satisfies PlannedTexts
 })
 
