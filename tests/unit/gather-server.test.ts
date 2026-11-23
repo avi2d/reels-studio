@@ -20,7 +20,7 @@ test("polling stays active after chat writes changed blocks until pause shorteni
     const changed = '{"blocks":[{"id":"one","title":"One","takes":[]}]}'
     await writeFile(join(dir, "gathered.json"), JSON.stringify({ videos: ["a"], gazed: ["a"], shortened: blocksHash(previous) }))
     await writeFile(join(dir, "blocks.json"), changed)
-    const timeline: TimelineView = { looks: [{ video: "a", state: "measured" }], faces: [], pictures: [], inserts: { state: "none" }, timeline: { state: "ready", blocks: [], dropped: 0, edits: NO_EDITS } }
+    const timeline: TimelineView = { looks: [{ video: "a", state: "measured" }], faces: [], pictures: [], inserts: { state: "none" }, texts: { state: "none" }, timeline: { state: "ready", blocks: [], dropped: 0, edits: NO_EDITS } }
     const media = mediaWith(() => [{ name: "a", state: "ready", transcript: { duration: 1, words: [] } }], timeline)
     const chat = Chat.of({
       history: () => Effect.die("unexpected service call"), send: () => Effect.die("unexpected service call"),
@@ -44,7 +44,7 @@ test("polling stays idle when changed blocks cannot shorten because the timeline
     const changed = '{unreadable'
     await writeFile(join(dir, "gathered.json"), JSON.stringify({ videos: ["a"], gazed: ["a"], failed: true, hash: blocksHash(changed), shortened: blocksHash(previous) }))
     await writeFile(join(dir, "blocks.json"), changed)
-    const timeline: TimelineView = { looks: [{ video: "a", state: "measured" }], faces: [], pictures: [], inserts: { state: "none" }, timeline: { state: "unreadable" } }
+    const timeline: TimelineView = { looks: [{ video: "a", state: "measured" }], faces: [], pictures: [], inserts: { state: "none" }, texts: { state: "none" }, timeline: { state: "unreadable" } }
     const media = mediaWith(() => [{ name: "a", state: "ready", transcript: { duration: 1, words: [] } }], timeline)
     const chat = Chat.of({
       history: () => Effect.die("unexpected service call"), send: () => Effect.die("unexpected service call"),
