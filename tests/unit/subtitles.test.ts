@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { bareWord, subtitleWords } from "../../src/shared/subtitles.ts"
+import { bareWord, correctedWord, subtitleWords } from "../../src/shared/subtitles.ts"
 
 const transcript = {
   duration: 10,
@@ -13,28 +13,63 @@ const transcript = {
 }
 const transcripts = new Map([["a.mov", transcript]])
 
+test("a correction reaches an unambiguous matching take but not repeated words", () => {
+  const speech = new Map([
+    ["a", { duration: 3, words: [{ start: 0, end: 1, text: "привет" }, { start: 1, end: 2, text: "мир" }, { start: 2, end: 3, text: "мир" }] }],
+    ["b", { duration: 3, words: [{ start: 0, end: 1, text: "привет" }, { start: 1, end: 2, text: "мир" }] }],
+    ["c", { duration: 3, words: [{ start: 0, end: 1, text: "мир" }, { start: 1, end: 2, text: "мир" }] }]
+  ])
+  const blocks = [{ id: "b", title: "b", takes: [
+    { video: "a", from: 0, to: 1, reason: "" },
+    { video: "a", from: 2, to: 2, reason: "" },
+    { video: "b", from: 0, to: 1, reason: "" },
+    { video: "c", from: 0, to: 1, reason: "" }
+  ] }] as const
+  const corrections = [{ block: "b", video: "a", index: 1, text: "свет" }]
+  expect(correctedWord(blocks, speech, corrections, "b", "a", 1)).toBe("свет")
+  expect(correctedWord(blocks, speech, corrections, "b", "a", 2)).toBe("свет")
+  expect(correctedWord(blocks, speech, corrections, "b", "b", 1)).toBe("свет")
+  expect(correctedWord(blocks, speech, corrections, "b", "c", 0)).toBe("мир")
+  expect(correctedWord(blocks, speech, corrections, "b", "c", 1)).toBe("мир")
+})
+
+test("subtitle correction does not process words outside the cut", () => {
+  const speech = new Map([["a", { duration: 3, words: [
+    { start: 0, end: 1, text: "one" },
+    { start: 1, end: 2, text: "two" },
+    { start: 2, end: 3, text: "three" }
+  ] }]])
+  const seen: Array<number> = []
+  const words = subtitleWords([{ video: "a", start: 1, end: 2 }], speech, (_clip, index, text) => {
+    seen.push(index)
+    return text
+  })
+  expect(seen).toEqual([1])
+  expect(words.map((word) => word.text)).toEqual(["two"])
+})
+
 test("a word the cut removed never shows, and the words after the cut move earlier by the removed stretch", () => {
   const clips = [{ video: "a.mov", start: 1.0, end: 1.95 }, { video: "a.mov", start: 2.9, end: 3.8 }]
-  expect(subtitleWords(clips, transcripts).map((word) => word.text)).toEqual(["А", "вас", "бесит"])
-  const moved = subtitleWords(clips, transcripts)[2]
+  expect(subtitleWords(clips, transcripts, (_clip, _index, text) => text).map((word) => word.text)).toEqual(["А", "вас", "бесит"])
+  const moved = subtitleWords(clips, transcripts, (_clip, _index, text) => text)[2]
   expect(moved?.start).toBeCloseTo(0.95 + 0.1)
   expect(moved?.end).toBeCloseTo(0.95 + 0.9)
 })
 
 test("a word stays until the next word starts rather than vanishing in the short gap between them", () => {
-  const words = subtitleWords([{ video: "a.mov", start: 0.9, end: 2.6 }], transcripts)
+  const words = subtitleWords([{ video: "a.mov", start: 0.9, end: 2.6 }], transcripts, (_clip, _index, text) => text)
   expect(words[0]?.end).toBeCloseTo(words[1]?.start ?? 0)
   expect(words[1]?.end).toBeCloseTo(words[2]?.start ?? 0)
 })
 
 test("a word before a long silence leaves the screen 0.4 s after it is said, not when the next word starts", () => {
-  const words = subtitleWords([{ video: "a.mov", start: 2.9, end: 5.6 }], transcripts)
+  const words = subtitleWords([{ video: "a.mov", start: 2.9, end: 5.6 }], transcripts, (_clip, _index, text) => text)
   expect(words[0]?.text).toBe("бесит")
   expect(words[0]?.end).toBeCloseTo(3.6 + 0.4 - 2.9)
 })
 
 test("no two words stand on the screen at once", () => {
-  const words = subtitleWords([{ video: "a.mov", start: 0, end: 10 }, { video: "a.mov", start: 0, end: 10 }], transcripts)
+  const words = subtitleWords([{ video: "a.mov", start: 0, end: 10 }, { video: "a.mov", start: 0, end: 10 }], transcripts, (_clip, _index, text) => text)
   words.slice(1).forEach((word, index) => { expect(word.start).toBeGreaterThanOrEqual(words[index]?.end ?? 0) })
 })
 

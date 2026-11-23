@@ -103,7 +103,7 @@ const plain = (text: string): string => text.replace(/[{}\\]/gu, "").replace(/\s
 
 const styleLine = (role: keyof typeof FACES): string => {
   const face = FACES[role]
-  return `Style: ${role},${face.name},${face.size},${face.colour},${face.colour},&H00000000,&H00000000,0,${face.italic ? -1 : 0},0,0,100,100,0,0,1,0,0,7,0,0,0,1`
+  return `Style: ${role},${face.name},${face.size},${face.colour},${face.colour},&H00000000,&H00000000,0,${face.italic ? -1 : 0},0,0,100,100,0,0,1,${role === "word" ? 3 : 0},0,7,0,0,0,1`
 }
 
 const header = [

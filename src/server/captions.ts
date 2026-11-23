@@ -1,9 +1,9 @@
 import { Data, Effect, FileSystem, Option, Path, Schema } from "effect"
 import { assOf, fitWord, hasCaptions, NO_CAPTIONS, shownTexts, type CaptionPart, type Captions } from "../shared/captions.ts"
 import type { Transcript } from "../shared/plan.ts"
-import { subtitleWords } from "../shared/subtitles.ts"
+import { correctedWord, subtitleWords } from "../shared/subtitles.ts"
 import { TextsFile, type PlannedTexts } from "../shared/texts.ts"
-import type { Clip } from "../shared/timeline.ts"
+import type { Block, Clip, Edits } from "../shared/timeline.ts"
 import { fitsArea, textAreaOf } from "../shared/zones.ts"
 import { REEL_RATE } from "./media-commands.ts"
 import { run } from "./media-jobs.ts"
@@ -36,11 +36,11 @@ export const readTexts = Effect.fnUntraced(function*(dir: string) {
   return yield* textsOf(yield* readText(`${dir}/texts.json`), dir)
 })
 
-export const readCaptions = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, transcripts: ReadonlyMap<string, Transcript>) {
+export const readCaptions = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, transcripts: ReadonlyMap<string, Transcript>, blocks: ReadonlyArray<Block>, edits: Edits) {
   const approval = yield* readApproval(dir)
   if (approval.plan.state !== "approved") return NO_CAPTIONS
   const texts = yield* textsOf(approval.texts, dir)
-  return { words: subtitleWords(clips, transcripts), texts: texts.state === "ready" ? shownTexts(texts.planned, clips, transcripts) : [] } satisfies Captions
+  return { words: subtitleWords(clips, transcripts, (clip, index) => correctedWord(blocks, transcripts, edits.subtitles ?? [], clip.block, clip.video, index)), texts: texts.state === "ready" ? shownTexts(texts.planned, clips, transcripts) : [] } satisfies Captions
 })
 
 // Two levels: the option value inside the filter, then the filter inside the graph.

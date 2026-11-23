@@ -159,5 +159,5 @@ export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyA
   const clips = onFrames(base)
   const planned = yield* readInserts(dir, transcripts)
   const placesNow = insertPlaces(planned.state === "ready" ? planned.planned : [], clips, transcripts, edits, pictures)
-  return { clips, inserts: shownInserts(placesNow, clips, edits, pictures, resolved), captions: yield* readCaptions(dir, clips, transcripts) } satisfies Cut
+  return { clips, inserts: shownInserts(placesNow, clips, edits, pictures, resolved), captions: yield* readCaptions(dir, clips, transcripts, blocks, edits) } satisfies Cut
 })
