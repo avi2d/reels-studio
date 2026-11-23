@@ -367,6 +367,11 @@ export const timelineCard = (projectId: string, hooks: Hooks, levelAt: LevelAt):
     if (state.playing !== undefined) player.stop()
     else if (state.open !== undefined) watch(state.open.block.id)
   }
+  parts.rowHolder.addEventListener("focusout", (event) => {
+    if (event.target instanceof HTMLInputElement && event.target.closest(".subtitle-row") !== null) {
+      globalThis.setTimeout(() => { if (parts.rowHolder.isConnected) draw() }, 0)
+    }
+  })
   parts.go.addEventListener("click", toggle)
   parts.undo.addEventListener("click", undo)
   parts.redo.addEventListener("click", redo)
