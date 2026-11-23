@@ -96,7 +96,9 @@ To run the checks:
 1. Run `bun run lint` to run the linter and the kit gates.
 1. Run `bun run typecheck` to check the types and the Effect diagnostics.
 
-GitHub Actions runs `checks-browser` on pull requests.
+On pull requests, GitHub Actions selects unit tests, end-to-end tests, and browser routes by changed path.
+Changes to shared test settings run the whole tier.
+A push to `main` or a release runs all three tiers and the PDF image comparison.
 The suite in [tests/e2e/browser/](tests/e2e/browser/) runs only in GitHub Actions and needs no model account.
 
 The project layout lives in [Project layout](docs/project-layout.md).
