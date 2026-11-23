@@ -123,7 +123,8 @@ export const isHdrVideo = Effect.fnUntraced(function*(source: string) {
 
 export const readTranscript = Effect.fnUntraced(function*(job: Job) {
   const fs = yield* FileSystem.FileSystem
-  return yield* decodeTranscript(yield* fs.readFileString(places(job).transcript))
+  const transcript = yield* decodeTranscript(yield* fs.readFileString(places(job).transcript))
+  return { ...transcript, words: transcript.words.map((word) => ({ ...word, text: word.text.replace(/(?<=\S)—/gu, " —") })) }
 })
 
 export const readGaze = Effect.fnUntraced(function*(job: Job) {
