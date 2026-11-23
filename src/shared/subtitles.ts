@@ -43,7 +43,7 @@ export const bareWord = (text: string): string => text.replace(EDGE_MARKS, "")
 // A word stays until the next word starts, at most WORD_HOLD past its own end, and never past the cut that ends its clip.
 export const subtitleWords = <T extends Placed>(
   clips: ReadonlyArray<T>, transcripts: ReadonlyMap<string, Transcript>,
-  textOf: (clip: T, index: number, text: string) => string = (_clip, _index, text) => text
+  textOf: (clip: T, index: number, text: string) => string
 ): ReadonlyArray<ShownWord> => {
   const shown: Array<ShownWord> = []
   let at = 0
