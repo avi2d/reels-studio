@@ -10,7 +10,7 @@ import {
   type Clip, type Gaze, type GazeFailure, type PlannedInsert, type PlannedInserts, type TimelineView, type VideoFaces
 } from "../shared/timeline.ts"
 import { NO_CAPTIONS, type Captions } from "../shared/captions.ts"
-import { readCaptions } from "./captions.ts"
+import { readCaptions, readTexts } from "./captions.ts"
 import { quoteOnPage } from "./insert-files.ts"
 import { places, readGaze, readTranscript } from "./media-jobs.ts"
 
@@ -135,9 +135,10 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
     lookOf(name, gazes.get(name), gazeWritten.has(name), unseen.get(places({ dir, name }).source)))
   const pictures = yield* readPictures(dir)
   const inserts = yield* readInserts(dir, transcripts)
+  const texts = yield* readTexts(dir)
   const written = yield* readBlocks(dir)
-  if (written === "none" || written === "unreadable") return { looks, faces, pictures, inserts, timeline: { state: written } } satisfies TimelineView
-  return { looks, faces, pictures, inserts, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir) } } satisfies TimelineView
+  if (written === "none" || written === "unreadable") return { looks, faces, pictures, inserts, texts, timeline: { state: written } } satisfies TimelineView
+  return { looks, faces, pictures, inserts, texts, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir) } } satisfies TimelineView
 })
 
 export interface Cut {

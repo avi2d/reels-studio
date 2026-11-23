@@ -226,6 +226,7 @@ const setup = (blocks: number): { readonly card: ReturnType<typeof timelineCard>
     faces: [],
     pictures: [],
     inserts: { state: "none" },
+    texts: { state: "none" },
     timeline: { state: "ready", blocks: blocksOf(count), dropped: 0, edits: { order: [], deleted: [], chosen: [], pauses: [] } },
     gathering: false,
     gatherFailed: false

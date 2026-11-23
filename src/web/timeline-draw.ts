@@ -1,6 +1,7 @@
 import { lengthOf, type Transcript } from "../shared/plan.ts"
 import { insertPlaces, openInserts, shownInserts, type Shown } from "../shared/inserts.ts"
 import { cutOf, facesByVideo, openPlaces, placesOf } from "../shared/joins.ts"
+import { textPlaces } from "../shared/captions.ts"
 import {
   arrange, assemble, chosenTake, clipsOf, playedPause, withManualPauses,
   type Clip, type Edits, type GazeFailure, type Placed, type PlannedInsert, type Take, type TimelinePage, type TimelineView
@@ -13,6 +14,7 @@ import { margins, type Margins } from "./margins.ts"
 import { blockDetail, deletedList, pauseList, type DetailActions } from "./timeline-detail.ts"
 import { cutMap } from "./timeline-map.ts"
 import { insertList, type InsertActions } from "./timeline-inserts.ts"
+import { textList } from "./timeline-texts.ts"
 import { placeList, type PlaceActions, type PlaceCoverage } from "./timeline-places.ts"
 import { blockRow, type RowActions } from "./timeline-row.ts"
 
@@ -199,7 +201,7 @@ const replaceLists = (holder: HTMLElement, ...nodes: ReadonlyArray<HTMLElement>)
 
 const PHRASE_ENDS = 4
 
-const phraseOf = (transcripts: ReadonlyMap<string, Transcript>, planned: PlannedInsert): string => {
+const phraseOf = (transcripts: ReadonlyMap<string, Transcript>, planned: Pick<PlannedInsert, "video" | "from" | "to">): string => {
   const words = (transcripts.get(planned.video)?.words ?? []).slice(planned.from, planned.to + 1).map((word) => word.text)
   return words.length <= 2 * PHRASE_ENDS ? words.join(" ") : `${words.slice(0, PHRASE_ENDS).join(" ")} … ${words.slice(-PHRASE_ENDS).join(" ")}`
 }
@@ -271,6 +273,7 @@ const drawPanels = (
   deleted: ReturnType<typeof arrange>["deleted"],
   faces: ReturnType<typeof facesByVideo>,
   inserts: ReturnType<typeof insertPlaces>,
+  texts: ReturnType<typeof textPlaces>,
   actions: Actions
 ): { readonly places: ReturnType<typeof placesOf>; readonly coverage: PlaceCoverage } => {
   replaceLists(parts.detailHolder,
@@ -281,7 +284,8 @@ const drawPanels = (
   const { pictures } = loaded.view
   replaceLists(parts.placeHolder,
     placeList(places, displayed, coverage, pictures, actions),
-    ...insertList({ planned: loaded.view.inserts, places: inserts, pictures, phraseOf: (one) => phraseOf(loaded.transcripts, one) }, actions))
+    ...insertList({ planned: loaded.view.inserts, places: inserts, pictures, phraseOf: (one) => phraseOf(loaded.transcripts, one) }, actions),
+    ...textList({ planned: loaded.view.texts, places: texts, phraseOf: (one) => phraseOf(loaded.transcripts, one) }))
   replaceLists(parts.pauseHolder, pauseList(displayed, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
   return { places, coverage }
 }
@@ -315,7 +319,9 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): DrawnRe
   const inserts = insertsOf(loaded, reel, edits)
   const shown = shownInserts(inserts, reel, edits, loaded.view.pictures)
   drawRows(parts, displayed, open, shown, actions)
-  const { places, coverage } = drawPanels(parts, displayed, placed, open, index, loaded, edits, deleted, faces, inserts, actions)
+  const { texts } = loaded.view
+  const thoughts = textPlaces(texts.state === "ready" ? texts.planned : [], reel, loaded.transcripts)
+  const { places, coverage } = drawPanels(parts, displayed, placed, open, index, loaded, edits, deleted, faces, inserts, thoughts, actions)
   return {
     open,
     shown,
