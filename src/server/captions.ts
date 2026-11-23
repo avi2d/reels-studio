@@ -3,7 +3,7 @@ import { assOf, fitWord, hasCaptions, NO_CAPTIONS, shownTexts, type CaptionPart,
 import type { Transcript } from "../shared/plan.ts"
 import { correctedWord, subtitleWords } from "../shared/subtitles.ts"
 import { TextsFile, type PlannedTexts } from "../shared/texts.ts"
-import { NO_EDITS, type Block, type Clip, type Edits } from "../shared/timeline.ts"
+import type { Block, Clip, Edits } from "../shared/timeline.ts"
 import { fitsArea, textAreaOf } from "../shared/zones.ts"
 import { REEL_RATE } from "./media-commands.ts"
 import { run } from "./media-jobs.ts"
@@ -24,7 +24,7 @@ export const readTexts = Effect.fnUntraced(function*(dir: string) {
   return yield* textsOf(yield* readText(`${dir}/texts.json`), dir)
 })
 
-export const readCaptions = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, transcripts: ReadonlyMap<string, Transcript>, blocks: ReadonlyArray<Block> = [], edits: Edits = NO_EDITS) {
+export const readCaptions = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, transcripts: ReadonlyMap<string, Transcript>, blocks: ReadonlyArray<Block>, edits: Edits) {
   const approval = yield* readApproval(dir)
   if (approval.plan.state !== "approved") return NO_CAPTIONS
   const texts = yield* textsOf(approval.texts, dir)

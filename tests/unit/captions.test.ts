@@ -5,6 +5,7 @@ import { Effect } from "effect"
 import { filterPath, inkOf, readCaptions, readTexts } from "../../src/server/captions.ts"
 import { fitWord, NO_CAPTIONS, shownTexts, textPlaces } from "../../src/shared/captions.ts"
 import { readApproval } from "../../src/server/approval.ts"
+import { NO_EDITS } from "../../src/shared/timeline.ts"
 
 test("a long subtitle word shrinks instead of reaching under the Instagram button column", () => {
   const word = { text: "высокопрофессиональный", start: 0, end: 1 }
@@ -30,7 +31,7 @@ test("changed or newly added text cannot reach captions under an older approval"
   const approval = { plan: "план", texts, at: "2026-11-20T10:00:00.000Z", done: [] }
   const clips = [{ block: "a", video: "a.mov", start: 0, end: 3 }]
   const transcripts = new Map([["a.mov", { duration: 3, words: [{ text: "Аванс", start: 0, end: 1 }] }]])
-  const read = () => Effect.runPromise(readCaptions(dir, clips, transcripts).pipe(Effect.provide(BunFileSystem.layer)))
+  const read = () => Effect.runPromise(readCaptions(dir, clips, transcripts, [], NO_EDITS).pipe(Effect.provide(BunFileSystem.layer)))
   const state = async () => (await Effect.runPromise(readApproval(dir).pipe(Effect.provide(BunFileSystem.layer)))).plan.state
   try {
     await writeFile(`${dir}/plan.md`, "план")
