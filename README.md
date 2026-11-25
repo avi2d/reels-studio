@@ -68,24 +68,7 @@ Each setting is an environment variable read at start.
 
 ## Keep the studio running
 
-The owner's computer serves the studio from a clone of `main` at `~/Projects/reels-studio`.
-The uploaded videos and everything made from them live in `~/.local/share/reels-studio/projects`, outside any clone.
-
-To make the studio start again after a restart of the computer:
-
-1. Copy `deploy/reels-studio.service` to `~/.config/systemd/user/`.
-1. Run `systemctl --user daemon-reload`.
-1. Run `loginctl enable-linger $USER`.
-1. Run `systemctl --user enable --now reels-studio.service`.
-
-The linger step keeps the user manager running without an open login.
-On WSL2, open the Linux machine once after each Windows restart.
-Without that step, systemd finds no machine for the unit.
-
-To serve a newer `main`:
-
-1. Run `git pull` and `bun install --frozen-lockfile` in `~/Projects/reels-studio`.
-1. Run `systemctl --user restart reels-studio.service`.
+The steps that keep the studio running and serve a newer `main` are in [Keep the studio running](docs/keep-the-studio-running.md).
 
 How the studio hears a video lives in [How the studio hears a video](docs/how-the-studio-hears-a-video.md).
 
@@ -110,4 +93,19 @@ The brief, the plan and the yes are described in [The brief and the one plan](do
 
 ## Troubleshooting
 
-The page that does not open from a phone, a video that is not heard and a chat that does not answer are described in [Troubleshooting](docs/troubleshooting.md).
+### The page does not open from a phone
+
+Windows blocks inbound connections to WSL by default.
+The page opens on the computer itself and not from another device until the owner adds a Hyper-V firewall rule for the port.
+
+### A video shows «Студия не расслышала это видео»
+
+ffmpeg or the recognizer failed, and the studio log holds what it printed.
+Run `journalctl --user -u reels-studio.service` to read the log.
+Press «Попробовать ещё раз» under the video to have the studio listen to it again.
+A video with no sound fails again.
+
+### The chat answers «Ответ не дошёл»
+
+pi or the model provider refused the message, and the studio log holds what each printed.
+Run `pi --list-models` and check that the chosen model is in the list.
