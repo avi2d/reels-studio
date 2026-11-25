@@ -42,9 +42,10 @@ const listPage = (): Effect.Effect<void, Api.Failed> =>
 
 const reelPage = (id: string, step: Step): Effect.Effect<void, Api.Failed> =>
   Effect.map(Api.getProject(id), ({ project }) => {
-    document.title = `${stepName(step)} · ${project.title} · ${TITLE}`
+    const setPageTitle = (title: string): void => { document.title = `${stepName(step)} · ${title} · ${TITLE}` }
+    setPageTitle(project.title)
     show("reel",
-      topBar({ project, removed: () => { navigate(STUDIO_PATH) } }),
+      topBar({ project, renamed: setPageTitle, removed: () => { navigate(STUDIO_PATH) } }),
       rail(project, step),
       h("main", { class: "main" }, stepBody(project, step)))
   })

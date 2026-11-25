@@ -36,6 +36,7 @@ To start the studio:
 The log prints `Listening on http://0.0.0.0:8765`.
 The page shows the videos as tiles with covers and a button that starts the next one.
 The new screens open at `/new` beside the old page.
+Each reel card shows its status, and the reel's top bar menu lets you rename it.
 
 The studio answers the home network and the owner's Mac through the `local-apps` gateway.
 The gateway must listen only on that Mac's loopback address.

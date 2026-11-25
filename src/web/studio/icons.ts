@@ -5,8 +5,9 @@ import more from "lucide-static/icons/ellipsis.svg" with { type: "text" }
 import film from "lucide-static/icons/film.svg" with { type: "text" }
 import plus from "lucide-static/icons/plus.svg" with { type: "text" }
 import trash from "lucide-static/icons/trash-2.svg" with { type: "text" }
+import pencil from "lucide-static/icons/pencil.svg" with { type: "text" }
 
-const ICONS = { check, film, left, more, plus, right, trash }
+const ICONS = { check, film, left, more, pencil, plus, right, trash }
 
 export type IconName = keyof typeof ICONS
 

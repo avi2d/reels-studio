@@ -4,6 +4,7 @@ import type { Visual } from "../shared/inserts.ts"
 import { Message } from "../shared/chat.ts"
 import { Offer, type Pick, UploadedVideo } from "../shared/library.ts"
 import { VideoView } from "../shared/plan.ts"
+import { ProjectView, type Effort } from "../shared/project.ts"
 import { ReelView, SoundCheck, type PictureSide } from "../shared/reel.ts"
 import type { Face } from "../shared/face.ts"
 import { RetouchView, type RetouchPicture } from "../shared/retouch.ts"
@@ -12,20 +13,7 @@ import { Edits, TimelinePage } from "../shared/timeline.ts"
 export class Failed extends Data.TaggedError("Failed")<{ readonly message: string }> {}
 export class Offline extends Data.TaggedError("Offline")<{}> {}
 
-const Effort = Schema.Literals(["low", "medium", "high"])
-export type Effort = typeof Effort.Type
-
-const ProjectView = Schema.Struct({
-  id: Schema.String,
-  title: Schema.String,
-  createdAt: Schema.String,
-  model: Schema.optionalKey(Schema.String),
-  effort: Schema.optionalKey(Effort),
-  stage: Schema.Literals(["created", "uploaded"]),
-  files: Schema.Array(Schema.Struct({ name: Schema.String, size: Schema.Finite })),
-  cover: Schema.optionalKey(Schema.String)
-})
-export type ProjectView = typeof ProjectView.Type
+export type { Effort, ProjectView } from "../shared/project.ts"
 
 export type { Message } from "../shared/chat.ts"
 
@@ -83,6 +71,9 @@ export const getModels = call(Schema.Struct({ models: Schema.Array(Schema.String
 
 export const createProject = (title: string): Effect.Effect<typeof OneProject.Type, Failed> =>
   call(OneProject, "/api/projects", post({ title }))
+
+export const renameProject = (id: string, title: string): Effect.Effect<typeof OneProject.Type, Failed> =>
+  call(OneProject, `/api/projects/${id}`, { ...post({ title }), method: "PATCH" })
 
 export const getProject = (id: string): Effect.Effect<typeof OneProject.Type, Failed> =>
   call(OneProject, `/api/projects/${id}`)

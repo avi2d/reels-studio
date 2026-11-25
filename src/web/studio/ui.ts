@@ -36,11 +36,26 @@ export const menuButton = (label: string, items: ReadonlyArray<MenuItem>): HTMLE
     document.addEventListener("keydown", escape, true)
     list.querySelector("button")?.focus()
   }
-  list.append(...items.map((item) =>
-    h("button", { class: item.danger ? "menu__item menu__item--danger" : "menu__item", type: "button", role: "menuitem", click: () => {
+  const buttons = items.map((item) =>
+    h("button", { class: item.danger ? "menu__item menu__item--danger" : "menu__item", type: "button", role: "menuitem", tabindex: "-1", click: () => {
       close()
+      trigger.focus()
       item.run()
-    } }, icon(item.icon), item.label)))
+    } }, icon(item.icon), item.label))
+  list.append(...buttons)
+  list.addEventListener("keydown", (event) => {
+    const current = buttons.findIndex((item) => item === event.target)
+    const next = event.key === "ArrowDown" ? (current + 1) % buttons.length
+      : event.key === "ArrowUp" ? (current + buttons.length - 1) % buttons.length
+      : event.key === "Home" ? 0
+      : event.key === "End" ? buttons.length - 1 : undefined
+    if (next === undefined) return
+    event.preventDefault()
+    buttons[next]?.focus()
+  })
+  box.addEventListener("focusout", (event) => {
+    if (!box.contains(event.relatedTarget instanceof Node ? event.relatedTarget : null)) close()
+  })
   trigger.addEventListener("click", () => { if (list.hidden) open(); else close() })
   return box
 }
