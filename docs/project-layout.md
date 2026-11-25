@@ -29,6 +29,7 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/shared/brief.ts` | The format of the brief, the plan and the saved yes, and the work the studio does after the yes |
 | `src/shared/chat.ts` | The format of a chat message and the kinds of file a person can attach to it |
 | `src/shared/library.ts` | The formats of an uploaded video, of a video offered to a reel from the shared list or another folder, and of a pick, used by the server and the page |
+| `src/shared/project.ts` | The formats of a reel's `project.json`, of the title a person sends to create or rename it, and of the reel the page gets with its one status: created, uploaded or built, used by the server and the page |
 | `src/shared/page.ts` | The addresses of the home, uploaded videos and project pages, and of the new screens under `/new` with their five steps, used by the server and the page |
 | `tools/transcribe/` | The speech recognizer, a Python script that uv runs |
 | `tools/pdf/` | The PDF reader that renders the first pages and takes out the text, and renders one page with the place of each letter for an insert, Python scripts that uv runs |
