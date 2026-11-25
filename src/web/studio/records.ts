@@ -73,15 +73,15 @@ const layout = (id: string) => {
   const choose = (): void => { input.click() }
   const heading = h("h1", { tabindex: "-1" })
   const more = button("quiet", "Добавить", { class: "btn btn--quiet btn--sm", click: choose }, "plus")
-  const drop = h("button", { class: "drop", type: "button", click: choose }, icon("upload"), h("b", {}, "Выбрать видео"), h("span", {}, "Все дубли сразу"))
+  const pick = h("div", { class: "pick" }, button("main", "Выбрать видео", { click: choose }, "upload"), h("p", { class: "hint" }, "Можно выбрать все дубли сразу."))
   const mine = h("ul", { class: "recs", "aria-label": "Записи ролика" })
   const problem = h("p", { class: "error", role: "alert" })
   const loadProblem = h("p", { class: "error", role: "alert" })
   const earlierTitle = h("h2", { class: "recs-title", id: "records-earlier" }, "Загружены раньше")
   const earlier = h("ul", { class: "recs", "aria-labelledby": "records-earlier" })
   const next = h("a", { class: "btn btn--main btn--start", href: stepPath(id, "plan") }, "Дальше: план", icon("right"))
-  const body = h("div", { class: "body" }, h("div", { class: "head" }, heading, more), drop, mine, problem, loadProblem, earlierTitle, earlier, next, input)
-  return { input, heading, more, drop, mine, problem, loadProblem, earlierTitle, earlier, next, body }
+  const body = h("div", { class: "body" }, h("div", { class: "head" }, heading, more), pick, mine, problem, loadProblem, earlierTitle, earlier, next, input)
+  return { input, heading, more, pick, mine, problem, loadProblem, earlierTitle, earlier, next, body }
 }
 
 interface Live {
@@ -170,7 +170,7 @@ function render(live: Live): void {
   const lengths = heardLengths(shelves)
   view.heading.textContent = headingOf(mine.length, lengths)
   view.more.hidden = mine.length === 0
-  view.drop.hidden = mine.length > 0
+  view.pick.hidden = mine.length > 0
   view.mine.hidden = mine.length === 0
   view.earlierTitle.hidden = earlier.length === 0
   view.earlier.hidden = earlier.length === 0
@@ -217,9 +217,9 @@ const listen = (live: Live): void => {
     else render(live)
   })
   input.addEventListener("change", () => {
-    const videos = [...input.files ?? []].filter((file) => file.type.startsWith("video/"))
+    const videos = [...input.files ?? []]
     input.value = ""
-    problem.textContent = videos.length === 0 ? "Студия принимает только видео." : ""
+    problem.textContent = ""
     sendTakes(live.id, videos)
   })
 }
