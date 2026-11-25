@@ -71,10 +71,10 @@ const joinRound = (projectId: string): Effect.Effect<boolean> =>
       )
     }
     const checked = new Set(names)
-    const left = joiningTo(projectId).filter((name) => !ready.includes(name) && (!checked.has(name) || stateOf(name) !== undefined))
+    const left = joiningTo(projectId).filter((name) => !checked.has(name) || stateOf(name) === "waiting")
     setJoining(projectId, left)
     if (ready.length > 0 || left.join("/") !== names.join("/")) changed(true)
-    return left.some((name) => !checked.has(name) || stateOf(name) === "waiting")
+    return left.length > 0
   }).pipe(Effect.catchTag("Failed", () => Effect.succeed(true)))
 
 const joinLoop = (projectId: string): Effect.Effect<void> =>

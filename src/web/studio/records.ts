@@ -76,11 +76,12 @@ const layout = (id: string) => {
   const drop = h("button", { class: "drop", type: "button", click: choose }, icon("upload"), h("b", {}, "Выбрать видео"), h("span", {}, "Все дубли сразу"))
   const mine = h("ul", { class: "recs", "aria-label": "Записи ролика" })
   const problem = h("p", { class: "error", role: "alert" })
+  const loadProblem = h("p", { class: "error", role: "alert" })
   const earlierTitle = h("h2", { class: "recs-title", id: "records-earlier" }, "Загружены раньше")
   const earlier = h("ul", { class: "recs", "aria-labelledby": "records-earlier" })
   const next = h("a", { class: "btn btn--main btn--start", href: stepPath(id, "plan") }, "Дальше: план", icon("right"))
-  const body = h("div", { class: "body" }, h("div", { class: "head" }, heading, more), drop, mine, problem, earlierTitle, earlier, next, input)
-  return { input, heading, more, drop, mine, problem, earlierTitle, earlier, next, body }
+  const body = h("div", { class: "body" }, h("div", { class: "head" }, heading, more), drop, mine, problem, loadProblem, earlierTitle, earlier, next, input)
+  return { input, heading, more, drop, mine, problem, loadProblem, earlierTitle, earlier, next, body }
 }
 
 interface Live {
@@ -92,6 +93,7 @@ interface Live {
   shelves: Shelves
   open: string
   timer: number
+  generation: number
 }
 
 const act = (live: Live, work: Effect.Effect<unknown, Api.Failed>): void => {
@@ -190,48 +192,41 @@ function refresh(live: Live): void {
   globalThis.clearTimeout(live.timer)
   if (!live.view.body.isConnected) return
   keepJoining(live.id)
+  live.generation += 1
+  const generation = live.generation
+  const current = (): boolean => generation === live.generation
   run(Effect.map(loadShelves(live.id), (shelves) => {
+    if (!current()) return
+    live.view.loadProblem.textContent = ""
     live.shelves = shelves
     live.onProject(shelves.project)
     render(live)
     if (joiningTo(live.id).length > 0 || stillHearing(shelves)) later(live)
   }), (message) => {
-    live.view.problem.textContent = message
+    if (!current()) return
+    live.view.loadProblem.textContent = message
     later(live)
   })
 }
 
-const takeFiles = (live: Live, files: ReadonlyArray<File>): void => {
-  live.view.problem.textContent = files.length === 0 ? "Студия принимает только видео." : ""
-  sendTakes(live.id, files)
-}
-
 const listen = (live: Live): void => {
-  const { input, drop, body } = live.view
+  const { input, problem, body } = live.view
   const stop = onTakesChanged((settled) => {
     if (!body.isConnected) stop()
     else if (settled) refresh(live)
     else render(live)
   })
   input.addEventListener("change", () => {
-    takeFiles(live, [...input.files ?? []])
+    const videos = [...input.files ?? []].filter((file) => file.type.startsWith("video/"))
     input.value = ""
-  })
-  drop.addEventListener("dragover", (event) => {
-    event.preventDefault()
-    drop.classList.add("drop--over")
-  })
-  drop.addEventListener("dragleave", () => { drop.classList.remove("drop--over") })
-  drop.addEventListener("drop", (event) => {
-    event.preventDefault()
-    drop.classList.remove("drop--over")
-    takeFiles(live, [...event.dataTransfer?.files ?? []].filter((file) => file.type.startsWith("video/")))
+    problem.textContent = videos.length === 0 ? "Студия принимает только видео." : ""
+    sendTakes(live.id, videos)
   })
 }
 
 export const recordsStep = (project: Api.ProjectView, onProject: (project: Api.ProjectView) => void): Effect.Effect<HTMLElement, Api.Failed> =>
   Effect.map(loadShelves(project.id), (shelves) => {
-    const live: Live = { id: project.id, view: layout(project.id), shown: new Map(), adding: new Set(), onProject, shelves, open: "", timer: 0 }
+    const live: Live = { id: project.id, view: layout(project.id), shown: new Map(), adding: new Set(), onProject, shelves, open: "", timer: 0, generation: 0 }
     listen(live)
     keepJoining(live.id)
     render(live)

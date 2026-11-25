@@ -74,7 +74,6 @@ a { color: inherit; text-decoration: none; }
 .drop .ic { color: var(--blue); margin-bottom: 4px; }
 .drop .ic svg { width: 22px; height: 22px; }
 .drop b { color: var(--ink); font-size: 16px; font-weight: 600; }
-.drop--over { border-color: var(--blue); background: var(--blue-soft); }
 
 .recs-title { font-size: 13px; font-weight: 600; color: var(--muted); }
 .recs { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
