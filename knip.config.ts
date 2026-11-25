@@ -5,6 +5,7 @@ export default defineConfig({
     "src/index.ts",
     "src/pi/project-guard.ts",
     "src/web/app.ts",
+    "src/web/studio/main.ts",
     "tests/e2e/browser/hooks.ts",
     "tests/e2e/browser/run.ts",
     "tests/e2e/browser/tool.ts"

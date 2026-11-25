@@ -2,15 +2,8 @@ import assert from "node:assert/strict"
 import { join } from "node:path"
 import type { ProductCheck } from "@avi2dg/checks/browser-hooks.ts"
 import type { Page } from "playwright-core"
-import { CHAT_PICTURE, CHAT_REPLY, SOURCE_VIDEO } from "./scenario.ts"
-
-const timeout = 20_000
-
-const setting = (name: "REELS_BROWSER_DIR" | "REELS_BROWSER_URL"): string => {
-  const value = process.env[name]
-  assert(value !== undefined, `The browser runner must set ${name}`)
-  return value
-}
+import { CHAT_PICTURE, CHAT_REPLY, SOURCE_VIDEO, setting, timeout } from "./scenario.ts"
+import { studioChecks } from "./studio.ts"
 
 const createProject = async (page: Page, title: string): Promise<void> => {
   page.setDefaultTimeout(timeout)
@@ -313,4 +306,4 @@ const removal: ProductCheck = {
   }
 }
 
-export const checks = [directVideos, savedVideosLink, projectAndUpload, preview, placesScroll, attachment, removal] satisfies readonly ProductCheck[]
+export const checks = [directVideos, savedVideosLink, projectAndUpload, preview, placesScroll, attachment, removal, ...studioChecks] satisfies readonly ProductCheck[]
