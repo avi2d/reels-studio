@@ -175,8 +175,10 @@ function render(live: Live): void {
   view.earlierTitle.hidden = earlier.length === 0
   view.earlier.hidden = earlier.length === 0
   view.next.hidden = lengths.length === 0
+  const focusInRows = view.mine.contains(document.activeElement) || view.earlier.contains(document.activeElement)
   sync(live, view.mine, mine)
   sync(live, view.earlier, earlier)
+  if (focusInRows) queueMicrotask(() => { if (!view.body.contains(document.activeElement)) view.heading.focus() })
   const keys = new Set([...mine, ...earlier].map((row) => row.key))
   for (const key of live.shown.keys()) if (!keys.has(key)) live.shown.delete(key)
   const problem = takeProblem(live.id)
