@@ -5,8 +5,8 @@ import { run } from "../run.ts"
 import { button, sheet } from "./ui.ts"
 
 const COPY = {
-  new: { heading: "Новый ролик", save: "Создать ролик", pending: "Создаём…", placeholder: "Например: возврат без чека" },
-  rename: { heading: "Переименовать ролик", save: "Сохранить название", pending: "Сохраняем…" }
+  new: { heading: "Новый ролик", save: "Создать ролик", placeholder: "Например: возврат без чека" },
+  rename: { heading: "Переименовать ролик", save: "Сохранить название" }
 }
 
 type TitleSheet = { readonly kind: "new" } | { readonly kind: "rename"; readonly title: string }
@@ -27,10 +27,8 @@ export const editTitle = (mode: TitleSheet, save: (title: string) => Effect.Effe
     problem)
   const dialog = sheet("reel-title", form)
   const busy = (on: boolean): void => {
-    title.readOnly = on
     submit.disabled = on
     cancel.disabled = on
-    submit.textContent = on ? copy.pending : copy.save
   }
   dialog.addEventListener("cancel", (event) => { if (submit.disabled) event.preventDefault() })
   form.addEventListener("submit", (event) => {
@@ -41,7 +39,6 @@ export const editTitle = (mode: TitleSheet, save: (title: string) => Effect.Effe
     run(Effect.map(save(title.value.trim()), () => { dialog.close() }), (message) => {
       busy(false)
       problem.textContent = message
-      title.focus()
     })
   })
   cancel.addEventListener("click", () => { dialog.close() })
