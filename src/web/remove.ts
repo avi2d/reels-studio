@@ -49,12 +49,19 @@ export const askToConfirmRemoval = ({ title, what, note, label, remove, onRemove
   focusWhenReady(cancel)
 }
 
+export const REEL_REMOVAL = {
+  title: (reel: string): string => `Удалить ролик «${reel}»?`,
+  what: "Удалятся чат, план и видео этого ролика. Вернуть их не получится.",
+  note: "Видео, которые есть и в других роликах, там останутся. Исходные файлы на ваших устройствах студия не трогает. Если студия сейчас отвечает в чате или слушает видео этого ролика, она остановится.",
+  label: "Удалить ролик"
+}
+
 export const askToRemove = (project: { readonly id: string; readonly title: string }, onRemoved: () => void): void => {
   askToConfirmRemoval({
-    title: `Удалить ролик «${project.title}»?`,
-    what: "Удалятся чат, план и видео этого ролика. Вернуть их не получится.",
-    note: "Видео, которые есть и в других роликах, там останутся. Исходные файлы на ваших устройствах студия не трогает. Если студия сейчас отвечает в чате или слушает видео этого ролика, она остановится.",
-    label: "Удалить ролик",
+    title: REEL_REMOVAL.title(project.title),
+    what: REEL_REMOVAL.what,
+    note: REEL_REMOVAL.note,
+    label: REEL_REMOVAL.label,
     remove: Api.removeProject(project.id),
     onRemoved
   })

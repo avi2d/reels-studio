@@ -7,6 +7,7 @@ export default defineConfig({
   browserRoutes: {
     "src/index.ts": ["/"],
     "src/web/app.ts": ["/"],
+    "src/web/studio/main.ts": ["/"],
     "tools/ci/provide-media.sh": ["/"],
     "tools/ci/test.sh": [],
     "tools/pdf/test_page.py": [],
