@@ -80,7 +80,9 @@ test.each(["before", "after", "connected", "rejected"] as const)(
       if (entries.some((entry) => entry.take.kind === "unsent") ||
         (added.length > 0 && entries.length === 0 && joiningTo(id).length === 0)) finished.resolve()
     })
-    const fetch = spyOn(globalThis, "fetch").mockImplementation(async (input, init) => server.handle(input, init))
+    const fetch = spyOn(globalThis, "fetch").mockImplementation(
+      Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => server.handle(input, init), { preconnect: () => {} })
+    )
     try {
       sendTakes(id, [new File(["take"], "take.mp4", { lastModified: 1 })])
       await finished.promise
