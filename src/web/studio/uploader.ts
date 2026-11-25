@@ -11,7 +11,13 @@ import { dropTake, onTakesChanged, resend, sendingNow, sendTakes } from "./uploa
 
 const POLL_MS = 4000
 
-let libraryOnLoad: ReadonlySet<string> | undefined
+let libraryOnLoad: Set<string> | undefined
+
+// A name deleted since load is free again, and the take uploaded under it is a new one.
+const forgetDeleted = (earlierNames: Set<string>, uploaded: ReadonlyArray<UploadedVideo>): void => {
+  const listed = new Set(uploaded.map((video) => video.name))
+  for (const name of earlierNames) if (!listed.has(name)) earlierNames.delete(name)
+}
 
 const layout = (onMove: () => void) => {
   const input = h("input", { type: "file", name: "records", accept: "video/*", multiple: true, hidden: true, tabindex: "-1" })
@@ -30,7 +36,7 @@ const layout = (onMove: () => void) => {
 
 interface Live {
   readonly view: ReturnType<typeof layout>
-  readonly earlierNames: ReadonlySet<string>
+  readonly earlierNames: Set<string>
   uploaded: ReadonlyArray<UploadedVideo>
   timer: number
   generation: number
@@ -76,6 +82,7 @@ const later = (live: Live): void => {
 const settle = (live: Live, uploaded: ReadonlyArray<UploadedVideo>): void => {
   live.view.loadProblem.textContent = ""
   live.uploaded = uploaded
+  forgetDeleted(live.earlierNames, uploaded)
   render(live)
   if (stillUploading(uploaded)) later(live)
   else globalThis.clearTimeout(live.timer)
@@ -121,6 +128,7 @@ const listen = (live: Live): void => {
 
 export const uploaderSection = (uploaded: ReadonlyArray<UploadedVideo>): HTMLElement => {
   libraryOnLoad ??= new Set(uploaded.map((video) => video.name))
+  forgetDeleted(libraryOnLoad, uploaded)
   const live: Live = { view: layout(() => { render(live) }), earlierNames: libraryOnLoad, uploaded, timer: 0, generation: 0 }
   listen(live)
   render(live)

@@ -5,7 +5,7 @@ import { join } from "node:path"
 import type { ProductCheck } from "@avi2dg/checks/browser-hooks.ts"
 import { Schema } from "effect"
 import type { Page } from "playwright-core"
-import { Offer, UploadedVideo } from "../../../src/shared/library.ts"
+import { UploadedVideo } from "../../../src/shared/library.ts"
 import { STEPS, STUDIO_PATH, stepPath } from "../../../src/shared/page.ts"
 import { SOURCE_VIDEO, setting, timeout } from "./scenario.ts"
 
@@ -163,8 +163,30 @@ const recordsStep: ProductCheck = {
   }
 }
 
+const pickUpload = async (page: Page, name: string, bytes: Uint8Array): Promise<string> => {
+  const before = new Set((await uploadsNow()).map((video) => video.name))
+  await page.locator('input[type="file"][name="records"]').setInputFiles({ name, mimeType: "video/mp4", buffer: Buffer.from(bytes) })
+  const until = Date.now() + HEARING
+  for (;;) {
+    const ready = (await uploadsNow()).find((video) => !before.has(video.name) && video.state === "ready")
+    if (ready !== undefined) return ready.name
+    assert(Date.now() < until, "The new upload must reach ready")
+    await Bun.sleep(500)
+  }
+}
+
+const deleteUpload = async (page: Page, name: string): Promise<void> => {
+  await page.getByRole("button", { name: `Ещё о записи «${name}»`, exact: true }).click()
+  await page.getByRole("menuitem", { name: "Удалить запись", exact: true }).click()
+  const [removed] = await Promise.all([
+    page.waitForResponse((response) => response.request().method() === "DELETE" && new URL(response.url()).pathname.startsWith("/api/library/"), { timeout }),
+    page.getByRole("dialog", { name: `Удалить запись «${name}»?` }).getByRole("button", { name: "Удалить запись", exact: true }).click()
+  ])
+  assert(removed.ok(), `The studio refused to delete the upload: ${removed.status()}`)
+}
+
 const finishedUploadStays: ProductCheck = {
-  name: "the owner's finished upload stays on page 1 above more than five older uploads instead of moving to its alphabetical page",
+  name: "the owner's finished upload stays on page 1 above more than five older uploads, also when it reuses the name of a take deleted after load, instead of moving to its alphabetical page",
   run: async (page) => {
     page.setDefaultTimeout(timeout)
     const bytes = await Bun.file(join(setting("REELS_BROWSER_DIR"), SOURCE_VIDEO)).bytes()
@@ -186,24 +208,17 @@ const finishedUploadStays: ProductCheck = {
     await page.goto(address(STUDIO_PATH))
     const list = page.getByRole("list", { name: "Загруженные записи", exact: true })
     const pages = page.getByRole("navigation", { name: "Страницы записей", exact: true })
-    await pages.getByRole("button", { name: "Дальше", exact: true }).click()
-    const before = new Set((await uploadsNow()).map((video) => video.name))
-    await page.locator('input[type="file"][name="records"]').setInputFiles({
-      name: "z-page-finished.mp4", mimeType: "video/mp4", buffer: Buffer.from(bytes)
-    })
-    await pages.getByRole("button", { name: "Назад", exact: true }).waitFor()
-    assert(await pages.getByRole("button", { name: "Назад", exact: true }).isDisabled(), "Picking an upload must return to page 1")
-    const until = Date.now() + HEARING
-    let name: string | undefined
-    while (name === undefined) {
-      name = (await uploadsNow()).find((video) => !before.has(video.name) && video.state === "ready")?.name
-      assert(Date.now() < until, "The new upload must reach ready")
-      if (name === undefined) await Bun.sleep(500)
+    const back = pages.getByRole("button", { name: "Назад", exact: true })
+    const next = pages.getByRole("button", { name: "Дальше", exact: true })
+    const staysOnFirstPage = async (finished: string): Promise<void> => {
+      await list.getByRole("listitem").filter({ has: page.getByText(finished, { exact: true }) }).getByText(READY).waitFor({ timeout: HEARING })
+      assert.equal(await list.getByRole("listitem").count(), 5, "Page 1 must still hold at most five uploads")
+      assert(await back.isDisabled(), "The finished row must stay on page 1")
     }
+    await next.click()
+    const name = await pickUpload(page, "z-page-finished.mp4", bytes)
+    await staysOnFirstPage(name)
     const row = list.getByRole("listitem").filter({ has: page.getByText(name, { exact: true }) })
-    await row.getByText(READY).waitFor({ timeout: HEARING })
-    assert.equal(await list.getByRole("listitem").count(), 5, "Page 1 must still hold at most five uploads")
-    assert(await pages.getByRole("button", { name: "Назад", exact: true }).isDisabled(), "The finished row must stay on page 1")
     await page.getByRole("button", { name: "Новый ролик", exact: true }).click()
     const dialog = page.getByRole("dialog", { name: "Новый ролик" })
     await dialog.getByRole("textbox", { name: "Название" }).fill("Проверка порядка записей")
@@ -214,7 +229,14 @@ const finishedUploadStays: ProductCheck = {
     await page.reload()
     await list.getByRole("listitem").first().waitFor()
     assert.equal(await row.count(), 0, "Reloading must restore the library order")
-    return { targets: ["more than five older uploads", "new upload resets to page 1", "finished row stays on page 1 through navigation", "reload restores library order"], found: [] }
+    while (await row.count() === 0) {
+      assert(await next.isEnabled(), "The finished upload must be on a later page after a reload")
+      await next.click()
+    }
+    await deleteUpload(page, name)
+    assert.equal(await pickUpload(page, name, bytes), name, "A deleted name must be free for the next upload")
+    await staysOnFirstPage(name)
+    return { targets: ["more than five older uploads", "new upload resets to page 1", "finished row stays on page 1 through navigation", "reload restores library order", "a take deleted after load and uploaded again under its name stays on page 1"], found: [] }
   }
 }
 
@@ -222,12 +244,10 @@ const addedRowsStayBusy: ProductCheck = {
   name: "an added recording stays unavailable until refreshed shelves arrive instead of flashing back as a free checkbox",
   run: async (page) => {
     page.setDefaultTimeout(timeout)
-    await uploadOnStudioPage(page)
+    const [first, second] = await uploadOnStudioPage(page)
+    assert(first !== undefined && second !== undefined, "The check needs two distinct uploaded recordings")
     const title = "Проверка обновления записей"
     const id = await createReel(page, title)
-    const offer = Schema.decodeUnknownSync(Offer)(await (await fetch(address(`/api/projects/${id}/library`))).json())
-    const [first, second] = offer.videos.filter((video) => video.from === "library").map((video) => video.name)
-    assert(first !== undefined && second !== undefined, "The check needs two distinct uploaded recordings")
     const held = Promise.withResolvers<void>()
     const release = Promise.withResolvers<void>()
     const path = `**/api/projects/${id}/library`
