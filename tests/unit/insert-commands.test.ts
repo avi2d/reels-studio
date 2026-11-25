@@ -1,11 +1,38 @@
 import { expect, test } from "bun:test"
 import { finishArgs } from "../../src/server/finish-commands.ts"
-import { clipFrom, clipSoundArgs, type InsertLayer } from "../../src/server/insert-commands.ts"
+import { clipFrom, clipSoundArgs, overlayGraph, type InsertLayer } from "../../src/server/insert-commands.ts"
+import { textAreaOf } from "../../src/shared/zones.ts"
 
 const clip = (sound: boolean): Extract<InsertLayer, { readonly kind: "clip" }> =>
   ({ kind: "clip", file: "walk.mov", shape: "fill", width: 1080, height: 1920, start: 4, end: 7, from: 2, lasts: 6, hdr: false, sound })
 
 const graphOf = (args: ReadonlyArray<string>): string => args[args.indexOf("-filter_complex") + 1] ?? ""
+
+for (const [width, height] of [[1600, 900], [900, 1600], [1000, 1000]] as const) {
+  for (const kind of ["still", "clip"] as const) {
+    test(`${kind} card ${width}x${height} stays inside the Instagram text box without cropping`, () => {
+      const base = { file: "card.png", shape: "card", width, height, start: 0, end: 3 } as const
+      const layer: InsertLayer = kind === "still" ? { ...base, kind } : { ...base, kind, from: 0, lasts: 3, hdr: false, sound: false }
+      const graph = overlayGraph([layer], "[out]")
+      const pad = /pad=(\d+):(\d+):12:12:color=white/.exec(graph)
+      const overlay = /overlay=(\d+):(\d+):/.exec(graph)
+      expect(pad).not.toBeNull()
+      expect(overlay).not.toBeNull()
+      const outerWidth = Number(pad?.[1])
+      const outerHeight = Number(pad?.[2])
+      const x = Number(overlay?.[1])
+      const y = Number(overlay?.[2])
+      const box = textAreaOf("Instagram").box
+      expect(x).toBeGreaterThanOrEqual(box.left)
+      expect(y).toBeGreaterThanOrEqual(box.top)
+      expect(x + outerWidth).toBeLessThanOrEqual(box.right)
+      expect(y + outerHeight).toBeLessThanOrEqual(box.bottom)
+      expect(graph).toContain("force_original_aspect_ratio=decrease")
+      expect(graph).not.toContain("crop=")
+      expect(graph).not.toContain("zoompan")
+    })
+  }
+}
 
 test("a clip insert left silent adds none of its own sound, so the voice goes to the levelling without a mix pass", () => {
   expect(clipSoundArgs("voice.mp4", [clip(false)], "joined.mp4", "picture-and-sound")).toBeUndefined()

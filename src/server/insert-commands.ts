@@ -1,5 +1,5 @@
 import { INSERT_DRIFT, INSERT_FADE, type Shape } from "../shared/inserts.ts"
-import { FRAME } from "../shared/zones.ts"
+import { FRAME, textAreaOf } from "../shared/zones.ts"
 import { even, REEL_RATE, TO_SDR } from "./media-commands.ts"
 import type { Streams } from "./sound-commands.ts"
 
@@ -18,11 +18,11 @@ export type InsertLayer =
 
 type ClipLayer = InsertLayer & { readonly kind: "clip" }
 
-const CARD_BOX = { left: 65, top: 269, width: 950, height: 979 }
+const CARD_BOX = textAreaOf("Instagram").box
 const CARD_BORDER = 12
 
 const cardSize = (width: number, height: number): { readonly width: number; readonly height: number } => {
-  const room = { width: CARD_BOX.width - 2 * CARD_BORDER, height: CARD_BOX.height - 2 * CARD_BORDER }
+  const room = { width: CARD_BOX.right - CARD_BOX.left - 2 * CARD_BORDER, height: CARD_BOX.bottom - CARD_BOX.top - 2 * CARD_BORDER }
   const scale = Math.min(room.width / width, room.height / height)
   return { width: even(width * scale), height: even(height * scale) }
 }
@@ -52,12 +52,16 @@ const insertFilter = (layer: InsertLayer, index: number): { readonly layer: stri
     return { layer: `[${index + 1}:v]${body(FRAME.width, FRAME.height)},${fades},${timed}[p${index}]`, x: 0, y: 0 }
   }
   const card = cardSize(layer.width, layer.height)
+  const source = layer.kind === "clip"
+    ? `${layer.hdr ? `${TO_SDR},` : ""}tpad=stop_mode=clone:stop_duration=${seconds.toFixed(4)},trim=duration=${seconds.toFixed(4)},fps=${REEL_RATE}`
+    : `trim=end_frame=1,loop=loop=${Math.max(1, frames) - 1}:size=1,fps=${REEL_RATE}`
+  const contained = `${source},scale=${card.width}:${card.height}:force_original_aspect_ratio=decrease,pad=${card.width}:${card.height}:(ow-iw)/2:(oh-ih)/2:color=white,setsar=1`
   const outer = { width: card.width + 2 * CARD_BORDER, height: card.height + 2 * CARD_BORDER }
   const framed = `pad=${outer.width}:${outer.height}:${CARD_BORDER}:${CARD_BORDER}:color=white`
   return {
-    layer: `[${index + 1}:v]${body(card.width, card.height)},${framed},${fades},${timed}[p${index}]`,
-    x: CARD_BOX.left + Math.round((CARD_BOX.width - outer.width) / 2),
-    y: CARD_BOX.top + Math.round((CARD_BOX.height - outer.height) / 2)
+    layer: `[${index + 1}:v]${contained},${framed},${fades},${timed}[p${index}]`,
+    x: CARD_BOX.left + Math.round((CARD_BOX.right - CARD_BOX.left - outer.width) / 2),
+    y: CARD_BOX.top + Math.round((CARD_BOX.bottom - CARD_BOX.top - outer.height) / 2)
   }
 }
 
