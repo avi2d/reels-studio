@@ -8,16 +8,6 @@ import { button, menuButton, sheet } from "./ui.ts"
 
 const STEP_NAMES = { records: "Записи", plan: "План", montage: "Монтаж", look: "Оформление", done: "Ролики" } satisfies Record<Step, string>
 
-const RECORDS = ["запись", "записи", "записей"] as const
-
-const recordsWord = (count: number): string => {
-  const tens = count % 100
-  const ones = count % 10
-  if (tens >= 11 && tens <= 14) return RECORDS[2]
-  if (ones === 1) return RECORDS[0]
-  return ones >= 2 && ones <= 4 ? RECORDS[1] : RECORDS[2]
-}
-
 export const stepName = (step: Step): string => STEP_NAMES[step]
 
 const confirmRemoval = (project: Api.ProjectView, onRemoved: () => void): void => {
@@ -65,9 +55,6 @@ export const topBar = (reel?: { readonly project: Api.ProjectView; readonly remo
       menuButton("Ещё", [{ label: "Удалить ролик", icon: "trash", danger: true, run: () => { confirmRemoval(reel.project, reel.removed) } }])
     ])
 
-const fact = (project: Api.ProjectView, step: Step): string =>
-  step === "records" && project.files.length > 0 ? `${project.files.length} ${recordsWord(project.files.length)}` : ""
-
 const isDone = (project: Api.ProjectView, step: Step): boolean => step === "records" && project.stage === "uploaded"
 
 const stepLink = (project: Api.ProjectView, current: Step) => (step: Step, index: number): HTMLElement => {
@@ -80,7 +67,7 @@ const stepLink = (project: Api.ProjectView, current: Step) => (step: Step, index
     "aria-current": on ? "step" : false
   },
   h("span", { class: "step__mark" }, done && !on ? icon("check") : String(index + 1)),
-  h("span", { class: "step__text" }, h("b", {}, STEP_NAMES[step]), h("span", {}, fact(project, step)))))
+  h("span", { class: "step__text" }, h("b", {}, STEP_NAMES[step]))))
 }
 
 export const rail = (project: Api.ProjectView, current: Step): HTMLElement =>

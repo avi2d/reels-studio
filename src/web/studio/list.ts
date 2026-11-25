@@ -20,9 +20,15 @@ const askForTitle = (onCreated: (id: string) => void): void => {
     h("div", { class: "sheet__row" }, create, cancel),
     problem)
   const dialog = sheet("new-reel", form)
+  const busy = (on: boolean): void => {
+    create.disabled = on
+    cancel.disabled = on
+  }
+  dialog.addEventListener("cancel", (event) => { if (create.disabled) event.preventDefault() })
   form.addEventListener("submit", (event) => {
     event.preventDefault()
-    create.disabled = true
+    if (create.disabled) return
+    busy(true)
     problem.textContent = ""
     run(
       Effect.map(Api.createProject(title.value.trim()), ({ project }) => {
@@ -31,7 +37,7 @@ const askForTitle = (onCreated: (id: string) => void): void => {
       }),
       (message) => {
         problem.textContent = message
-        create.disabled = false
+        busy(false)
       }
     )
   })

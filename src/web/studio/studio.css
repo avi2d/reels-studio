@@ -119,7 +119,5 @@ a { color: inherit; text-decoration: none; }
   .step::after { content: none; }
   .step__text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
   .step__text b { font-weight: 600; }
-  .step__text span { overflow: hidden; font-size: 13px; color: var(--muted); white-space: nowrap; text-overflow: ellipsis; }
-  .step__text span:empty { display: none; }
   .step--on { background: var(--blue-soft); }
 }
