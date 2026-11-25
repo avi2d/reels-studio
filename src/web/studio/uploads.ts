@@ -1,10 +1,10 @@
-import { Effect, Option, Schema } from "effect"
+import { Effect } from "effect"
 import type { UploadedVideo } from "../../shared/library.ts"
 import * as Api from "../api.ts"
 import { oneAfterAnother } from "../queue.ts"
 import { BROKEN } from "../run.ts"
 import { libraryShelf, upload } from "../upload.ts"
-import { type Take, uploadedName } from "./takes.ts"
+import type { Take } from "./takes.ts"
 
 type SendTake = Extract<Take, { readonly kind: "queued" | "sending" | "offline" | "unsent" }>
 
@@ -14,103 +14,67 @@ export interface Sending {
   readonly take: SendTake
 }
 
+export type TakesChange =
+  | { readonly kind: "moved" }
+  | { readonly kind: "listed"; readonly uploaded: ReadonlyArray<UploadedVideo> }
+  | { readonly kind: "unlisted" }
+
 const QUEUED: SendTake = { kind: "queued" }
 
-const sendingByReel = new Map<string, ReadonlyArray<Sending>>()
-const problems = new Map<string, string>()
-const joiners = new Set<string>()
-const listeners = new Set<(settled: boolean) => void>()
+let sending: ReadonlyArray<Sending> = []
+const listeners = new Set<(change: TakesChange) => void>()
 
-export const onTakesChanged = (listener: (settled: boolean) => void): (() => void) => {
+export const onTakesChanged = (listener: (change: TakesChange) => void): (() => void) => {
   listeners.add(listener)
   return () => { listeners.delete(listener) }
 }
 
-const changed = (settled: boolean): void => {
-  for (const listener of [...listeners]) listener(settled)
+const changed = (change: TakesChange): void => {
+  for (const listener of [...listeners]) listener(change)
 }
 
-export const sendingTo = (projectId: string): ReadonlyArray<Sending> => sendingByReel.get(projectId) ?? []
+export const sendingNow = (): ReadonlyArray<Sending> => sending
 
-export const takeProblem = (projectId: string): string | undefined => {
-  const problem = problems.get(projectId)
-  problems.delete(projectId)
-  return problem
+const without = (key: string): ReadonlyArray<Sending> => sending.filter((entry) => entry.key !== key)
+
+const setTake = (key: string, take: SendTake): void => {
+  sending = sending.map((entry) => entry.key === key ? { ...entry, take } : entry)
+  changed({ kind: "moved" })
 }
 
-const setTake = (projectId: string, key: string, take: SendTake | undefined): void => {
-  const list = sendingTo(projectId)
-  sendingByReel.set(projectId, take === undefined
-    ? list.filter((entry) => entry.key !== key)
-    : list.map((entry) => entry.key === key ? { ...entry, take } : entry))
-  changed(take === undefined)
-}
-
-const decodeNames = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Array(Schema.String)))
-const joinKey = (projectId: string): string => `reels-joining:${projectId}`
-
-// Kept in the browser so a recording still joins its reel after a reload while the studio hears it.
-export const joiningTo = (projectId: string): ReadonlyArray<string> =>
-  Option.getOrElse(decodeNames(localStorage.getItem(joinKey(projectId))), () => [])
-
-const setJoining = (projectId: string, names: ReadonlyArray<string>): void => {
-  if (names.length === 0) localStorage.removeItem(joinKey(projectId))
-  else localStorage.setItem(joinKey(projectId), JSON.stringify(names))
-}
-
-const joinRound = (projectId: string): Effect.Effect<boolean> =>
-  Effect.gen(function*() {
-    const names = joiningTo(projectId)
-    if (names.length === 0) return false
-    const { videos } = yield* Api.getUploaded
-    const stateOf = (name: string): UploadedVideo["state"] | undefined => videos.find((video) => video.name === name)?.state
-    const ready = names.filter((name) => stateOf(name) === "ready")
-    if (ready.length > 0) {
-      yield* Api.addVideos(projectId, ready.map((name) => ({ from: "library", name }))).pipe(
-        Effect.catchTag("Failed", (error) => Effect.sync(() => { problems.set(projectId, error.message) }))
-      )
+// The finished row leaves together with the fresh list, so the recording never vanishes between the two.
+const finish = (key: string): Effect.Effect<void> => {
+  const lookup: Effect.Effect<ReadonlyArray<UploadedVideo>, Api.Failed> = Api.getUploadedForTransfer.pipe(
+    Effect.map(({ videos }) => videos),
+    Effect.catchTag("Offline", () => Effect.gen(function*() {
+      setTake(key, { kind: "offline" })
+      yield* Effect.sleep("3 seconds")
+      return yield* lookup
+    }))
+  )
+  return Effect.match(lookup, {
+    onFailure: () => {
+      sending = without(key)
+      changed({ kind: "unlisted" })
+    },
+    onSuccess: (uploaded) => {
+      sending = without(key)
+      changed({ kind: "listed", uploaded })
     }
-    const checked = new Set(names)
-    const left = joiningTo(projectId).filter((name) => !checked.has(name) || stateOf(name) === "waiting")
-    setJoining(projectId, left)
-    if (ready.length > 0 || left.join("/") !== names.join("/")) changed(true)
-    return left.length > 0
-  }).pipe(Effect.catchTag("Failed", () => Effect.succeed(true)))
-
-const joinLoop = (projectId: string): Effect.Effect<void> =>
-  Effect.flatMap(joinRound(projectId), (again) => again ? Effect.andThen(Effect.sleep("4 seconds"), joinLoop(projectId)) : Effect.void)
-
-export const keepJoining = (projectId: string): void => {
-  if (joiners.has(projectId) || joiningTo(projectId).length === 0) return
-  joiners.add(projectId)
-  Effect.runFork(joinLoop(projectId).pipe(Effect.ensuring(Effect.sync(() => { joiners.delete(projectId) }))))
+  })
 }
 
-const NOT_LISTED = "Студия приняла файл, но не показала его. Обновите страницу."
-
-const sendOne = (projectId: string, { key, file }: Sending): Effect.Effect<void> =>
-  Effect.gen(function*() {
-    const uploaded: typeof Api.getUploaded = Api.getUploadedForTransfer.pipe(
-      Effect.catchTag("Offline", () => Effect.gen(function*() {
-        setTake(projectId, key, { kind: "offline" })
-        yield* Effect.sleep("3 seconds")
-        return yield* uploaded
-      }))
-    )
-    const before = new Set((yield* uploaded).videos.map((video) => video.name))
-    yield* upload(libraryShelf, file, (progress) => {
-      setTake(projectId, key, progress.waiting ? { kind: "offline" } : { kind: "sending", sent: progress.sent, total: progress.total })
-    })
-    const name = uploadedName(file, before, (yield* uploaded).videos)
-    if (name === undefined) return yield* new Api.Failed({ message: NOT_LISTED })
-    setJoining(projectId, [...joiningTo(projectId), name])
-    setTake(projectId, key, undefined)
-    keepJoining(projectId)
+const sendOne = ({ key, file }: Sending): Effect.Effect<void> =>
+  upload(libraryShelf, file, (progress) => {
+    setTake(key, progress.waiting ? { kind: "offline" } : { kind: "sending", sent: progress.sent, total: progress.total })
   }).pipe(
-    Effect.catchTag("Failed", (error) => Effect.sync(() => { setTake(projectId, key, { kind: "unsent", message: error.message }) })),
+    Effect.matchEffect({
+      onFailure: (error) => Effect.sync(() => { setTake(key, { kind: "unsent", message: error.message }) }),
+      onSuccess: () => finish(key)
+    }),
     Effect.catchDefect((defect) => Effect.sync(() => {
       console.error(defect)
-      setTake(projectId, key, { kind: "unsent", message: BROKEN })
+      setTake(key, { kind: "unsent", message: BROKEN })
     }))
   )
 
@@ -118,22 +82,22 @@ const enqueue = oneAfterAnother((work: Effect.Effect<void>) => work)
 
 const keyOf = (file: File): string => `${file.name}:${file.size}:${file.lastModified}`
 
-export const sendTakes = (projectId: string, files: ReadonlyArray<File>): void => {
-  const list = sendingTo(projectId)
-  const busy = new Set(list.filter((entry) => entry.take.kind !== "unsent").map((entry) => entry.key))
+export const sendTakes = (files: ReadonlyArray<File>): void => {
+  const busy = new Set(sending.filter((entry) => entry.take.kind !== "unsent").map((entry) => entry.key))
   const fresh = new Map(files.filter((file) => !busy.has(keyOf(file))).map((file) => [keyOf(file), file]))
   if (fresh.size === 0) return
   const made = [...fresh].map(([key, file]): Sending => ({ key, file, take: QUEUED }))
-  sendingByReel.set(projectId, [...list.filter((entry) => !fresh.has(entry.key)), ...made])
-  changed(false)
-  enqueue(made.map((entry) => sendOne(projectId, entry)))
+  sending = [...sending.filter((entry) => !fresh.has(entry.key)), ...made]
+  changed({ kind: "moved" })
+  enqueue(made.map(sendOne))
 }
 
-export const resend = (projectId: string, key: string): void => {
-  const entry = sendingTo(projectId).find((one) => one.key === key)
-  if (entry !== undefined) sendTakes(projectId, [entry.file])
+export const resend = (key: string): void => {
+  const entry = sending.find((one) => one.key === key)
+  if (entry !== undefined) sendTakes([entry.file])
 }
 
-export const dropTake = (projectId: string, key: string): void => {
-  setTake(projectId, key, undefined)
+export const dropTake = (key: string): void => {
+  sending = without(key)
+  changed({ kind: "moved" })
 }

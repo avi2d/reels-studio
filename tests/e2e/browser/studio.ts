@@ -26,7 +26,7 @@ const createReel = async (page: Page, title: string): Promise<string> => {
   const dialog = page.getByRole("dialog", { name: "Новый ролик" })
   await dialog.getByRole("textbox", { name: "Название" }).fill(title)
   await dialog.getByRole("button", { name: "Создать ролик", exact: true }).click()
-  await page.getByRole("heading", { name: "Загрузите записи", exact: true, level: 1 }).waitFor()
+  await page.getByRole("heading", { name: "Выберите записи", exact: true, level: 1 }).waitFor()
   await page.getByRole("link", { name: "Шаг 1: Записи" }).and(page.locator('[aria-current="step"]')).waitFor()
   return reelId(page)
 }
@@ -53,7 +53,7 @@ const createListDelete: ProductCheck = {
     const card = page.getByRole("link", { name: new RegExp(title, "u") })
     await card.getByText(/· Новый$/u).waitFor()
     await card.click()
-    await page.getByRole("heading", { name: "Загрузите записи", exact: true, level: 1 }).waitFor()
+    await page.getByRole("heading", { name: "Выберите записи", exact: true, level: 1 }).waitFor()
     assert.equal(new URL(page.url()).pathname, stepPath(id, "records"))
     await deleteReel(page, title)
     assert.equal(await page.getByRole("link", { name: new RegExp(title, "u") }).count(), 0, "The deleted reel must leave the list")
@@ -81,14 +81,37 @@ const playerAt = (page: Page, from: number, to: number) =>
     return player instanceof HTMLVideoElement && player.readyState >= 1 && !player.seeking && player.currentTime >= low && player.currentTime < high
   }, [from, to] as const)
 
-const uploadHearSeek = async (page: Page, title: string): Promise<void> => {
-  const id = await createReel(page, title)
+const READY = /^Готово · 0:07$/u
+
+const readyUploads = (page: Page): Promise<number> =>
+  page.getByRole("list", { name: "Загруженные записи", exact: true }).getByText(READY).count()
+
+const uploadOnStudioPage = async (page: Page): Promise<void> => {
+  await page.goto(address(STUDIO_PATH))
+  await page.getByRole("heading", { name: "Записи", exact: true, level: 2 }).waitFor()
+  const before = await readyUploads(page)
   await page.locator('input[type="file"][name="records"]').setInputFiles(join(setting("REELS_BROWSER_DIR"), SOURCE_VIDEO))
-  const row = reelRecords(page).first()
-  await row.getByText(/^Готово · 0:07$/u).waitFor({ timeout: HEARING })
+  await page.waitForFunction((count) => [...document.querySelectorAll('[aria-label="Загруженные записи"] .rec__status')]
+    .filter((status) => status.textContent === "Готово · 0:07").length > count, before, { timeout: HEARING })
+}
+
+const addEarlier = async (page: Page, title: string): Promise<string> => {
+  const id = await createReel(page, title)
+  assert.equal(await page.locator('input[type="file"]').count(), 0, "Step 1 picks uploaded recordings and holds no upload picker")
+  const [added] = await Promise.all([
+    page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/projects/${id}/videos`),
+    page.getByRole("list", { name: "Загружены раньше", exact: true }).getByRole("button", { name: /^В ролик: «source/u }).first().click()
+  ])
+  assert(added.ok(), `The studio refused to add the recording: ${added.status()}`)
+  await reelRecords(page).first().getByText(READY).waitFor()
   await page.getByRole("heading", { name: "1 запись · 0:07", exact: true, level: 1 }).waitFor()
-  assert.equal(await reelRecords(page).count(), 1, "One upload must make one recording in the reel")
+  assert.equal(await reelRecords(page).count(), 1, "One press of «В ролик» must make one recording in the reel")
   await assertOnlySource(id)
+  return id
+}
+
+const seekByWord = async (page: Page): Promise<void> => {
+  const row = reelRecords(page).first()
   await row.getByRole("button", { expanded: false }).click()
   await playerAt(page, 0, 1)
   await row.getByRole("button", { name: "Конец", exact: true }).click()
@@ -96,28 +119,18 @@ const uploadHearSeek = async (page: Page, title: string): Promise<void> => {
   assert.equal(await page.getByText(/обрежу по лицу/u).count(), 0, "The horizontal crop status waits for its server step")
 }
 
-const addEarlier = async (page: Page, title: string): Promise<void> => {
-  const id = await createReel(page, title)
-  const [added] = await Promise.all([
-    page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/projects/${id}/videos`),
-    page.getByRole("list", { name: "Загружены раньше", exact: true }).getByRole("button", { name: /^В ролик: «source/u }).first().click()
-  ])
-  assert(added.ok(), `The studio refused to add the recording: ${added.status()}`)
-  await reelRecords(page).first().getByText(/^Готово · 0:07$/u).waitFor()
-  await page.getByRole("heading", { name: "1 запись · 0:07", exact: true, level: 1 }).waitFor()
-  await assertOnlySource(id)
-}
-
 const recordsStep: ProductCheck = {
-  name: "a recording uploaded on the records step reads «Готово», a pressed word moves its player, and «В ролик» adds it to the next reel, instead of the player staying at the start or a second upload",
+  name: "a recording uploaded on the studio page reads «Готово», step 1 adds it to two reels with «В ролик» and a pressed word moves its player, instead of a second upload, an upload picker in step 1 or the player staying at the start",
   run: async (page) => {
     page.setDefaultTimeout(timeout)
     const [first, second] = ["Ролик с записью", "Ролик из прежней записи"]
-    await uploadHearSeek(page, first)
+    await uploadOnStudioPage(page)
+    await addEarlier(page, first)
+    await seekByWord(page)
     await deleteReel(page, first)
     await addEarlier(page, second)
     await deleteReel(page, second)
-    return { targets: ["upload reaches «Готово · 0:07»", "pressed «Конец» moves the player to 0:05", "«В ролик» adds the earlier recording ready", "each reel keeps the original"], found: [] }
+    return { targets: ["upload on the studio page reaches «Готово · 0:07»", "step 1 holds no upload picker", "«В ролик» adds the uploaded recording ready", "pressed «Конец» moves the player to 0:05", "each reel keeps the original"], found: [] }
   }
 }
 

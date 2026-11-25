@@ -6,6 +6,7 @@ import { run } from "../run.ts"
 import { rail, stepBody, stepName, topBar } from "./frame.ts"
 import { listView } from "./list.ts"
 import { recordsStep } from "./records.ts"
+import { uploaderSection } from "./uploader.ts"
 
 type Page = { readonly kind: "list" } | { readonly kind: "reel"; readonly id: string; readonly step: Step | undefined }
 
@@ -36,9 +37,10 @@ const showFailure = (message: string): void => {
 }
 
 const listPage = (): Effect.Effect<void, Api.Failed> =>
-  Effect.map(Api.listProjects, ({ projects }) => {
+  Effect.map(Effect.all({ list: Api.listProjects, uploaded: Api.getUploaded }, { concurrency: "unbounded" }), ({ list, uploaded }) => {
     document.title = `Ролики · ${TITLE}`
-    show("home", topBar(), h("main", { class: "main" }, listView(projects, (id) => { navigate(stepPath(id, "records")) })))
+    const onCreated = (id: string): void => { navigate(stepPath(id, "records")) }
+    show("home", topBar(), h("main", { class: "main" }, listView(list.projects, onCreated, uploaderSection(uploaded.videos))))
   })
 
 const stepView = (project: Api.ProjectView, step: Step, onProject: (project: Api.ProjectView) => void): Effect.Effect<HTMLElement, Api.Failed> =>

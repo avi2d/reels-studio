@@ -20,7 +20,7 @@ const card = (project: Api.ProjectView): HTMLElement =>
     h("span", { class: "reelcard__text" }, h("b", {}, project.title), h("span", {}, `${formatDay(project.createdAt)} · ${STATUS[project.status]}`)),
     icon("right")))
 
-export const listView = (projects: ReadonlyArray<Api.ProjectView>, onCreated: (id: string) => void): HTMLElement =>
+export const listView = (projects: ReadonlyArray<Api.ProjectView>, onCreated: (id: string) => void, uploader: HTMLElement): HTMLElement =>
   h("div", { class: "body" },
     h("div", { class: "head" },
       h("h1", { tabindex: "-1" }, "Ролики"),
@@ -29,4 +29,5 @@ export const listView = (projects: ReadonlyArray<Api.ProjectView>, onCreated: (i
       } }, "plus")),
     projects.length === 0
       ? h("p", { class: "hint" }, "Роликов пока нет. Нажмите «Новый ролик» и назовите первый.")
-      : h("ul", { class: "reels" }, ...projects.map(card)))
+      : h("ul", { class: "reels" }, ...projects.map(card)),
+    uploader)

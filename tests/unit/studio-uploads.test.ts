@@ -1,39 +1,32 @@
 import { expect, spyOn, test } from "bun:test"
-import { joiningTo, onTakesChanged, sendTakes, sendingTo } from "../../src/web/studio/uploads.ts"
+import { onTakesChanged, sendingNow, sendTakes, type TakesChange } from "../../src/web/studio/uploads.ts"
 
-type Connection = "before" | "after" | "connected" | "rejected"
+type Connection = "connected" | "dropped" | "rejected"
 
-const fakeStudio = (id: string, connection: Connection) => {
+const fakeStudio = (connection: Connection) => {
   const server = {
     completed: false,
     disconnected: false,
     starts: 0,
     patches: 0,
     lookups: 0,
-    added: [] as Array<unknown>,
     handle: async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = input instanceof Request ? input.url : input instanceof URL ? input.href : input
       const method = init?.method ?? "GET"
       if (url === "/api/library") return lookup()
       if (url === "/api/library/uploads" && method === "POST") return start()
       if (url === "/api/library/uploads/one" && method === "PATCH") return patch()
-      if (url === `/api/projects/${id}/videos` && method === "POST") return add(init?.body)
       throw new Error(`Unexpected request: ${method} ${url}`)
     }
   }
-  const dropsNow = () =>
-    !server.disconnected &&
-    ((connection === "before" && !server.completed) || (connection === "after" && server.completed))
   const lookup = () => {
     server.lookups += 1
     if (connection === "rejected") return Response.json({ error: "Library unavailable" }, { status: 503 })
-    if (dropsNow()) {
+    if (connection === "dropped" && !server.disconnected) {
       server.disconnected = true
       throw new TypeError("Network disconnected")
     }
-    return Response.json({
-      videos: server.completed ? [{ name: "take.mp4", size: 4, state: "ready", duration: 7 }] : []
-    })
+    return Response.json({ videos: server.completed ? [{ name: "take.mp4", size: 4, state: "waiting" }] : [] })
   }
   const start = () => {
     server.starts += 1
@@ -44,21 +37,12 @@ const fakeStudio = (id: string, connection: Connection) => {
     server.completed = true
     return new Response(null, { status: 204, headers: { "upload-offset": "4" } })
   }
-  const add = (body: BodyInit | null | undefined) => {
-    if (typeof body !== "string") throw new Error("The request body is not JSON text")
-    server.added.push(JSON.parse(body))
-    return Response.json({ project: {
-      id, title: "Test reel", createdAt: "2026-01-01", stage: "uploaded", status: "uploaded",
-      files: [{ name: "take.mp4", size: 4 }]
-    } })
-  }
   return server
 }
 
-test.each(["before", "after", "connected", "rejected"] as const)(
-  "%s library lookup does not lose or duplicate a finished upload",
+test.each(["connected", "dropped", "rejected"] as const)(
+  "a finished upload whose library lookup is %s leaves the queue once and is never offered for a second upload",
   async (connection) => {
-    const id = `lookup-${connection}`
     const stored = new Map<string, string>()
     const previousStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage")
     Object.defineProperty(globalThis, "localStorage", {
@@ -69,37 +53,29 @@ test.each(["before", "after", "connected", "rejected"] as const)(
         removeItem: (key: string) => { stored.delete(key) }
       }
     })
-    const server = fakeStudio(id, connection)
-    const added = server.added
+    const server = fakeStudio(connection)
     const states: Array<string> = []
+    const ends: Array<TakesChange> = []
     const finished = Promise.withResolvers<void>()
     const timer = setTimeout(() => { finished.reject(new Error("The upload did not settle")) }, 8000)
-    const stop = onTakesChanged(() => {
-      const entries = sendingTo(id)
-      states.push(...entries.map((entry) => entry.take.kind))
-      if (entries.some((entry) => entry.take.kind === "unsent") ||
-        (added.length > 0 && entries.length === 0 && joiningTo(id).length === 0)) finished.resolve()
+    const stop = onTakesChanged((change) => {
+      states.push(...sendingNow().map((entry) => entry.take.kind))
+      if (change.kind !== "moved") ends.push(change)
+      if (change.kind !== "moved" || states.includes("unsent")) finished.resolve()
     })
     const fetch = spyOn(globalThis, "fetch").mockImplementation(
       Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => server.handle(input, init), { preconnect: () => {} })
     )
     try {
-      sendTakes(id, [new File(["take"], "take.mp4", { lastModified: 1 })])
+      sendTakes([new File(["take"], "take.mp4", { lastModified: 1 })])
       await finished.promise
-      if (connection === "rejected") {
-        expect(server.lookups).toBe(1)
-        expect(server.starts).toBe(0)
-        expect(states).toContain("unsent")
-        expect(states).not.toContain("offline")
-      } else {
-        expect(sendingTo(id)).toEqual([])
-        expect(joiningTo(id)).toEqual([])
-        expect(server.starts).toBe(1)
-        expect(server.patches).toBe(1)
-        expect(added).toEqual([{ videos: [{ from: "library", name: "take.mp4" }] }])
-        expect(states).not.toContain("unsent")
-        if (connection !== "connected") expect(states).toContain("offline")
-      }
+      expect(sendingNow()).toEqual([])
+      expect(server.starts).toBe(1)
+      expect(server.patches).toBe(1)
+      expect(states).not.toContain("unsent")
+      if (connection === "rejected") expect(ends).toEqual([{ kind: "unlisted" }])
+      else expect(ends).toEqual([{ kind: "listed", uploaded: [{ name: "take.mp4", size: 4, state: "waiting" }] }])
+      if (connection === "dropped") expect(states).toContain("offline")
     } finally {
       clearTimeout(timer)
       stop()

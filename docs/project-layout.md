@@ -38,7 +38,7 @@ The studio keeps its code, skills and per-video folders in these places.
 | `deploy/reels-studio.service` | The systemd user unit that keeps the studio running |
 | `src/pi/` | The pi extension that keeps the chat model inside one video folder |
 | `src/web/` | The page, its styles and its script |
-| `src/web/studio/` | The new screens at `/new`: the reel list, the top bar and the five steps, beside the old page until they replace it. Step 1, «Записи», is wired to the server: it picks and uploads takes, lists a reel's recordings and the earlier uploads, and plays a recording |
+| `src/web/studio/` | The new screens at `/new`: the reel list, the top bar and the five steps, beside the old page until they replace it. The reel list uploads takes, and step 1, «Записи», adds uploaded takes to the reel, lists its recordings and plays a recording |
 | `skills/` | The four skills the chat model reads: plan, style, player zones and inserts |
 | `brands/` | One folder per style profile with its colours, fonts and templates, and the font files under `fonts/` |
 | `prompts/studio.md` | The system prompt of the chat model |

@@ -1,4 +1,3 @@
-import type { UploadedVideo } from "../../shared/library.ts"
 import { formatLength } from "../format.ts"
 
 export type Take =
@@ -37,23 +36,3 @@ const RECORD_FORMS: Record<Intl.LDMLPluralRule, string> = {
 const russianPlural = new Intl.PluralRules("ru-RU")
 
 export const recordCount = (count: number): string => `${count} ${RECORD_FORMS[russianPlural.select(count)]}`
-
-const isCopyOf = (picked: string, stored: string): boolean => {
-  if (stored === picked) return true
-  const dot = picked.lastIndexOf(".")
-  const [stem, extension] = dot > 0 ? [picked.slice(0, dot), picked.slice(dot)] : [picked, ""]
-  if (!stored.startsWith(`${stem} (`) || !stored.endsWith(`)${extension}`)) return false
-  return /^\d+$/u.test(stored.slice(stem.length + 2, stored.length - extension.length - 1))
-}
-
-// The upload address never names the stored file, so the file that appeared during the upload is the one.
-export const uploadedName = (
-  file: { readonly name: string; readonly size: number },
-  before: ReadonlySet<string>,
-  after: ReadonlyArray<UploadedVideo>
-): string | undefined => {
-  const sameSize = after.filter((video) => video.size === file.size)
-  const fresh = sameSize.filter((video) => !before.has(video.name))
-  const copies = sameSize.filter((video) => isCopyOf(file.name, video.name))
-  return (fresh.find((video) => copies.includes(video)) ?? fresh.at(-1) ?? copies.at(-1))?.name
-}
