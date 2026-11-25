@@ -107,6 +107,12 @@ button.rec__main { cursor: pointer; touch-action: manipulation; }
 .reels > li + li { border-top: 1px solid var(--line); }
 .uploads { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
 .uploads h2:focus { outline: none; }
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pager__where { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.choose { display: flex; flex-direction: column; gap: 12px; }
+.choose__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+label.rec__main { cursor: pointer; touch-action: manipulation; }
+.rec__check { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--blue); cursor: pointer; }
 .reelcard { display: flex; align-items: center; gap: 12px; padding: 12px; color: var(--muted); }
 .reelcard__thumb { flex: none; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 10px; overflow: hidden; background: var(--line); }
 .reelcard__thumb video { width: 100%; height: 100%; object-fit: cover; }
@@ -129,7 +135,7 @@ button.rec__main { cursor: pointer; touch-action: manipulation; }
 .field:focus { outline: 2px solid var(--blue); outline-offset: -1px; border-color: var(--blue); }
 
 @media (hover: hover) {
-  .btn:hover:not(:disabled), .menu__item:hover, .reelcard:hover, button.rec__main:hover { background: var(--hover); }
+  .btn:hover:not(:disabled), .menu__item:hover, .reelcard:hover, button.rec__main:hover, label.rec__main:hover { background: var(--hover); }
   .word:hover { background: var(--blue-soft); }
   .btn--main:hover:not(:disabled) { background: var(--blue-press); }
   .btn--danger:hover:not(:disabled) { background: var(--red-press); }

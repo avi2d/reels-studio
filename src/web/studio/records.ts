@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { type LibraryVideo, pickOf } from "../../shared/library.ts"
+import { pickOf } from "../../shared/library.ts"
 import { STUDIO_PATH, stepPath } from "../../shared/page.ts"
 import * as Api from "../api.ts"
 import { h } from "../dom.ts"
@@ -7,8 +7,9 @@ import { formatLength } from "../format.ts"
 import { run } from "../run.ts"
 import { icon } from "./icons.ts"
 import { rowList, showKeepingFocus } from "./record-list.ts"
-import { earlierRows, heardLengths, mineRows, type Shelves, stillHearing } from "./record-rows.ts"
+import { earlierRows, heardLengths, mineRows, offerKey, type Shelves, stillHearing } from "./record-rows.ts"
 import { recordCount } from "./takes.ts"
+import { button } from "./ui.ts"
 import { onTakesChanged, sendingNow } from "./uploads.ts"
 
 const POLL_MS = 4000
@@ -26,39 +27,68 @@ const layout = (id: string) => {
   const loadProblem = h("p", { class: "error", role: "alert" })
   const earlierTitle = h("h2", { class: "recs-title", id: "records-earlier" }, "Загружены раньше")
   const earlier = rowList({ "aria-labelledby": "records-earlier" })
+  const add = button("main", "Добавить в ролик", { class: "btn btn--main btn--start" }, "plus")
+  const all = button("quiet", "Выбрать все", { class: "btn btn--quiet btn--sm" })
+  const choose = h("div", { class: "choose" },
+    h("p", { class: "hint" }, "Отметьте записи, которые нужны в ролике, и нажмите «Добавить в ролик»."),
+    earlier.node,
+    h("div", { class: "choose__bar" }, add, all))
   const sending = h("p", { class: "hint" })
   const listening = h("p", { class: "hint" })
   const empty = h("div", { class: "pick" },
     h("p", { class: "hint" }, "Загруженных записей пока нет. Загрузите дубли на странице «Ролики», и они появятся здесь."),
     h("a", { class: "btn btn--quiet", href: STUDIO_PATH }, icon("upload"), "К загрузке видео"))
   const next = h("a", { class: "btn btn--main btn--start", href: stepPath(id, "plan") }, "Дальше: план", icon("right"))
-  const body = h("div", { class: "body" }, heading, mine.node, problem, loadProblem, earlierTitle, earlier.node, sending, listening, empty, next)
-  return { heading, mine, problem, loadProblem, earlierTitle, earlier, sending, listening, empty, next, body }
+  const body = h("div", { class: "body" }, heading, mine.node, problem, loadProblem, earlierTitle, choose, sending, listening, empty, next)
+  return { heading, mine, problem, loadProblem, earlierTitle, earlier, add, all, choose, sending, listening, empty, next, body }
 }
 
 interface Live {
   readonly id: string
   readonly view: ReturnType<typeof layout>
   readonly adding: Set<string>
+  readonly chosen: Set<string>
   readonly onProject: (project: Api.ProjectView) => void
   shelves: Shelves
   timer: number
   generation: number
 }
 
-const addToReel = (live: Live, key: string, video: LibraryVideo): void => {
-  live.adding.add(key)
+const addChosen = (live: Live): void => {
+  const videos = live.shelves.offer.videos.filter((video) => live.chosen.has(offerKey(video)))
+  if (videos.length === 0) return
+  const keys = videos.map(offerKey)
+  for (const key of keys) {
+    live.chosen.delete(key)
+    live.adding.add(key)
+  }
   live.view.problem.textContent = ""
   render(live)
-  const settle = (): void => { live.adding.delete(key) }
-  run(Effect.map(Api.addVideos(live.id, [pickOf(video)]), () => {
+  const settle = (): void => { for (const key of keys) live.adding.delete(key) }
+  run(Effect.map(Api.addVideos(live.id, videos.map(pickOf)), () => {
     settle()
     refresh(live)
   }), (message) => {
     settle()
+    for (const key of keys) live.chosen.add(key)
     live.view.problem.textContent = message
     render(live)
   })
+}
+
+const toggle = (live: Live, key: string): void => {
+  if (!live.chosen.delete(key)) live.chosen.add(key)
+  render(live)
+}
+
+const toggleAll = (live: Live): void => {
+  const free = live.shelves.offer.videos.map(offerKey).filter((key) => !live.adding.has(key))
+  const every = free.every((key) => live.chosen.has(key))
+  for (const key of free) {
+    if (every) live.chosen.delete(key)
+    else live.chosen.add(key)
+  }
+  render(live)
 }
 
 const retryReel = (live: Live, name: string): void => {
@@ -75,12 +105,23 @@ const headingOf = (count: number, lengths: ReadonlyArray<number>): string => {
 function render(live: Live): void {
   const { view, shelves } = live
   const mine = mineRows(live.id, shelves, (name) => { retryReel(live, name) })
-  const earlier = earlierRows(shelves, live.adding, (key, video) => { addToReel(live, key, video) })
+  const offered = new Set(shelves.offer.videos.map(offerKey))
+  for (const key of live.chosen) if (!offered.has(key)) live.chosen.delete(key)
+  const earlier = earlierRows(shelves, live.adding, live.chosen, (key) => { toggle(live, key) })
+  const free = earlier.filter((row) => row.choice !== undefined)
+  const count = live.chosen.size
   const lengths = heardLengths(shelves)
   const { listening } = shelves.offer
   const sending = sendingNow().filter((entry) => entry.take.kind !== "unsent").length
   view.heading.textContent = headingOf(mine.length, lengths)
   view.earlierTitle.hidden = earlier.length === 0
+  view.choose.hidden = earlier.length === 0
+  if (count === 0 && view.add === document.activeElement) view.heading.focus()
+  view.add.disabled = count === 0
+  view.add.lastChild?.replaceWith(count === 0 ? "Добавить в ролик" : `Добавить в ролик: ${recordCount(count)}`)
+  view.all.hidden = free.length < 2
+  view.all.disabled = free.length === 0
+  view.all.textContent = free.length > 0 && free.every((row) => row.choice?.checked === true) ? "Снять выбор" : "Выбрать все"
   view.sending.hidden = sending === 0
   view.sending.textContent = `Ещё загружаю: ${recordCount(sending)}. Готовые записи появятся здесь сами.`
   view.listening.hidden = listening === 0
@@ -131,7 +172,9 @@ const listen = (live: Live): void => {
 
 export const recordsStep = (project: Api.ProjectView, onProject: (project: Api.ProjectView) => void): Effect.Effect<HTMLElement, Api.Failed> =>
   Effect.map(loadShelves(project.id), (shelves) => {
-    const live: Live = { id: project.id, view: layout(project.id), adding: new Set(), onProject, shelves, timer: 0, generation: 0 }
+    const live: Live = { id: project.id, view: layout(project.id), adding: new Set(), chosen: new Set(), onProject, shelves, timer: 0, generation: 0 }
+    live.view.add.addEventListener("click", () => { addChosen(live) })
+    live.view.all.addEventListener("click", () => { toggleAll(live) })
     listen(live)
     render(live)
     if (stillHearing(shelves)) later(live)

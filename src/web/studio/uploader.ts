@@ -3,6 +3,7 @@ import type { UploadedVideo } from "../../shared/library.ts"
 import * as Api from "../api.ts"
 import { h } from "../dom.ts"
 import { run } from "../run.ts"
+import { pager } from "./pager.ts"
 import { rowList, showKeepingFocus } from "./record-list.ts"
 import { stillUploading, type UploadHandlers, uploadRows } from "./record-rows.ts"
 import { button, confirmRemoval } from "./ui.ts"
@@ -10,18 +11,19 @@ import { dropTake, onTakesChanged, resend, sendingNow, sendTakes } from "./uploa
 
 const POLL_MS = 4000
 
-const layout = () => {
+const layout = (onMove: () => void) => {
   const input = h("input", { type: "file", name: "records", accept: "video/*", multiple: true, hidden: true, tabindex: "-1" })
   const heading = h("h2", { id: "uploads-title", tabindex: "-1" }, "Записи")
   const choose = button("quiet", "Загрузить видео", { click: () => { input.click() } }, "upload")
   const list = rowList({ "aria-label": "Загруженные записи" })
+  const pages = pager("Страницы записей", onMove)
   const problem = h("p", { class: "error", role: "alert" })
   const loadProblem = h("p", { class: "error", role: "alert" })
   const section = h("section", { class: "uploads", "aria-labelledby": "uploads-title" },
     h("div", { class: "head" }, heading, choose),
     h("p", { class: "hint" }, "Загрузите дубли один раз и добавляйте их в любой ролик на шаге «Записи». Можно выбрать все дубли сразу."),
-    list.node, problem, loadProblem, input)
-  return { input, heading, list, problem, loadProblem, section }
+    list.node, pages.node, problem, loadProblem, input)
+  return { input, heading, list, pages, problem, loadProblem, section }
 }
 
 interface Live {
@@ -58,7 +60,8 @@ const handlersOf = (live: Live): UploadHandlers => ({
 })
 
 const render = (live: Live): void => {
-  showKeepingFocus(live.view.heading, [[live.view.list, uploadRows(sendingNow(), live.uploaded, handlersOf(live))]])
+  const rows = uploadRows(sendingNow(), live.uploaded, handlersOf(live))
+  showKeepingFocus(live.view.heading, [[live.view.list, live.view.pages.show(rows)]])
 }
 
 const later = (live: Live): void => {
@@ -89,7 +92,7 @@ function refresh(live: Live): void {
 }
 
 const listen = (live: Live): void => {
-  const { input, problem, section } = live.view
+  const { input, pages, problem, section } = live.view
   const stop = onTakesChanged((change) => {
     if (!section.isConnected) {
       stop()
@@ -107,12 +110,13 @@ const listen = (live: Live): void => {
     const videos = [...input.files ?? []]
     input.value = ""
     problem.textContent = ""
+    pages.reset()
     sendTakes(videos)
   })
 }
 
 export const uploaderSection = (uploaded: ReadonlyArray<UploadedVideo>): HTMLElement => {
-  const live: Live = { view: layout(), uploaded, timer: 0, generation: 0 }
+  const live: Live = { view: layout(() => { render(live) }), uploaded, timer: 0, generation: 0 }
   listen(live)
   render(live)
   if (stillUploading(uploaded)) later(live)

@@ -13,8 +13,12 @@ export interface Shelves {
 export type Action =
   | { readonly kind: "retry"; readonly run: () => void }
   | { readonly kind: "drop"; readonly run: () => void }
-  | { readonly kind: "add"; readonly run: () => void }
   | { readonly kind: "remove"; readonly run: () => void }
+
+interface Choice {
+  readonly checked: boolean
+  readonly toggle: () => void
+}
 
 export interface Row {
   readonly key: string
@@ -23,10 +27,11 @@ export interface Row {
   readonly preview: string | undefined
   readonly note: string | undefined
   readonly transcript: Transcript | undefined
+  readonly choice: Choice | undefined
   readonly actions: ReadonlyArray<Action>
 }
 
-const plain = { preview: undefined, note: undefined, transcript: undefined } as const
+const plain = { preview: undefined, note: undefined, transcript: undefined, choice: undefined } as const
 
 const reelRow = (id: string, video: VideoView, retry: (name: string) => void): Row => {
   if (video.state === "ready") {
@@ -37,6 +42,7 @@ const reelRow = (id: string, video: VideoView, retry: (name: string) => void): R
       preview: Api.previewUrl(id, video.name),
       note: undefined,
       transcript: video.transcript,
+      choice: undefined,
       actions: []
     }
   }
@@ -53,9 +59,11 @@ const reelRow = (id: string, video: VideoView, retry: (name: string) => void): R
 export const mineRows = (id: string, shelves: Shelves, retry: (name: string) => void): ReadonlyArray<Row> =>
   shelves.reel.map((video) => reelRow(id, video, retry))
 
-export const earlierRows = (shelves: Shelves, adding: ReadonlySet<string>, add: (key: string, video: LibraryVideo) => void): ReadonlyArray<Row> =>
+export const offerKey = (video: LibraryVideo): string => `pick:${JSON.stringify(pickOf(video))}`
+
+export const earlierRows = (shelves: Shelves, adding: ReadonlySet<string>, chosen: ReadonlySet<string>, toggle: (key: string) => void): ReadonlyArray<Row> =>
   shelves.offer.videos.map((video) => {
-    const key = `pick:${JSON.stringify(pickOf(video))}`
+    const key = offerKey(video)
     const busy = adding.has(key)
     return {
       key,
@@ -64,7 +72,8 @@ export const earlierRows = (shelves: Shelves, adding: ReadonlySet<string>, add: 
       preview: video.from === "library" ? Api.uploadedPreviewUrl(video.name) : Api.previewUrl(video.project, video.name),
       note: video.from === "reel" ? `Из ролика «${video.titles.join("», «")}»` : undefined,
       transcript: undefined,
-      actions: busy ? [] : [{ kind: "add", run: () => { add(key, video) } }]
+      choice: busy ? undefined : { checked: chosen.has(key), toggle: () => { toggle(key) } },
+      actions: []
     }
   })
 

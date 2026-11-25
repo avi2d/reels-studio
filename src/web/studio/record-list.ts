@@ -22,7 +22,6 @@ const textOf = (row: Row): HTMLElement =>
 const actionNode = (row: Row, action: Action): HTMLElement => {
   switch (action.kind) {
     case "retry": return button("quiet", "Ещё раз", { class: "btn btn--quiet btn--sm", "data-focus": "retry", click: action.run }, "retry")
-    case "add": return button("quiet", "В ролик", { class: "btn btn--quiet btn--sm", "data-focus": "add", "aria-label": `В ролик: «${row.name}»`, click: action.run }, "plus")
     case "drop": return h("button", { class: "btn btn--plain btn--icon", type: "button", "data-focus": "drop", title: "Не загружать", "aria-label": `Не загружать «${row.name}»`, click: action.run }, icon("close"))
     case "remove": return menuButton(`Ещё о записи «${row.name}»`, [{ label: "Удалить запись", icon: "trash", danger: true, run: action.run }])
   }
@@ -36,15 +35,24 @@ const transcriptOf = (preview: string, transcript: Transcript): HTMLElement => {
     : [h("p", { class: "transcript" }, ...words), h("p", { class: "hint" }, "Нажмите на слово, и запись перейдёт к нему.")])
 }
 
-const rowNode = (row: Row, open: boolean, onOpen: () => void): HTMLElement => {
-  const heard = row.transcript !== undefined && row.preview !== undefined ? { preview: row.preview, transcript: row.transcript } : undefined
-  const main = heard === undefined
+const mainOf = (row: Row, playable: boolean, open: boolean, onOpen: () => void): HTMLElement => {
+  if (row.choice !== undefined) {
+    const box = h("input", { class: "rec__check", type: "checkbox", "data-focus": "choice", checked: row.choice.checked, change: row.choice.toggle })
+    return h("label", { class: "rec__main" }, box, thumbOf(row), textOf(row))
+  }
+  return !playable
     ? h("div", { class: "rec__main" }, thumbOf(row), textOf(row))
     : h("button", { class: "rec__main", type: "button", "data-focus": "main", "aria-expanded": String(open), click: onOpen }, thumbOf(row), textOf(row), h("span", { class: "rec__chev" }, icon("down")))
+}
+
+const rowNode = (row: Row, open: boolean, onOpen: () => void): HTMLElement => {
+  const heard = row.transcript !== undefined && row.preview !== undefined ? { preview: row.preview, transcript: row.transcript } : undefined
+  const main = mainOf(row, heard !== undefined, open, onOpen)
   return h("li", { class: open ? "rec rec--open" : "rec" },
     h("div", { class: "rec__row" }, main, h("div", { class: "rec__actions" }, ...row.actions.map((action) => actionNode(row, action)))),
     ...open && heard !== undefined ? [transcriptOf(heard.preview, heard.transcript)] : [])
 }
+
 
 const keepFocus = (old: HTMLElement | undefined, fresh: HTMLElement): void => {
   const focused = document.activeElement
