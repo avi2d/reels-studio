@@ -8,7 +8,7 @@ const unavailable = () => Effect.die("unexpected service call")
 
 export const projectAt = (dir: string): ReturnType<typeof Projects.of> => Projects.of({
   folder: () => Effect.succeed(dir), list: Effect.succeed([]), create: unavailable,
-  get: unavailable, setChoice: unavailable, remove: unavailable
+  get: unavailable, rename: unavailable, setChoice: unavailable, remove: unavailable
 })
 
 export const mediaWith = (videos: () => ReadonlyArray<VideoView>, timeline: TimelineView): { readonly service: ReturnType<typeof Media.of>, readonly edits: () => Edits } => {
