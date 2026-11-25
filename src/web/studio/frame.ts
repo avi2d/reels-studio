@@ -1,8 +1,10 @@
+import { Effect } from "effect"
 import { STEPS, STUDIO_PATH, projectPath, stepPath, type Step } from "../../shared/page.ts"
 import * as Api from "../api.ts"
 import { h } from "../dom.ts"
 import { REEL_REMOVAL } from "../remove.ts"
 import { icon } from "./icons.ts"
+import { editTitle } from "./title-sheet.ts"
 import { confirmRemoval, menuButton } from "./ui.ts"
 
 const STEP_NAMES = { records: "Записи", plan: "План", montage: "Монтаж", look: "Оформление", done: "Ролики" } satisfies Record<Step, string>
@@ -20,13 +22,32 @@ const removeReel = (project: Api.ProjectView, onRemoved: () => void): void => {
   })
 }
 
-export const topBar = (reel?: { readonly project: Api.ProjectView; readonly removed: () => void }): HTMLElement =>
-  h("header", { class: "top" },
-    h("a", { class: "top__home", href: STUDIO_PATH }, ...reel === undefined ? [] : [icon("left")], "Студия"),
-    ...reel === undefined ? [] : [
-      h("span", { class: "top__name" }, reel.project.title),
-      menuButton("Ещё", [{ label: "Удалить ролик", icon: "trash", danger: true, run: () => { removeReel(reel.project, reel.removed) } }])
-    ])
+interface ReelBar {
+  readonly project: Api.ProjectView
+  readonly removed: () => void
+  readonly renamed: (title: string) => void
+}
+
+export const topBar = (reel?: ReelBar): HTMLElement => {
+  const home = h("a", { class: "top__home", href: STUDIO_PATH }, ...reel === undefined ? [] : [icon("left")], "Студия")
+  const header = h("header", { class: "top" }, home)
+  if (reel === undefined) return header
+
+  let project = reel.project
+  const name = h("span", { class: "top__name" }, project.title)
+  const rename = (): void => {
+    editTitle({ kind: "rename", title: project.title }, (title) => Effect.map(Api.renameProject(project.id, title), (saved) => {
+      project = saved.project
+      name.textContent = project.title
+      reel.renamed(project.title)
+    }))
+  }
+  header.append(name, menuButton("Ещё", [
+    { label: "Переименовать", icon: "pencil", danger: false, run: rename },
+    { label: "Удалить ролик", icon: "trash", danger: true, run: () => { removeReel(project, reel.removed) } }
+  ]))
+  return header
+}
 
 const isDone = (project: Api.ProjectView, step: Step): boolean => step === "records" && project.stage === "uploaded"
 

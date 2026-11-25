@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { readdir, stat } from "node:fs/promises"
+import { copyFile, mkdir, readdir, stat, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import type { ProductCheck } from "@avi2dg/checks/browser-hooks.ts"
 import type { Page } from "playwright-core"
@@ -157,4 +157,56 @@ const pageWidths: ProductCheck = {
   }
 }
 
-export const studioChecks = [createListDelete, recordsStep, pageWidths] satisfies readonly ProductCheck[]
+const renamePersists: ProductCheck = {
+  name: "a reel renamed from the top bar keeps its new title after reload instead of reverting",
+  run: async (page) => {
+    page.setDefaultTimeout(timeout)
+    const before = "Название до правки"
+    const after = "Название после правки"
+    const id = await createReel(page, before)
+    await page.getByRole("button", { name: "Ещё", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Переименовать", exact: true }).click()
+    const dialog = page.getByRole("dialog", { name: "Переименовать ролик" })
+    const title = dialog.getByRole("textbox", { name: "Название" })
+    assert.equal(await title.inputValue(), before)
+    await title.fill(after)
+    await dialog.getByRole("button", { name: "Сохранить название" }).click()
+    await dialog.waitFor({ state: "hidden" })
+    const bar = page.getByRole("banner")
+    await bar.getByText(after, { exact: true }).waitFor()
+    await page.reload()
+    await bar.getByText(after, { exact: true }).waitFor()
+    assert.equal(new URL(page.url()).pathname, stepPath(id, "records"))
+    await bar.getByRole("link", { name: "Студия" }).click()
+    await page.getByRole("link", { name: new RegExp(after, "u") }).waitFor()
+    assert.equal(await page.getByRole("link", { name: new RegExp(before, "u") }).count(), 0)
+    return { targets: ["renamed title in the top bar after reload", "renamed card on the same reel"], found: [] }
+  }
+}
+
+const builtStatus: ProductCheck = {
+  name: "a reel card reads «Ролики готовы» when the published video file is present instead of keeping the upload status",
+  run: async (page) => {
+    page.setDefaultTimeout(timeout)
+    const title = "Собранный ролик"
+    const id = await createReel(page, title)
+    const fixtures = setting("REELS_BROWSER_DIR")
+    const directory = join(fixtures, "projects", id)
+    const reel = join(directory, "reel")
+    const made = "2026-01-01T00:00:00.000Z"
+    const video = "reel-2026-01-01T00-00-00.000Z.mp4"
+    await mkdir(reel)
+    await writeFile(join(reel, "reel.json"), JSON.stringify({ made, video, parts: [] }))
+    await copyFile(join(fixtures, SOURCE_VIDEO), join(directory, "source", SOURCE_VIDEO))
+    await page.goto(address(STUDIO_PATH))
+    const card = page.getByRole("link", { name: new RegExp(title, "u") })
+    await card.getByText(/· Записи загружены$/u).waitFor()
+    await copyFile(join(fixtures, SOURCE_VIDEO), join(reel, video))
+    await page.reload()
+    await card.getByText(/· Ролики готовы$/u).waitFor()
+    assert.equal(await card.getByText("Записи загружены", { exact: false }).count(), 0)
+    return { targets: ["uploaded status without a published file", "ready status once the video file is present"], found: [] }
+  }
+}
+
+export const studioChecks = [createListDelete, recordsStep, pageWidths, renamePersists, builtStatus] satisfies readonly ProductCheck[]

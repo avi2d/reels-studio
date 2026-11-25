@@ -2,6 +2,7 @@ import { Effect, FileSystem, Layer, Option, Schema, Stream } from "effect"
 import { Pick } from "../shared/library.ts"
 import { Face } from "../shared/face.ts"
 import { RetouchPicture } from "../shared/retouch.ts"
+import { Effort, ProjectTitleInput } from "../shared/project.ts"
 import { PictureSide } from "../shared/reel.ts"
 import { Edits, type TimelinePage } from "../shared/timeline.ts"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
@@ -14,7 +15,7 @@ import { openLibrary } from "./library.ts"
 import { allowedHosts, isAllowedHost, isHomeAddress, isSameOrigin } from "./home-network.ts"
 import { Media } from "./media.ts"
 import type { ReelVersion } from "./reel.ts"
-import { Effort, Projects } from "./projects.ts"
+import { Projects } from "./projects.ts"
 import { parseRange } from "./range.ts"
 import { Settings } from "./settings.ts"
 import * as Tus from "./tus.ts"
@@ -59,7 +60,6 @@ const versionOf = (request: HttpServerRequest.HttpServerRequest): ReelVersion =>
 const body = <A>(schema: Schema.ConstraintDecoder<A>) =>
   HttpServerRequest.schemaBodyJson(schema).pipe(Effect.mapError(() => badRequest("Запрос не разобран")))
 
-const NewProject = Schema.Struct({ title: Schema.String })
 const SaveEdits = Schema.Struct({ base: Edits, edits: Edits })
 
 const projects = Layer.mergeAll(
@@ -69,12 +69,17 @@ const projects = Layer.mergeAll(
   }))),
   HttpRouter.add("POST", "/api/projects", reply(Effect.gen(function*() {
     const store = yield* Projects
-    const input = yield* body(NewProject)
+    const input = yield* body(ProjectTitleInput)
     return json({ project: yield* store.create(input.title) }, 201)
   }))),
   HttpRouter.add("GET", "/api/projects/:id", reply(Effect.gen(function*() {
     const store = yield* Projects
     return json({ project: yield* store.get(yield* param("id")) })
+  }))),
+  HttpRouter.add("PATCH", "/api/projects/:id", reply(Effect.gen(function*() {
+    const store = yield* Projects
+    const input = yield* body(ProjectTitleInput)
+    return json({ project: yield* store.rename(yield* param("id"), input.title) })
   }))),
   HttpRouter.add("DELETE", "/api/projects/:id", reply(Effect.gen(function*() {
     const store = yield* Projects

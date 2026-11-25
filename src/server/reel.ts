@@ -1,4 +1,4 @@
-import { DateTime, Effect, FileSystem, Option, Schema } from "effect"
+import { DateTime, Effect, FileSystem, Option, Schema, type PlatformError } from "effect"
 import { Face } from "../shared/face.ts"
 import { visualKey, type Shown } from "../shared/inserts.ts"
 import { Frame } from "../shared/timeline.ts"
@@ -79,6 +79,9 @@ const publishedReel = Effect.fnUntraced(function*(dir: string) {
   if (!(yield* fs.exists(target))) return undefined
   return { target, record } as const
 })
+
+export const hasPublishedReel = (dir: string): Effect.Effect<boolean, PlatformError.PlatformError, FileSystem.FileSystem> =>
+  Effect.map(publishedReel(dir), (reel) => reel !== undefined)
 
 export const builtFace = Effect.fnUntraced(function*(dir: string) {
   return (yield* publishedReel(dir))?.record.face

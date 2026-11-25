@@ -7,10 +7,11 @@ import film from "lucide-static/icons/film.svg" with { type: "text" }
 import plus from "lucide-static/icons/plus.svg" with { type: "text" }
 import retry from "lucide-static/icons/rotate-ccw.svg" with { type: "text" }
 import trash from "lucide-static/icons/trash-2.svg" with { type: "text" }
+import pencil from "lucide-static/icons/pencil.svg" with { type: "text" }
 import upload from "lucide-static/icons/upload.svg" with { type: "text" }
 import close from "lucide-static/icons/x.svg" with { type: "text" }
 
-const ICONS = { check, close, down, film, left, more, plus, retry, right, trash, upload }
+const ICONS = { check, close, down, film, left, more, pencil, plus, retry, right, trash, upload }
 
 export type IconName = keyof typeof ICONS
 

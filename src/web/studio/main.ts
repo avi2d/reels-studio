@@ -56,9 +56,10 @@ const reelPage = (id: string, step: Step): Effect.Effect<void, Api.Failed> =>
       steps = fresh
       stage = now.stage
     })
-    document.title = `${stepName(step)} · ${project.title} · ${TITLE}`
+    const setPageTitle = (title: string): void => { document.title = `${stepName(step)} · ${title} · ${TITLE}` }
+    setPageTitle(project.title)
     show("reel",
-      topBar({ project, removed: () => { navigate(STUDIO_PATH) } }),
+      topBar({ project, renamed: setPageTitle, removed: () => { navigate(STUDIO_PATH) } }),
       steps,
       h("main", { class: "main" }, body))
   })
