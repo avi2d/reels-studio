@@ -11,6 +11,8 @@ import { dropTake, onTakesChanged, resend, sendingNow, sendTakes } from "./uploa
 
 const POLL_MS = 4000
 
+let libraryOnLoad: ReadonlySet<string> | undefined
+
 const layout = (onMove: () => void) => {
   const input = h("input", { type: "file", name: "records", accept: "video/*", multiple: true, hidden: true, tabindex: "-1" })
   const heading = h("h2", { id: "uploads-title", tabindex: "-1" }, "Записи")
@@ -28,6 +30,7 @@ const layout = (onMove: () => void) => {
 
 interface Live {
   readonly view: ReturnType<typeof layout>
+  readonly earlierNames: ReadonlySet<string>
   uploaded: ReadonlyArray<UploadedVideo>
   timer: number
   generation: number
@@ -60,7 +63,8 @@ const handlersOf = (live: Live): UploadHandlers => ({
 })
 
 const render = (live: Live): void => {
-  const rows = uploadRows(sendingNow(), live.uploaded, handlersOf(live))
+  const uploaded = live.uploaded.toSorted((a, b) => Number(live.earlierNames.has(a.name)) - Number(live.earlierNames.has(b.name)))
+  const rows = uploadRows(sendingNow(), uploaded, handlersOf(live))
   showKeepingFocus(live.view.heading, [[live.view.list, live.view.pages.show(rows)]])
 }
 
@@ -116,7 +120,8 @@ const listen = (live: Live): void => {
 }
 
 export const uploaderSection = (uploaded: ReadonlyArray<UploadedVideo>): HTMLElement => {
-  const live: Live = { view: layout(() => { render(live) }), uploaded, timer: 0, generation: 0 }
+  libraryOnLoad ??= new Set(uploaded.map((video) => video.name))
+  const live: Live = { view: layout(() => { render(live) }), earlierNames: libraryOnLoad, uploaded, timer: 0, generation: 0 }
   listen(live)
   render(live)
   if (stillUploading(uploaded)) later(live)

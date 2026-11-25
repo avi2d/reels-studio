@@ -66,7 +66,6 @@ const addChosen = (live: Live): void => {
   render(live)
   const settle = (): void => { for (const key of keys) live.adding.delete(key) }
   run(Effect.map(Api.addVideos(live.id, videos.map(pickOf)), () => {
-    settle()
     refresh(live)
   }), (message) => {
     settle()
@@ -106,6 +105,7 @@ function render(live: Live): void {
   const { view, shelves } = live
   const mine = mineRows(live.id, shelves, (name) => { retryReel(live, name) })
   const offered = new Set(shelves.offer.videos.map(offerKey))
+  for (const key of live.adding) if (!offered.has(key)) live.adding.delete(key)
   for (const key of live.chosen) if (!offered.has(key)) live.chosen.delete(key)
   const earlier = earlierRows(shelves, live.adding, live.chosen, (key) => { toggle(live, key) })
   const free = earlier.filter((row) => row.choice !== undefined)

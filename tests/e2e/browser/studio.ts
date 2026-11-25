@@ -5,7 +5,7 @@ import { join } from "node:path"
 import type { ProductCheck } from "@avi2dg/checks/browser-hooks.ts"
 import { Schema } from "effect"
 import type { Page } from "playwright-core"
-import { UploadedVideo } from "../../../src/shared/library.ts"
+import { Offer, UploadedVideo } from "../../../src/shared/library.ts"
 import { STEPS, STUDIO_PATH, stepPath } from "../../../src/shared/page.ts"
 import { SOURCE_VIDEO, setting, timeout } from "./scenario.ts"
 
@@ -162,6 +162,102 @@ const recordsStep: ProductCheck = {
   }
 }
 
+const finishedUploadStays: ProductCheck = {
+  name: "the owner's finished upload stays on page 1 above more than five older uploads instead of moving to its alphabetical page",
+  run: async (page) => {
+    page.setDefaultTimeout(timeout)
+    const bytes = await Bun.file(join(setting("REELS_BROWSER_DIR"), SOURCE_VIDEO)).bytes()
+    for (let index = 0; index < 6; index += 1) {
+      const start = await fetch(address("/api/library/uploads"), {
+        method: "POST",
+        headers: { "tus-resumable": "1.0.0", "upload-length": String(bytes.length), "upload-metadata": `filename ${Buffer.from(`a-page-${index}.mp4`).toString("base64")}` }
+      })
+      assert.equal(start.status, 201)
+      const location = start.headers.get("location")
+      assert(location !== null, "Starting an upload must return its location")
+      const finish = await fetch(address(location), {
+        method: "PATCH",
+        headers: { "tus-resumable": "1.0.0", "upload-offset": "0", "content-type": "application/offset+octet-stream" },
+        body: bytes
+      })
+      assert.equal(finish.status, 204)
+    }
+    await page.goto(address(STUDIO_PATH))
+    const list = page.getByRole("list", { name: "Загруженные записи", exact: true })
+    const pages = page.getByRole("navigation", { name: "Страницы записей", exact: true })
+    await pages.getByRole("button", { name: "Дальше", exact: true }).click()
+    const before = new Set((await uploadsNow()).map((video) => video.name))
+    await page.locator('input[type="file"][name="records"]').setInputFiles({
+      name: "z-page-finished.mp4", mimeType: "video/mp4", buffer: Buffer.from(bytes)
+    })
+    await pages.getByRole("button", { name: "Назад", exact: true }).waitFor()
+    assert(await pages.getByRole("button", { name: "Назад", exact: true }).isDisabled(), "Picking an upload must return to page 1")
+    const until = Date.now() + HEARING
+    let name: string | undefined
+    while (name === undefined) {
+      name = (await uploadsNow()).find((video) => !before.has(video.name) && video.state === "ready")?.name
+      assert(Date.now() < until, "The new upload must reach ready")
+      if (name === undefined) await Bun.sleep(500)
+    }
+    const row = list.getByRole("listitem").filter({ has: page.getByText(name, { exact: true }) })
+    await row.getByText(READY).waitFor({ timeout: HEARING })
+    assert.equal(await list.getByRole("listitem").count(), 5, "Page 1 must still hold at most five uploads")
+    assert(await pages.getByRole("button", { name: "Назад", exact: true }).isDisabled(), "The finished row must stay on page 1")
+    await page.getByRole("button", { name: "Новый ролик", exact: true }).click()
+    const dialog = page.getByRole("dialog", { name: "Новый ролик" })
+    await dialog.getByRole("textbox", { name: "Название" }).fill("Проверка порядка записей")
+    await dialog.getByRole("button", { name: "Создать ролик", exact: true }).click()
+    await page.getByRole("heading", { name: "Выберите записи", exact: true, level: 1 }).waitFor()
+    await deleteReel(page, "Проверка порядка записей")
+    await row.getByText(READY).waitFor()
+    await page.reload()
+    await list.getByRole("listitem").first().waitFor()
+    assert.equal(await row.count(), 0, "Reloading must restore the library order")
+    return { targets: ["more than five older uploads", "new upload resets to page 1", "finished row stays on page 1 through navigation", "reload restores library order"], found: [] }
+  }
+}
+
+const addedRowsStayBusy: ProductCheck = {
+  name: "an added recording stays unavailable until refreshed shelves arrive instead of flashing back as a free checkbox",
+  run: async (page) => {
+    page.setDefaultTimeout(timeout)
+    await uploadOnStudioPage(page)
+    const title = "Проверка обновления записей"
+    const id = await createReel(page, title)
+    const offer = Schema.decodeUnknownSync(Offer)(await (await fetch(address(`/api/projects/${id}/library`))).json())
+    const [first, second] = offer.videos.filter((video) => video.from === "library").map((video) => video.name)
+    assert(first !== undefined && second !== undefined, "The check needs two distinct uploaded recordings")
+    const held = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const path = `**/api/projects/${id}/library`
+    await page.route(path, async (route) => {
+      const response = await route.fetch()
+      held.resolve()
+      await release.promise
+      await route.fulfill({ response })
+    })
+    try {
+      await boxOf(page, first).check()
+      await page.getByRole("button", { name: "Добавить в ролик: 1 запись", exact: true }).click()
+      await held.promise
+      await boxOf(page, second).check()
+      assert.equal(await boxOf(page, first).count(), 0, "A successful add must not become selectable while shelves are stale")
+      const earlier = page.getByRole("list", { name: "Загружены раньше", exact: true })
+      await earlier.getByRole("listitem").filter({ hasText: first }).getByText("Добавляю в ролик", { exact: true }).waitFor()
+      release.resolve()
+      await page.getByRole("heading", { name: "1 запись · 0:07", exact: true, level: 1 }).waitFor()
+      assert.equal(await boxOf(page, first).count(), 0, "The refreshed offer must omit the added recording")
+      assert(await boxOf(page, second).isChecked(), "Refreshing must preserve the other selection")
+      await assertSources(id, 1)
+    } finally {
+      release.resolve()
+      await page.unroute(path)
+    }
+    await deleteReel(page, title)
+    return { targets: ["added recording stays busy during a delayed refresh", "another selection survives the refresh", "one original recording reaches the reel"], found: [] }
+  }
+}
+
 const WINDOWS = [[1440, 900], [390, 844], [320, 640]] as const
 
 const pageWidths: ProductCheck = {
@@ -250,4 +346,4 @@ const builtStatus: ProductCheck = {
   }
 }
 
-export const studioChecks = [createListDelete, recordsStep, pageWidths, renamePersists, builtStatus] satisfies readonly ProductCheck[]
+export const studioChecks = [createListDelete, recordsStep, finishedUploadStays, addedRowsStayBusy, pageWidths, renamePersists, builtStatus] satisfies readonly ProductCheck[]
