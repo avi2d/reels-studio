@@ -101,6 +101,7 @@ const secondTake = async (): Promise<string> => {
   return path
 }
 
+// The original sample comes first: the second take is the same bytes plus a free box, so it is the larger file.
 const uploadOnStudioPage = async (page: Page): Promise<ReadonlyArray<string>> => {
   await page.goto(address(STUDIO_PATH))
   await page.getByRole("heading", { name: "Записи", exact: true, level: 2 }).waitFor()
@@ -108,7 +109,7 @@ const uploadOnStudioPage = async (page: Page): Promise<ReadonlyArray<string>> =>
   await page.locator('input[type="file"][name="records"]').setInputFiles([join(setting("REELS_BROWSER_DIR"), SOURCE_VIDEO), await secondTake()])
   const until = Date.now() + HEARING
   const heard = async (): Promise<ReadonlyArray<string>> =>
-    (await uploadsNow()).filter((video) => !before.has(video.name) && video.state === "ready").map((video) => video.name)
+    (await uploadsNow()).filter((video) => !before.has(video.name) && video.state === "ready").toSorted((a, b) => a.size - b.size).map((video) => video.name)
   for (let names = await heard(); ; names = await heard()) {
     if (names.length === 2) {
       await page.getByRole("list", { name: "Загруженные записи", exact: true }).getByText(READY).first().waitFor({ timeout: HEARING })
