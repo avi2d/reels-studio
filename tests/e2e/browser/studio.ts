@@ -120,6 +120,13 @@ const uploadOnStudioPage = async (page: Page): Promise<ReadonlyArray<string>> =>
   }
 }
 
+const removeUploads = async (names: ReadonlyArray<string>): Promise<void> => {
+  for (const name of names) {
+    const removed = await fetch(address(`/api/library/${encodeURIComponent(name)}`), { method: "DELETE" })
+    assert(removed.ok, `The studio refused to delete the upload ${name}: ${removed.status}`)
+  }
+}
+
 const boxOf = (page: Page, name: string) =>
   page.getByRole("list", { name: "Загружены раньше", exact: true }).getByRole("checkbox", { name: new RegExp(`^${RegExp.escape(name)}`, "u") })
 
@@ -159,6 +166,7 @@ const recordsStep: ProductCheck = {
     await deleteReel(page, first)
     await addChosen(page, second, takes.slice(0, 1))
     await deleteReel(page, second)
+    await removeUploads(takes)
     return { targets: ["two uploads on the studio page reach «Готово · 0:07»", "step 1 holds no upload picker", "two chosen recordings join the reel with one press", "one chosen recording joins the next reel", "pressed «Конец» moves the player to 0:05", "each reel keeps the original"], found: [] }
   }
 }
@@ -190,10 +198,11 @@ const finishedUploadStays: ProductCheck = {
   run: async (page) => {
     page.setDefaultTimeout(timeout)
     const bytes = await Bun.file(join(setting("REELS_BROWSER_DIR"), SOURCE_VIDEO)).bytes()
-    for (let index = 0; index < 6; index += 1) {
+    const older = Array.from({ length: 6 }, (_, index) => `a-page-${index}.mp4`)
+    for (const olderName of older) {
       const start = await fetch(address("/api/library/uploads"), {
         method: "POST",
-        headers: { "tus-resumable": "1.0.0", "upload-length": String(bytes.length), "upload-metadata": `filename ${Buffer.from(`a-page-${index}.mp4`).toString("base64")}` }
+        headers: { "tus-resumable": "1.0.0", "upload-length": String(bytes.length), "upload-metadata": `filename ${Buffer.from(olderName).toString("base64")}` }
       })
       assert.equal(start.status, 201)
       const location = start.headers.get("location")
@@ -236,6 +245,7 @@ const finishedUploadStays: ProductCheck = {
     await deleteUpload(page, name)
     assert.equal(await pickUpload(page, name, bytes), name, "A deleted name must be free for the next upload")
     await staysOnFirstPage(name)
+    await removeUploads([...older, name])
     return { targets: ["more than five older uploads", "new upload resets to page 1", "finished row stays on page 1 through navigation", "reload restores library order", "a take deleted after load and uploaded again under its name stays on page 1"], found: [] }
   }
 }
@@ -275,6 +285,7 @@ const addedRowsStayBusy: ProductCheck = {
       await page.unroute(path)
     }
     await deleteReel(page, title)
+    await removeUploads([first, second])
     return { targets: ["added recording stays busy during a delayed refresh", "another selection survives the refresh", "one original recording reaches the reel"], found: [] }
   }
 }
