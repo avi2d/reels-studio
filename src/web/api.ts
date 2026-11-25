@@ -45,7 +45,7 @@ export const failure = (response: Response): Effect.Effect<Failed> =>
     Effect.catch((error) => Effect.succeed(error))
   )
 
-const call = <A>(schema: Schema.ConstraintDecoder<A>, url: string, init?: RequestInit): Effect.Effect<A, Failed> =>
+const request = <A>(schema: Schema.ConstraintDecoder<A>, url: string, init?: RequestInit): Effect.Effect<A, Failed | Offline> =>
   Effect.gen(function*() {
     const response = yield* send(url, init)
     if (!response.ok) return yield* Effect.flatMap(failure(response), Effect.fail)
@@ -53,9 +53,13 @@ const call = <A>(schema: Schema.ConstraintDecoder<A>, url: string, init?: Reques
     return yield* Schema.decodeUnknownEffect(schema)(body).pipe(
       Effect.mapError(() => new Failed({ message: "Студия ответила непонятно" }))
     )
-  }).pipe(
-    Effect.catchTag("Offline", () => Effect.fail(new Failed({ message: "Нет связи со студией. Проверьте Wi-Fi." })))
-  )
+  })
+
+const requireConnection = <A>(work: Effect.Effect<A, Failed | Offline>): Effect.Effect<A, Failed> =>
+  work.pipe(Effect.catchTag("Offline", () => Effect.fail(new Failed({ message: "Нет связи со студией. Проверьте Wi-Fi." }))))
+
+const call = <A>(schema: Schema.ConstraintDecoder<A>, url: string, init?: RequestInit): Effect.Effect<A, Failed> =>
+  requireConnection(request(schema, url, init))
 
 const post = (body: unknown): RequestInit => ({
   method: "POST",
@@ -103,7 +107,9 @@ export const getLibrary = (id: string): Effect.Effect<Offer, Failed> =>
 
 const Uploaded = Schema.Struct({ videos: Schema.Array(UploadedVideo) })
 
-export const getUploaded: Effect.Effect<typeof Uploaded.Type, Failed> = call(Uploaded, "/api/library")
+export const getUploadedForTransfer = request(Uploaded, "/api/library")
+
+export const getUploaded = requireConnection(getUploadedForTransfer)
 
 export const retryUploaded = (name: string): Effect.Effect<void, Failed> =>
   call(Schema.Struct({ video: UploadedVideo }), `/api/library/${encodeURIComponent(name)}/retry`, { method: "POST" }).pipe(Effect.asVoid)

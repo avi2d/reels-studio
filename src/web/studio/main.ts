@@ -101,7 +101,6 @@ document.addEventListener("click", (event) => {
   event.preventDefault()
   navigate(address)
 })
-// A file dropped anywhere else opens in the tab and cancels the uploads in flight.
 const refuseDrop = (event: DragEvent): void => {
   event.preventDefault()
   if (event.dataTransfer !== null) event.dataTransfer.dropEffect = "none"

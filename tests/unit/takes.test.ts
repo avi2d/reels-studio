@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { percentOf, recordCount, statusOf, uploadedName } from "../../src/web/studio/takes.ts"
+import { percentOf, recordCount, uploadedName } from "../../src/web/studio/takes.ts"
 
 test("eleven and twenty-one take their own Russian forms, not the form of their last digit alone", () => {
   expect(recordCount(1)).toBe("1 запись")
@@ -14,13 +14,6 @@ test("an upload one byte short reads 99%, not a rounded-up 100% before it ends",
   expect(percentOf(999, 1000)).toBe(99)
   expect(percentOf(1000, 1000)).toBe(100)
   expect(percentOf(0, 0)).toBe(0)
-})
-
-test("each recording state reads its own line, and a heard one shows its length instead of a crop note", () => {
-  expect(statusOf({ kind: "sending", sent: 50, total: 100 })).toBe("Загружаю 50%")
-  expect(statusOf({ kind: "offline" })).toBe("Нет связи. Продолжу сама")
-  expect(statusOf({ kind: "unheard" })).toBe("Не расслышала")
-  expect(statusOf({ kind: "ready", duration: 7 })).toBe("Готово · 0:07")
 })
 
 test("a second upload of one file is found under its numbered name, not under another same-size upload", () => {

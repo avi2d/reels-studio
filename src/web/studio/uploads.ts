@@ -90,11 +90,18 @@ const NOT_LISTED = "Студия приняла файл, но не показа
 
 const sendOne = (projectId: string, { key, file }: Sending): Effect.Effect<void> =>
   Effect.gen(function*() {
-    const before = new Set((yield* Api.getUploaded).videos.map((video) => video.name))
+    const uploaded: typeof Api.getUploaded = Api.getUploadedForTransfer.pipe(
+      Effect.catchTag("Offline", () => Effect.gen(function*() {
+        setTake(projectId, key, { kind: "offline" })
+        yield* Effect.sleep("3 seconds")
+        return yield* uploaded
+      }))
+    )
+    const before = new Set((yield* uploaded).videos.map((video) => video.name))
     yield* upload(libraryShelf, file, (progress) => {
       setTake(projectId, key, progress.waiting ? { kind: "offline" } : { kind: "sending", sent: progress.sent, total: progress.total })
     })
-    const name = uploadedName(file, before, (yield* Api.getUploaded).videos)
+    const name = uploadedName(file, before, (yield* uploaded).videos)
     if (name === undefined) return yield* new Api.Failed({ message: NOT_LISTED })
     setJoining(projectId, [...joiningTo(projectId), name])
     setTake(projectId, key, undefined)
