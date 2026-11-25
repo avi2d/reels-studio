@@ -9,6 +9,7 @@ import { icon } from "./icons.ts"
 import { rowList, showKeepingFocus } from "./record-list.ts"
 import { earlierRows, heardLengths, mineRows, type Shelves, stillHearing } from "./record-rows.ts"
 import { recordCount } from "./takes.ts"
+import { onTakesChanged, sendingNow } from "./uploads.ts"
 
 const POLL_MS = 4000
 
@@ -25,13 +26,14 @@ const layout = (id: string) => {
   const loadProblem = h("p", { class: "error", role: "alert" })
   const earlierTitle = h("h2", { class: "recs-title", id: "records-earlier" }, "Загружены раньше")
   const earlier = rowList({ "aria-labelledby": "records-earlier" })
+  const sending = h("p", { class: "hint" })
   const listening = h("p", { class: "hint" })
   const empty = h("div", { class: "pick" },
     h("p", { class: "hint" }, "Загруженных записей пока нет. Загрузите дубли на странице «Ролики», и они появятся здесь."),
     h("a", { class: "btn btn--quiet", href: STUDIO_PATH }, icon("upload"), "К загрузке видео"))
   const next = h("a", { class: "btn btn--main btn--start", href: stepPath(id, "plan") }, "Дальше: план", icon("right"))
-  const body = h("div", { class: "body" }, heading, mine.node, problem, loadProblem, earlierTitle, earlier.node, listening, empty, next)
-  return { heading, mine, problem, loadProblem, earlierTitle, earlier, listening, empty, next, body }
+  const body = h("div", { class: "body" }, heading, mine.node, problem, loadProblem, earlierTitle, earlier.node, sending, listening, empty, next)
+  return { heading, mine, problem, loadProblem, earlierTitle, earlier, sending, listening, empty, next, body }
 }
 
 interface Live {
@@ -76,11 +78,14 @@ function render(live: Live): void {
   const earlier = earlierRows(shelves, live.adding, (key, video) => { addToReel(live, key, video) })
   const lengths = heardLengths(shelves)
   const { listening } = shelves.offer
+  const sending = sendingNow().filter((entry) => entry.take.kind !== "unsent").length
   view.heading.textContent = headingOf(mine.length, lengths)
   view.earlierTitle.hidden = earlier.length === 0
+  view.sending.hidden = sending === 0
+  view.sending.textContent = `Ещё загружаю: ${recordCount(sending)}. Готовые записи появятся здесь сами.`
   view.listening.hidden = listening === 0
   view.listening.textContent = `Ещё слушаю: ${recordCount(listening)}. Готовые записи появятся здесь сами.`
-  view.empty.hidden = mine.length > 0 || earlier.length > 0 || listening > 0
+  view.empty.hidden = mine.length > 0 || earlier.length > 0 || listening > 0 || sending > 0
   view.next.hidden = lengths.length === 0
   showKeepingFocus(view.heading, [[view.mine, mine], [view.earlier, earlier]])
 }
@@ -110,9 +115,24 @@ function refresh(live: Live): void {
   })
 }
 
+const listen = (live: Live): void => {
+  const stop = onTakesChanged((change) => {
+    if (!live.view.body.isConnected) {
+      stop()
+      return
+    }
+    switch (change.kind) {
+      case "moved": return render(live)
+      case "listed":
+      case "unlisted": return refresh(live)
+    }
+  })
+}
+
 export const recordsStep = (project: Api.ProjectView, onProject: (project: Api.ProjectView) => void): Effect.Effect<HTMLElement, Api.Failed> =>
   Effect.map(loadShelves(project.id), (shelves) => {
     const live: Live = { id: project.id, view: layout(project.id), adding: new Set(), onProject, shelves, timer: 0, generation: 0 }
+    listen(live)
     render(live)
     if (stillHearing(shelves)) later(live)
     return live.view.body
