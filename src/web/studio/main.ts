@@ -5,6 +5,7 @@ import { h } from "../dom.ts"
 import { run } from "../run.ts"
 import { rail, stepBody, stepName, topBar } from "./frame.ts"
 import { listView } from "./list.ts"
+import { recordsStep } from "./records.ts"
 
 type Page = { readonly kind: "list" } | { readonly kind: "reel"; readonly id: string; readonly step: Step | undefined }
 
@@ -40,13 +41,26 @@ const listPage = (): Effect.Effect<void, Api.Failed> =>
     show("home", topBar(), h("main", { class: "main" }, listView(projects, (id) => { navigate(stepPath(id, "records")) })))
   })
 
+const stepView = (project: Api.ProjectView, step: Step, onProject: (project: Api.ProjectView) => void): Effect.Effect<HTMLElement, Api.Failed> =>
+  step === "records" ? recordsStep(project, onProject) : Effect.succeed(stepBody(project, step))
+
 const reelPage = (id: string, step: Step): Effect.Effect<void, Api.Failed> =>
-  Effect.map(Api.getProject(id), ({ project }) => {
+  Effect.gen(function*() {
+    const { project } = yield* Api.getProject(id)
+    let steps = rail(project, step)
+    let stage = project.stage
+    const body = yield* stepView(project, step, (now) => {
+      if (now.stage === stage) return
+      const fresh = rail(now, step)
+      steps.replaceWith(fresh)
+      steps = fresh
+      stage = now.stage
+    })
     document.title = `${stepName(step)} · ${project.title} · ${TITLE}`
     show("reel",
       topBar({ project, removed: () => { navigate(STUDIO_PATH) } }),
-      rail(project, step),
-      h("main", { class: "main" }, stepBody(project, step)))
+      steps,
+      h("main", { class: "main" }, body))
   })
 
 let stopLoad: (() => void) | undefined

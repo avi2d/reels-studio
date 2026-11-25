@@ -68,6 +68,43 @@ a { color: inherit; text-decoration: none; }
 .btn--plain { border-color: transparent; background: transparent; color: var(--muted); }
 .btn--icon { width: var(--tap); padding: 0; flex: none; }
 .btn--start { align-self: flex-start; }
+.btn--sm { padding: 0 12px; font-size: 14px; }
+
+.drop { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; padding: 36px 16px; border: 1.5px dashed #b5bbc8; border-radius: 14px; background: var(--surface); color: var(--muted); font-size: 14px; cursor: pointer; touch-action: manipulation; }
+.drop .ic { color: var(--blue); margin-bottom: 4px; }
+.drop .ic svg { width: 22px; height: 22px; }
+.drop b { color: var(--ink); font-size: 16px; font-weight: 600; }
+.drop--over { border-color: var(--blue); background: var(--blue-soft); }
+
+.recs-title { font-size: 13px; font-weight: 600; color: var(--muted); }
+.recs { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.recs > li + li { border-top: 1px solid var(--line); }
+.rec--open { background: #fafbfc; }
+.rec__row { display: flex; align-items: center; gap: 4px; padding-right: 8px; }
+.rec__main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 0; background: none; text-align: left; }
+button.rec__main { cursor: pointer; touch-action: manipulation; }
+.rec__thumb { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 10px; overflow: hidden; background: var(--line); color: var(--muted); }
+.rec__thumb video { width: 100%; height: 100%; object-fit: cover; }
+.rec__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.rec__text b { font-weight: 600; overflow-wrap: anywhere; }
+.rec__status, .rec__note { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rec__status--bad { color: var(--red); }
+.rec__actions { flex: none; display: flex; align-items: center; gap: 2px; }
+.rec__actions:empty { display: none; }
+.rec__open { display: flex; flex-direction: column; gap: 10px; padding: 0 14px 14px; }
+.rec__player { display: block; width: auto; max-width: 100%; height: min(60dvh, 520px); margin-inline: auto; border-radius: 10px; background: #1c1e25; }
+.rec__chev { flex: none; display: grid; color: var(--muted); }
+.rec--open .rec__chev { transform: rotate(180deg); }
+.bar { display: block; width: 100%; height: 4px; margin-top: 4px; border: 0; border-radius: 2px; background: var(--line); overflow: hidden; appearance: none; }
+.bar::-webkit-progress-bar { background: var(--line); }
+.bar::-webkit-progress-value { background: var(--blue); transition: width 0.4s linear; }
+.bar::-moz-progress-bar { background: var(--blue); }
+.transcript { font-size: 15px; line-height: 1.6; }
+.word { padding: 0 2px; border: 0; border-radius: 4px; background: none; color: inherit; font: inherit; cursor: pointer; touch-action: manipulation; }
+@media (max-width: 479px) {
+  .rec__actions .btn--sm .ic { display: none; }
+  .rec__main { gap: 10px; padding-right: 4px; }
+}
 
 .reels { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
 .reels > li + li { border-top: 1px solid var(--line); }
@@ -93,14 +130,16 @@ a { color: inherit; text-decoration: none; }
 .field:focus { outline: 2px solid var(--blue); outline-offset: -1px; border-color: var(--blue); }
 
 @media (hover: hover) {
-  .btn:hover:not(:disabled), .menu__item:hover, .reelcard:hover { background: var(--hover); }
+  .btn:hover:not(:disabled), .menu__item:hover, .reelcard:hover, button.rec__main:hover { background: var(--hover); }
+  .drop:hover { border-color: var(--blue); }
+  .word:hover { background: var(--blue-soft); }
   .btn--main:hover:not(:disabled) { background: var(--blue-press); }
   .btn--danger:hover:not(:disabled) { background: var(--red-press); }
   .step:hover .step__text b { text-decoration: underline; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .btn { transition: none; }
+  .btn, .bar::-webkit-progress-value { transition: none; }
   .btn:active:not(:disabled) { transform: none; }
 }
 

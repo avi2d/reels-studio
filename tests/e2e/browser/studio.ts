@@ -1,10 +1,12 @@
 import assert from "node:assert/strict"
-import { stat } from "node:fs/promises"
+import { readdir, stat } from "node:fs/promises"
 import { join } from "node:path"
 import type { ProductCheck } from "@avi2dg/checks/browser-hooks.ts"
 import type { Page } from "playwright-core"
 import { STEPS, STUDIO_PATH, stepPath } from "../../../src/shared/page.ts"
-import { setting, timeout } from "./scenario.ts"
+import { SOURCE_VIDEO, setting, timeout } from "./scenario.ts"
+
+const HEARING = 60_000
 
 const address = (path: string): string => new URL(path, setting("REELS_BROWSER_URL")).href
 
@@ -24,7 +26,7 @@ const createReel = async (page: Page, title: string): Promise<string> => {
   const dialog = page.getByRole("dialog", { name: "Новый ролик" })
   await dialog.getByRole("textbox", { name: "Название" }).fill(title)
   await dialog.getByRole("button", { name: "Создать ролик", exact: true }).click()
-  await page.getByRole("heading", { name: "Записи", exact: true, level: 1 }).waitFor()
+  await page.getByRole("heading", { name: "Загрузите записи", exact: true, level: 1 }).waitFor()
   await page.getByRole("link", { name: "Шаг 1: Записи" }).and(page.locator('[aria-current="step"]')).waitFor()
   return reelId(page)
 }
@@ -51,7 +53,7 @@ const createListDelete: ProductCheck = {
     const card = page.getByRole("link", { name: new RegExp(title, "u") })
     await card.getByText(/· Новый$/u).waitFor()
     await card.click()
-    await page.getByRole("heading", { name: "Записи", exact: true, level: 1 }).waitFor()
+    await page.getByRole("heading", { name: "Загрузите записи", exact: true, level: 1 }).waitFor()
     assert.equal(new URL(page.url()).pathname, stepPath(id, "records"))
     await deleteReel(page, title)
     assert.equal(await page.getByRole("link", { name: new RegExp(title, "u") }).count(), 0, "The deleted reel must leave the list")
@@ -60,6 +62,62 @@ const createListDelete: ProductCheck = {
     assert.equal(await page.getByRole("link", { name: new RegExp(title, "u") }).count(), 0, "The deleted reel must stay out of the list after a reload")
     assert.equal(await folderExists(id), false, "Deleting a reel must remove its folder")
     return { targets: ["new reel opens its first step", "reel card reads «Новый»", "deleted reel leaves the list and the disk"], found: [] }
+  }
+}
+
+const reelRecords = (page: Page) => page.getByRole("list", { name: "Записи ролика", exact: true }).getByRole("listitem")
+
+const assertOnlySource = async (id: string): Promise<void> => {
+  const folder = join(setting("REELS_BROWSER_DIR"), "projects", id, "source")
+  const names = await readdir(folder)
+  assert.equal(names.length, 1, `The reel must hold one recording, it holds ${JSON.stringify(names)}`)
+  const kept = await Bun.file(join(folder, names[0] ?? "")).bytes()
+  assert.deepEqual(kept, await Bun.file(join(setting("REELS_BROWSER_DIR"), SOURCE_VIDEO)).bytes(), "The reel must keep the original bytes of the recording")
+}
+
+const playerAt = (page: Page, from: number, to: number) =>
+  page.waitForFunction(([low, high]) => {
+    const player = document.querySelector("video.rec__player")
+    return player instanceof HTMLVideoElement && player.readyState >= 1 && !player.seeking && player.currentTime >= low && player.currentTime < high
+  }, [from, to] as const)
+
+const uploadHearSeek = async (page: Page, title: string): Promise<void> => {
+  const id = await createReel(page, title)
+  await page.locator('input[type="file"][name="records"]').setInputFiles(join(setting("REELS_BROWSER_DIR"), SOURCE_VIDEO))
+  const row = reelRecords(page).first()
+  await row.getByText(/^Готово · 0:07$/u).waitFor({ timeout: HEARING })
+  await page.getByRole("heading", { name: "1 запись · 0:07", exact: true, level: 1 }).waitFor()
+  assert.equal(await reelRecords(page).count(), 1, "One upload must make one recording in the reel")
+  await assertOnlySource(id)
+  await row.getByRole("button", { expanded: false }).click()
+  await playerAt(page, 0, 1)
+  await row.getByRole("button", { name: "Конец", exact: true }).click()
+  await playerAt(page, 4.95, 5.3)
+  assert.equal(await page.getByText(/обрежу по лицу/u).count(), 0, "The horizontal crop status waits for its server step")
+}
+
+const addEarlier = async (page: Page, title: string): Promise<void> => {
+  const id = await createReel(page, title)
+  const [added] = await Promise.all([
+    page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `/api/projects/${id}/videos`),
+    page.getByRole("list", { name: "Загружены раньше", exact: true }).getByRole("button", { name: /^В ролик: «source/u }).first().click()
+  ])
+  assert(added.ok(), `The studio refused to add the recording: ${added.status()}`)
+  await reelRecords(page).first().getByText(/^Готово · 0:07$/u).waitFor()
+  await page.getByRole("heading", { name: "1 запись · 0:07", exact: true, level: 1 }).waitFor()
+  await assertOnlySource(id)
+}
+
+const recordsStep: ProductCheck = {
+  name: "a recording uploaded on the records step reads «Готово», a pressed word moves its player, and «В ролик» adds it to the next reel, instead of the player staying at the start or a second upload",
+  run: async (page) => {
+    page.setDefaultTimeout(timeout)
+    const [first, second] = ["Ролик с записью", "Ролик из прежней записи"]
+    await uploadHearSeek(page, first)
+    await deleteReel(page, first)
+    await addEarlier(page, second)
+    await deleteReel(page, second)
+    return { targets: ["upload reaches «Готово · 0:07»", "pressed «Конец» moves the player to 0:05", "«В ролик» adds the earlier recording ready", "each reel keeps the original"], found: [] }
   }
 }
 
@@ -99,4 +157,4 @@ const pageWidths: ProductCheck = {
   }
 }
 
-export const studioChecks = [createListDelete, pageWidths] satisfies readonly ProductCheck[]
+export const studioChecks = [createListDelete, recordsStep, pageWidths] satisfies readonly ProductCheck[]

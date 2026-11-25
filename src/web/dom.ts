@@ -16,3 +16,13 @@ export const h = <K extends keyof HTMLElementTagNameMap>(
   node.append(...children)
   return node
 }
+
+// Moving a playing video element out of the document pauses it, so only the items that changed are touched.
+export const placeInOrder = (parent: HTMLElement, nodes: ReadonlyArray<HTMLElement>): void => {
+  const wanted = new Set<Element>(nodes)
+  for (const child of [...parent.children]) if (!wanted.has(child)) child.remove()
+  nodes.forEach((node, index) => {
+    const here = parent.children[index]
+    if (here !== node) parent.insertBefore(node, here ?? null)
+  })
+}
