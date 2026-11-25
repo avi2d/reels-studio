@@ -1,3 +1,5 @@
+import { Effect } from "effect"
+import type { Failed } from "../api.ts"
 import { h, type Props } from "../dom.ts"
 import { icon, type IconName } from "./icons.ts"
 
@@ -50,4 +52,50 @@ export const sheet = (id: string, ...children: ReadonlyArray<Node>): HTMLDialogE
   dialog.addEventListener("close", () => { dialog.remove() })
   document.body.append(dialog)
   return dialog
+}
+
+export interface Removal {
+  readonly title: string
+  readonly what: string
+  readonly note: string
+  readonly label: string
+  readonly remove: Effect.Effect<unknown, Failed>
+  readonly onRemoved: () => void
+}
+
+export const confirmRemoval = ({ title, what, note, label, remove, onRemoved }: Removal): void => {
+  const confirm = button("danger", label)
+  const cancel = button("quiet", "Отмена")
+  const problem = h("p", { class: "error", role: "alert" })
+  const dialog = sheet("remove-what",
+    h("h2", { id: "remove-what" }, title),
+    h("p", {}, what),
+    h("p", { class: "hint" }, note),
+    h("div", { class: "sheet__row" }, confirm, cancel),
+    problem)
+  const busy = (on: boolean): void => {
+    dialog.toggleAttribute("data-busy", on)
+    confirm.disabled = on
+    cancel.disabled = on
+    confirm.textContent = on ? "Удаляем…" : label
+  }
+  dialog.addEventListener("cancel", (event) => { if (dialog.hasAttribute("data-busy")) event.preventDefault() })
+  cancel.addEventListener("click", () => { dialog.close() })
+  confirm.addEventListener("click", () => {
+    busy(true)
+    problem.textContent = ""
+    Effect.runFork(remove.pipe(
+      Effect.map(() => {
+        busy(false)
+        dialog.close()
+        onRemoved()
+      }),
+      Effect.catchTag("Failed", (error) => Effect.sync(() => {
+        busy(false)
+        problem.textContent = error.message
+      }))
+    ))
+  })
+  dialog.showModal()
+  cancel.focus()
 }

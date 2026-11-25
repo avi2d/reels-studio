@@ -3,7 +3,7 @@ import type { UploadedVideo } from "../shared/library.ts"
 import { HOME_PATH } from "../shared/page.ts"
 import * as Api from "./api.ts"
 import { button, focusWhenReady, iconButton, retryPair, tooltip, type Retry } from "./controls.ts"
-import { h } from "./dom.ts"
+import { h, placeInOrder } from "./dom.ts"
 import { formatLength, formatSize } from "./format.ts"
 import { askToConfirmRemoval } from "./remove.ts"
 import { oneAfterAnother } from "./queue.ts"
@@ -135,16 +135,6 @@ const uploadedItem = (video: UploadedVideo, retry: Retry, onRemoved: () => void)
       title: "Удалить видео",
       click: () => { askToRemoveVideo(video.name, onRemoved) }
     }))
-
-// Moving a playing video element out of the document pauses it, so only the items that changed are touched.
-const placeInOrder = (parent: HTMLElement, nodes: ReadonlyArray<HTMLElement>): void => {
-  const wanted = new Set<Element>(nodes)
-  for (const child of [...parent.children]) if (!wanted.has(child)) child.remove()
-  nodes.forEach((node, index) => {
-    const here = parent.children[index]
-    if (here !== node) parent.insertBefore(node, here ?? null)
-  })
-}
 
 export const uploadedView = (): HTMLElement => {
   const input = h("input", { class: "visually-hidden", name: "videos", type: "file", accept: "video/*", multiple: true, tabindex: "-1", "aria-hidden": "true" })

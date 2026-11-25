@@ -5,47 +5,21 @@ import { h } from "../dom.ts"
 import { REEL_REMOVAL } from "../remove.ts"
 import { icon } from "./icons.ts"
 import { editTitle } from "./title-sheet.ts"
-import { button, menuButton, sheet } from "./ui.ts"
+import { confirmRemoval, menuButton } from "./ui.ts"
 
 const STEP_NAMES = { records: "Записи", plan: "План", montage: "Монтаж", look: "Оформление", done: "Ролики" } satisfies Record<Step, string>
 
 export const stepName = (step: Step): string => STEP_NAMES[step]
 
-const confirmRemoval = (project: Api.ProjectView, onRemoved: () => void): void => {
-  const confirm = button("danger", REEL_REMOVAL.label)
-  const cancel = button("quiet", "Отмена")
-  const problem = h("p", { class: "error", role: "alert" })
-  const dialog = sheet("remove-reel",
-    h("h2", { id: "remove-reel" }, REEL_REMOVAL.title(project.title)),
-    h("p", {}, REEL_REMOVAL.what),
-    h("p", { class: "hint" }, REEL_REMOVAL.note),
-    h("div", { class: "sheet__row" }, confirm, cancel),
-    problem)
-  const busy = (on: boolean): void => {
-    dialog.toggleAttribute("data-busy", on)
-    confirm.disabled = on
-    cancel.disabled = on
-    confirm.textContent = on ? "Удаляем…" : REEL_REMOVAL.label
-  }
-  dialog.addEventListener("cancel", (event) => { if (dialog.hasAttribute("data-busy")) event.preventDefault() })
-  cancel.addEventListener("click", () => { dialog.close() })
-  confirm.addEventListener("click", () => {
-    busy(true)
-    problem.textContent = ""
-    Effect.runFork(Api.removeProject(project.id).pipe(
-      Effect.map(() => {
-        busy(false)
-        dialog.close()
-        onRemoved()
-      }),
-      Effect.catchTag("Failed", (error) => Effect.sync(() => {
-        busy(false)
-        problem.textContent = error.message
-      }))
-    ))
+const removeReel = (project: Api.ProjectView, onRemoved: () => void): void => {
+  confirmRemoval({
+    title: REEL_REMOVAL.title(project.title),
+    what: REEL_REMOVAL.what,
+    note: REEL_REMOVAL.note,
+    label: REEL_REMOVAL.label,
+    remove: Api.removeProject(project.id),
+    onRemoved
   })
-  dialog.showModal()
-  cancel.focus()
 }
 
 interface ReelBar {
@@ -70,7 +44,7 @@ export const topBar = (reel?: ReelBar): HTMLElement => {
   }
   header.append(name, menuButton("Ещё", [
     { label: "Переименовать", icon: "pencil", danger: false, run: rename },
-    { label: "Удалить ролик", icon: "trash", danger: true, run: () => { confirmRemoval(project, reel.removed) } }
+    { label: "Удалить ролик", icon: "trash", danger: true, run: () => { removeReel(project, reel.removed) } }
   ]))
   return header
 }

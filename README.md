@@ -37,6 +37,8 @@ The log prints `Listening on http://0.0.0.0:8765`.
 The page shows the videos as tiles with covers and a button that starts the next one.
 The new screens open at `/new` beside the old page.
 Each reel card shows its status, and the reel's top bar menu lets you rename it.
+The reel list at `/new` shows reels and uploaded takes five to a page, uploads takes and resumes an interrupted upload.
+Step 1, «Записи», adds the uploaded takes you tick to the reel at once and plays a recording from a word you press.
 
 The studio answers the home network and the owner's Mac through the `local-apps` gateway.
 The gateway must listen only on that Mac's loopback address.
@@ -67,24 +69,7 @@ Each setting is an environment variable read at start.
 
 ## Keep the studio running
 
-The owner's computer serves the studio from a clone of `main` at `~/Projects/reels-studio`.
-The uploaded videos and everything made from them live in `~/.local/share/reels-studio/projects`, outside any clone.
-
-To make the studio start again after a restart of the computer:
-
-1. Copy `deploy/reels-studio.service` to `~/.config/systemd/user/`.
-1. Run `systemctl --user daemon-reload`.
-1. Run `loginctl enable-linger $USER`.
-1. Run `systemctl --user enable --now reels-studio.service`.
-
-The linger step keeps the user manager running without an open login.
-On WSL2, open the Linux machine once after each Windows restart.
-Without that step, systemd finds no machine for the unit.
-
-To serve a newer `main`:
-
-1. Run `git pull` and `bun install --frozen-lockfile` in `~/Projects/reels-studio`.
-1. Run `systemctl --user restart reels-studio.service`.
+The steps that keep the studio running and serve a newer `main` are in [Keep the studio running](docs/keep-the-studio-running.md).
 
 How the studio hears a video lives in [How the studio hears a video](docs/how-the-studio-hears-a-video.md).
 

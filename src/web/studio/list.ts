@@ -4,6 +4,7 @@ import * as Api from "../api.ts"
 import { h } from "../dom.ts"
 import { formatDay } from "../format.ts"
 import { icon } from "./icons.ts"
+import { pager } from "./pager.ts"
 import { editTitle } from "./title-sheet.ts"
 import { button } from "./ui.ts"
 
@@ -20,13 +21,21 @@ const card = (project: Api.ProjectView): HTMLElement =>
     h("span", { class: "reelcard__text" }, h("b", {}, project.title), h("span", {}, `${formatDay(project.createdAt)} · ${STATUS[project.status]}`)),
     icon("right")))
 
-export const listView = (projects: ReadonlyArray<Api.ProjectView>, onCreated: (id: string) => void): HTMLElement =>
+const reelList = (projects: ReadonlyArray<Api.ProjectView>): ReadonlyArray<HTMLElement> => {
+  if (projects.length === 0) return [h("p", { class: "hint" }, "Роликов пока нет. Нажмите «Новый ролик» и назовите первый.")]
+  const reels = h("ul", { class: "reels" })
+  const pages = pager("Страницы роликов", () => { draw() })
+  const draw = (): void => { reels.replaceChildren(...pages.show(projects).map(card)) }
+  draw()
+  return [reels, pages.node]
+}
+
+export const listView = (projects: ReadonlyArray<Api.ProjectView>, onCreated: (id: string) => void, uploader: HTMLElement): HTMLElement =>
   h("div", { class: "body" },
     h("div", { class: "head" },
       h("h1", { tabindex: "-1" }, "Ролики"),
       button("main", "Новый ролик", { click: () => {
         editTitle({ kind: "new" }, (title) => Effect.map(Api.createProject(title), ({ project }) => { onCreated(project.id) }))
       } }, "plus")),
-    projects.length === 0
-      ? h("p", { class: "hint" }, "Роликов пока нет. Нажмите «Новый ролик» и назовите первый.")
-      : h("ul", { class: "reels" }, ...projects.map(card)))
+    ...reelList(projects),
+    uploader)
