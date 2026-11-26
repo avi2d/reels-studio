@@ -1,10 +1,11 @@
 #!/usr/bin/env bun
 import assert from "node:assert/strict"
+import { readdir } from "node:fs/promises"
 import { createInterface } from "node:readline"
 import { Schema } from "effect"
 import type { Transcript } from "../../../src/shared/plan.ts"
 import type { Blocks, Gaze } from "../../../src/shared/timeline.ts"
-import { CHAT_PICTURE, CHAT_REPLY, SOURCE_VIDEO } from "./scenario.ts"
+import { CHAT_PICTURE, CHAT_REPLY, PLAN_TASK, PLAN_TEXT, SOURCE_VIDEO } from "./scenario.ts"
 
 const transcript = {
   duration: 7,
@@ -68,6 +69,17 @@ const runPi = async (): Promise<void> => {
   if (message.startsWith("Собери блоки")) {
     await Bun.write("blocks.json", JSON.stringify(blocks))
     reply = "Блоки готовы."
+  } else if (message.startsWith("Составь один план")) {
+    assert(process.argv.some((arg) => arg.includes(PLAN_TASK)), "The prompt must include the saved task")
+    const [video] = await readdir("source")
+    assert(video !== undefined, "The plan needs the recording from step 1")
+    await Bun.write("blocks.json", JSON.stringify({ blocks: blocks.blocks.map((block) => ({
+      ...block, takes: block.takes.map((take) => ({ ...take, video }))
+    })) }))
+    await Bun.write("plan.md", PLAN_TEXT)
+    reply = PLAN_TEXT
+  } else if (message === "Согласна") {
+    reply = "Приступаю."
   } else if (message.includes("gather the blocks now")) {
     reply = "Собрала блоки."
   } else {
