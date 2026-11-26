@@ -5,7 +5,7 @@ import { createInterface } from "node:readline"
 import { Schema } from "effect"
 import type { Transcript } from "../../../src/shared/plan.ts"
 import type { Blocks, Gaze } from "../../../src/shared/timeline.ts"
-import { CHAT_PICTURE, CHAT_REPLY, PLAN_TASK, PLAN_TEXT, SOURCE_VIDEO } from "./scenario.ts"
+import { CHAT_PICTURE, CHAT_REPLY, FIRST_WORDS, PLAN_TASK, PLAN_TEXT, SLOW_MESSAGE, SOURCE_VIDEO } from "./scenario.ts"
 
 const transcript = {
   duration: 7,
@@ -59,6 +59,8 @@ const readPrompt = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct(
   })))
 })))
 
+const delta = (text: string) => ({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: text } })
+
 const runPi = async (): Promise<void> => {
   const input = createInterface({ input: process.stdin })
   const { value } = await input[Symbol.asyncIterator]().next()
@@ -66,7 +68,11 @@ const runPi = async (): Promise<void> => {
   process.stdin.pause()
   const { message, images } = readPrompt(value)
   let reply = CHAT_REPLY
-  if (message.startsWith("Собери блоки")) {
+  if (message === SLOW_MESSAGE) {
+    console.log(JSON.stringify(delta(FIRST_WORDS)))
+    await Bun.sleep(60_000)
+    reply = "Вот конец ответа."
+  } else if (message.startsWith("Собери блоки")) {
     await Bun.write("blocks.json", JSON.stringify(blocks))
     reply = "Блоки готовы."
   } else if (message.startsWith("Составь один план")) {
@@ -90,7 +96,7 @@ const runPi = async (): Promise<void> => {
     assert.equal(jpeg.subarray(0, 2).toString("hex"), "ffd8", "The picture was not delivered as JPEG")
   }
   const events = [
-    { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: reply } },
+    delta(reply),
     { type: "agent_settled" }
   ]
   console.log(events.map((event) => JSON.stringify(event)).join("\n"))
