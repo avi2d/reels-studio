@@ -351,6 +351,7 @@ const streamingChat: ProductCheck = {
     await chooser.setFiles(join(setting("REELS_BROWSER_DIR"), CHAT_PICTURE))
     await send.click()
     await chat.getByText(CHAT_REPLY, { exact: true }).waitFor()
+    await stop.waitFor({ state: "hidden" })
     const path = join(setting("REELS_BROWSER_DIR"), "projects", id, "attached", CHAT_PICTURE)
     assert.deepEqual(await Bun.file(path).bytes(), await Bun.file(join(setting("REELS_BROWSER_DIR"), CHAT_PICTURE)).bytes())
     await page.reload()
