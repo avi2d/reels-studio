@@ -34,6 +34,19 @@ A change to `plan.md` or `texts.json` after the yes makes the plan wait for a ne
 Adding or removing `texts.json` also requires a new yes.
 An approval saved without a text snapshot stays valid while the project has no `texts.json`.
 
+## The new studio at `/new`
+
+On step «План», «Как в прошлый раз» fills an empty task with the last task from another reel.
+«Составить план» saves the task and asks for a plan.
+After you press «Да, делайте», the studio finishes the work and opens «Монтаж».
+To see what the studio did, return to «План».
+
+«Чат» is available on every step.
+Replies appear as the model writes them.
+«Остановить» ends the current reply and keeps the text that arrived.
+It does not undo work the studio already started after a yes.
+Files for the chat go through «Приложить файлы».
+
 ## Files
 
 | Path | What it holds |

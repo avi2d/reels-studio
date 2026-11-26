@@ -25,18 +25,31 @@ const KIND_NAMES: Readonly<Record<FileKind, string>> = {
 
 const HAS_COVER: ReadonlySet<FileKind> = new Set(["picture", "document", "video"])
 
-const thumb = (kind: FileKind, source: string | undefined): HTMLElement => {
-  const fallback = h("span", { class: "thumb" }, icon(KIND_ICONS[kind]))
+interface AttachmentControls {
+  readonly icon: (name: FileKind) => HTMLElement
+  readonly pick: () => HTMLElement
+  readonly remove: (label: string) => HTMLElement
+  readonly changed?: () => void
+}
+
+const standardControls: AttachmentControls = {
+  icon: (kind) => icon(KIND_ICONS[kind]),
+  pick: () => iconButton("plain", "attach", "Приложить файлы", { class: "attach" }),
+  remove: (label) => iconButton("plain", "close", label, { class: "remove" })
+}
+
+const thumb = (kind: FileKind, source: string | undefined, draw: AttachmentControls["icon"]): HTMLElement => {
+  const fallback = h("span", { class: "thumb" }, draw(kind))
   if (source === undefined) return fallback
   const picture = h("img", { class: "thumb", src: source, alt: "", loading: "lazy", decoding: "async" })
   picture.addEventListener("error", () => { picture.replaceWith(fallback) })
   return picture
 }
 
-const fileItem = (name: string, source: string | undefined): HTMLElement => {
+const fileItem = (name: string, source: string | undefined, draw: AttachmentControls["icon"]): HTMLElement => {
   const kind = kindOfName(name)
   return h("li", { title: name },
-    thumb(kind, source),
+    thumb(kind, source, draw),
     h("span", { class: "visually-hidden" }, `${KIND_NAMES[kind]}: `),
     h("span", { class: "name" }, name))
 }
@@ -44,8 +57,8 @@ const fileItem = (name: string, source: string | undefined): HTMLElement => {
 const fileList = (items: ReadonlyArray<HTMLElement>): HTMLElement =>
   h("ul", { class: "attached", "aria-label": "Приложенные файлы" }, ...items)
 
-export const sentFiles = (projectId: string, names: ReadonlyArray<string>): HTMLElement =>
-  fileList(names.map((name) => fileItem(name, HAS_COVER.has(kindOfName(name)) ? Api.coverUrl(projectId, name) : undefined)))
+export const sentFiles = (projectId: string, names: ReadonlyArray<string>, draw: AttachmentControls["icon"] = standardControls.icon): HTMLElement =>
+  fileList(names.map((name) => fileItem(name, HAS_COVER.has(kindOfName(name)) ? Api.coverUrl(projectId, name) : undefined, draw)))
 
 interface Picked {
   readonly file: File
@@ -96,10 +109,10 @@ const makePreviews = (isDisposed: () => boolean): Previews => {
   return { previewOf, release, dispose }
 }
 
-export const attachTray = (projectId: string, onProblem: (message: string) => void): Tray => {
+export const attachTray = (projectId: string, onProblem: (message: string) => void, controls = standardControls): Tray => {
   const list = h("ul", { class: "tray", "aria-label": "Файлы к сообщению", hidden: true })
   const input = h("input", { class: "visually-hidden", type: "file", accept: ACCEPTED_FILES, multiple: true, tabindex: "-1", "aria-hidden": "true" })
-  const opener = iconButton("plain", "attach", "Приложить файлы", { class: "attach" })
+  const opener = controls.pick()
   opener.addEventListener("click", () => { input.click() })
   const picked: Array<Picked> = []
   const state = { locked: false, disposed: false }
@@ -111,7 +124,10 @@ export const attachTray = (projectId: string, onProblem: (message: string) => vo
     previews.dispose()
   }
 
-  const refresh = (): void => { list.hidden = picked.length === 0 }
+  const refresh = (): void => {
+    list.hidden = picked.length === 0
+    controls.changed?.()
+  }
 
   const drop = (entry: Picked): void => {
     const index = picked.indexOf(entry)
@@ -126,8 +142,8 @@ export const attachTray = (projectId: string, onProblem: (message: string) => vo
     const kind = kindOfName(file.name)
     const preview = previews.previewOf(file)
     const status = h("span", { class: "size" }, formatSize(file.size))
-    const remove = iconButton("plain", "close", `Убрать ${file.name}`, { class: "remove" })
-    const node = h("li", {}, thumb(kind, preview), h("span", { class: "name", title: file.name }, file.name), status, remove)
+    const remove = controls.remove(`Убрать ${file.name}`)
+    const node = h("li", {}, thumb(kind, preview, controls.icon), h("span", { class: "name", title: file.name }, file.name), status, remove)
     const entry: Picked = { file, node, status, preview, done: undefined }
     remove.addEventListener("click", () => { if (!state.locked) drop(entry) })
     return entry
@@ -171,7 +187,7 @@ export const attachTray = (projectId: string, onProblem: (message: string) => vo
         )))
 
   const sentView = (): HTMLElement =>
-    fileList(picked.map((entry) => fileItem(entry.file.name, previews.previewOf(entry.file))))
+    fileList(picked.map((entry) => fileItem(entry.file.name, previews.previewOf(entry.file), controls.icon)))
 
   const clear = (): void => {
     for (const entry of picked) previews.release(entry.preview)

@@ -4,9 +4,23 @@ export const Message = Schema.Struct({
   role: Schema.Literals(["user", "assistant"]),
   text: Schema.String,
   files: Schema.optionalKey(Schema.Array(Schema.String)),
-  failed: Schema.optionalKey(Schema.String)
+  failed: Schema.optionalKey(Schema.String),
+  stopped: Schema.optionalKey(Schema.Literal(true))
 })
 export type Message = typeof Message.Type
+
+export const CHAT_TURN_HEADER = "x-chat-turn"
+
+export const ChatEvent = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("delta"), text: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("step"), text: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("start") }),
+  Schema.Struct({ type: Schema.Literal("retry") }),
+  Schema.Struct({ type: Schema.Literal("error"), message: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("stopped") }),
+  Schema.Struct({ type: Schema.Literal("done") })
+])
+export type ChatEvent = typeof ChatEvent.Type
 
 export type FileKind = "picture" | "document" | "video" | "sound" | "other"
 

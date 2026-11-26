@@ -14,7 +14,7 @@ const bundle = (entry: string): Effect.Effect<string, BundleFailed> =>
 const NO_STORE = { "cache-control": "no-store" }
 const KEEP_A_DAY = { "cache-control": "public, max-age=86400" }
 const SHEETS = ["fonts.css", "app.css", "work.css", "timeline.css", "chat.css"]
-const STUDIO_SHEETS = ["fonts.css", "studio/studio.css"]
+const STUDIO_SHEETS = ["fonts.css", "studio/studio.css", "studio/planning.css"]
 const FONTS = ["onest-cyrillic.woff2", "onest-latin.woff2", "unbounded-cyrillic.woff2", "unbounded-latin.woff2"]
 
 export const pageRoutes = Layer.unwrap(Effect.gen(function*() {
