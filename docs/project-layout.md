@@ -27,7 +27,7 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/shared/reel.ts` | The state of a reel build and of the built file, used by the server and the page |
 | `src/shared/gather.ts` | When the studio asks the chat model to gather the blocks by itself |
 | `src/shared/brief.ts` | The format of the brief, the plan and the saved yes, and the work the studio does after the yes |
-| `src/shared/chat.ts` | The format of a chat message and the kinds of file a person can attach to it |
+| `src/shared/chat.ts` | The format of a chat message, of the events a streamed reply sends and of the header that names its turn, and the kinds of file a person can attach to it |
 | `src/shared/library.ts` | The formats of an uploaded video, of a video offered to a reel from the shared list or another folder, and of a pick, used by the server and the page |
 | `src/shared/project.ts` | The formats of a reel's `project.json`, of the title a person sends to create or rename it, and of the reel the page gets with its one status: created, uploaded or built, used by the server and the page |
 | `src/shared/page.ts` | The addresses of the home, uploaded videos and project pages, and of the new screens under `/new` with their five steps, used by the server and the page |
@@ -38,7 +38,7 @@ The studio keeps its code, skills and per-video folders in these places.
 | `deploy/reels-studio.service` | The systemd user unit that keeps the studio running |
 | `src/pi/` | The pi extension that keeps the chat model inside one video folder |
 | `src/web/` | The page, its styles and its script |
-| `src/web/studio/` | The new screens at `/new`: the reel list, the top bar and the five steps, beside the old page until they replace it. The reel list shows reels and uploaded takes five to a page and uploads takes, and step 1, «Записи», adds any number of ticked uploaded takes to the reel at once, lists its recordings and plays a recording |
+| `src/web/studio/` | The new screens at `/new`: the reel list, the top bar and the five steps, beside the old page until they replace it. The reel list shows reels and uploaded takes five to a page and uploads takes, and step 1, «Записи», adds any number of ticked uploaded takes to the reel at once, lists its recordings and plays a recording. Step 2, «План», takes the task and shows the plan, and the chat opens from every step with replies that stream and a stop button |
 | `skills/` | The four skills the chat model reads: plan, style, player zones and inserts |
 | `brands/` | One folder per style profile with its colours, fonts and templates, and the font files under `fonts/` |
 | `prompts/studio.md` | The system prompt of the chat model |
