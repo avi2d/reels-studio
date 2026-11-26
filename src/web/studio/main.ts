@@ -3,8 +3,10 @@ import { STUDIO_PATH, isStep, stepPath, type Step } from "../../shared/page.ts"
 import * as Api from "../api.ts"
 import { h } from "../dom.ts"
 import { run } from "../run.ts"
+import { studioChat, type StudioChat } from "./chat.ts"
 import { rail, stepBody, stepName, topBar } from "./frame.ts"
 import { listView } from "./list.ts"
+import { planStep } from "./plan.ts"
 import { recordsStep } from "./records.ts"
 import { uploaderSection } from "./uploader.ts"
 
@@ -13,6 +15,22 @@ type Page = { readonly kind: "list" } | { readonly kind: "reel"; readonly id: st
 const TITLE = "Студия Reels"
 
 const app = document.querySelector("#app") ?? document.body
+const drafts = new Map<string, string>()
+let room: { readonly id: string; readonly chat: StudioChat } | undefined
+let leaveStep: (() => void) | undefined
+
+const leaveChat = (): void => {
+  room?.chat.dispose()
+  room = undefined
+}
+
+const chatFor = (project: Api.ProjectView): StudioChat => {
+  if (room?.id === project.id) return room.chat
+  leaveChat()
+  const chat = studioChat(project)
+  room = { id: project.id, chat }
+  return chat
+}
 
 const pageAt = (pathname: string): Page | undefined => {
   const path = pathname.replace(/\/+$/u, "")
@@ -30,6 +48,7 @@ const show = (kind: "home" | "reel", ...nodes: ReadonlyArray<Node>): void => {
 }
 
 const showFailure = (message: string): void => {
+  leaveChat()
   document.title = TITLE
   show("home", topBar(), h("main", { class: "main" }, h("div", { class: "body" },
     h("p", { class: "error", role: "alert" }, message),
@@ -51,17 +70,34 @@ const reelPage = (id: string, step: Step): Effect.Effect<void, Api.Failed> =>
     const { project } = yield* Api.getProject(id)
     let steps = rail(project, step)
     let stage = project.stage
-    const body = yield* stepView(project, step, (now) => {
-      if (now.stage === stage) return
-      const fresh = rail(now, step)
-      steps.replaceWith(fresh)
-      steps = fresh
-      stage = now.stage
-    })
+    const chat = chatFor(project)
+    let body: HTMLElement
+    if (step === "plan") {
+      const saved = yield* Api.getBrief(id)
+      const view = planStep(id, saved, {
+        chat,
+        draft: drafts.get(id),
+        keepDraft: (value) => { if (value === undefined) drafts.delete(id); else drafts.set(id, value) },
+        advance: () => { if (location.pathname === stepPath(id, "plan")) navigate(stepPath(id, "montage")) }
+      })
+      body = view.body
+      leaveStep = view.dispose
+    } else {
+      body = yield* stepView(project, step, (now) => {
+        if (now.stage === stage) return
+        const fresh = rail(now, step)
+        steps.replaceWith(fresh)
+        steps = fresh
+        stage = now.stage
+      })
+    }
     const setPageTitle = (title: string): void => { document.title = `${stepName(step)} · ${title} · ${TITLE}` }
     setPageTitle(project.title)
     show("reel",
-      topBar({ project, renamed: setPageTitle, removed: () => { navigate(STUDIO_PATH) } }),
+      topBar({ project, chat: chat.opener, renamed: setPageTitle, removed: () => {
+        drafts.delete(id)
+        navigate(STUDIO_PATH)
+      } }),
       steps,
       h("main", { class: "main" }, body))
   })
@@ -70,7 +106,10 @@ let stopLoad: (() => void) | undefined
 
 const route = (moved: boolean): void => {
   stopLoad?.()
+  leaveStep?.()
+  leaveStep = undefined
   const page = pageAt(location.pathname)
+  if (page?.kind !== "reel" || room?.id !== page.id) leaveChat()
   if (page === undefined) {
     showFailure("Такой страницы в студии нет.")
     return

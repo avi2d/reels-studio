@@ -7,7 +7,7 @@ import { Schema } from "effect"
 import type { Page } from "playwright-core"
 import { UploadedVideo } from "../../../src/shared/library.ts"
 import { STEPS, STUDIO_PATH, stepPath } from "../../../src/shared/page.ts"
-import { SOURCE_VIDEO, setting, timeout } from "./scenario.ts"
+import { CHAT_PICTURE, CHAT_REPLY, FIRST_WORDS, PLAN_TASK, PLAN_TEXT, SLOW_MESSAGE, SOURCE_VIDEO, setting, timeout } from "./scenario.ts"
 
 const HEARING = 60_000
 
@@ -155,8 +155,39 @@ const seekByWord = async (page: Page): Promise<void> => {
   assert.equal(await page.getByText(/обрежу по лицу/u).count(), 0, "The horizontal crop status waits for its server step")
 }
 
+const approvePlan = async (page: Page, id: string): Promise<void> => {
+  await page.getByRole("link", { name: "Дальше: план", exact: true }).click()
+  const task = page.getByRole("textbox", { name: "Задание", exact: true })
+  const make = page.getByRole("button", { name: "Составить план", exact: true })
+  await make.waitFor()
+  assert(await make.isDisabled(), "The empty task must not start a plan")
+  await task.fill("   ")
+  assert(await make.isDisabled(), "Spaces are not a task")
+  await task.fill(PLAN_TASK)
+  await make.click()
+  await page.getByRole("main").getByText(PLAN_TEXT, { exact: true }).waitFor()
+  await page.reload()
+  assert.equal(await task.inputValue(), PLAN_TASK, "The task must survive a reload")
+  await page.getByRole("button", { name: "Да, делайте", exact: true }).click()
+  await page.waitForURL(address(stepPath(id, "montage")), { timeout })
+  await page.getByRole("heading", { name: "Монтаж", exact: true, level: 1 }).waitFor()
+  await page.getByRole("link", { name: "Шаг 2: План", exact: true }).click()
+  const work = page.getByRole("region", { name: "Что сделала студия" })
+  await work.getByRole("listitem").filter({ hasText: "«Конец»" }).waitFor()
+}
+
+const reusePlanTask = async (page: Page): Promise<void> => {
+  const title = "Ролик с прошлым заданием"
+  await createReel(page, title)
+  await page.getByRole("link", { name: "Шаг 2: План", exact: true }).click()
+  await page.getByRole("button", { name: "Как в прошлый раз", exact: true }).click()
+  assert.equal(await page.getByRole("textbox", { name: "Задание", exact: true }).inputValue(), PLAN_TASK)
+  assert(await page.getByRole("button", { name: "Составить план", exact: true }).isEnabled())
+  await deleteReel(page, title)
+}
+
 const recordsStep: ProductCheck = {
-  name: "two takes uploaded on the studio page read «Готово», step 1 adds both to one reel with one press, one to the next reel, and a pressed word moves the player, instead of one take per press, a second upload, an upload picker in step 1 or the player staying at the start",
+  name: "two takes uploaded on the studio page read «Готово», step 1 adds both to one reel with one press, one to the next reel, and a pressed word moves the player; a blank task cannot generate a plan and approving a real plan opens «Монтаж» instead of leaving the reel in step 2",
   run: async (page) => {
     page.setDefaultTimeout(timeout)
     const [first, second] = ["Ролик с двумя записями", "Ролик из одной записи"]
@@ -164,10 +195,13 @@ const recordsStep: ProductCheck = {
     await addChosen(page, first, takes)
     await seekByWord(page)
     await deleteReel(page, first)
-    await addChosen(page, second, takes.slice(0, 1))
+    const id = await addChosen(page, second, takes.slice(0, 1))
+    await approvePlan(page, id)
+    await reusePlanTask(page)
+    await page.goto(address(stepPath(id, "plan")))
     await deleteReel(page, second)
     await removeUploads(takes)
-    return { targets: ["two uploads on the studio page reach «Готово · 0:07»", "step 1 holds no upload picker", "two chosen recordings join the reel with one press", "one chosen recording joins the next reel", "pressed «Конец» moves the player to 0:05", "each reel keeps the original"], found: [] }
+    return { targets: ["two uploads on the studio page reach «Готово · 0:07»", "step 1 holds no upload picker", "two chosen recordings join the reel with one press", "one chosen recording joins the next reel", "pressed «Конец» moves the player to 0:05", "each reel keeps the original", "empty task blocks the plan", "the studio shows the saved plan and what it did", "one yes opens step 3", "the next reel can reuse the last task"], found: [] }
   }
 }
 
@@ -290,6 +324,47 @@ const addedRowsStayBusy: ProductCheck = {
   }
 }
 
+const streamingChat: ProductCheck = {
+  name: "stopping a reply from step 3 keeps the streamed words and frees the server for the next message instead of buffering or only hiding the reply",
+  run: async (page) => {
+    page.setDefaultTimeout(timeout)
+    const title = "Ролик с остановленным ответом"
+    const id = await createReel(page, title)
+    await page.getByRole("link", { name: "Шаг 3: Монтаж", exact: true }).click()
+    await page.getByRole("heading", { name: "Монтаж", exact: true, level: 1 }).waitFor()
+    await page.getByRole("button", { name: "Чат", exact: true }).click()
+    const chat = page.getByRole("dialog", { name: "Чат", exact: true })
+    const send = chat.getByRole("button", { name: "Отправить", exact: true })
+    await chat.getByRole("textbox", { name: "Сообщение", exact: true }).fill(SLOW_MESSAGE)
+    await send.click()
+    await chat.getByText(FIRST_WORDS, { exact: true }).waitFor()
+    const stop = chat.getByRole("button", { name: "Остановить", exact: true })
+    assert(await stop.isEnabled(), "The first words must appear while the model is still working")
+    await stop.click()
+    await chat.getByText("Ответ остановлен.", { exact: true }).waitFor()
+    await stop.waitFor({ state: "hidden" })
+
+    const [chooser] = await Promise.all([
+      page.waitForEvent("filechooser", { timeout }),
+      chat.getByRole("button", { name: "Приложить файлы", exact: true }).click()
+    ])
+    await chooser.setFiles(join(setting("REELS_BROWSER_DIR"), CHAT_PICTURE))
+    await send.click()
+    await chat.getByText(CHAT_REPLY, { exact: true }).waitFor()
+    await stop.waitFor({ state: "hidden" })
+    const path = join(setting("REELS_BROWSER_DIR"), "projects", id, "attached", CHAT_PICTURE)
+    assert.deepEqual(await Bun.file(path).bytes(), await Bun.file(join(setting("REELS_BROWSER_DIR"), CHAT_PICTURE)).bytes())
+    await page.reload()
+    await page.getByRole("button", { name: "Чат", exact: true }).click()
+    await chat.getByText(FIRST_WORDS, { exact: true }).waitFor()
+    await chat.getByText("Ответ остановлен.", { exact: true }).waitFor()
+    await chat.getByText(CHAT_REPLY, { exact: true }).waitFor()
+    await chat.getByRole("button", { name: "Закрыть чат", exact: true }).click()
+    await deleteReel(page, title)
+    return { targets: ["reply text arrives before completion", "stop frees the server for the next send", "an attachment keeps its original bytes", "stopped reply survives reload"], found: [] }
+  }
+}
+
 const WINDOWS = [[1440, 900], [390, 844], [320, 640]] as const
 
 const pageWidths: ProductCheck = {
@@ -378,4 +453,4 @@ const builtStatus: ProductCheck = {
   }
 }
 
-export const studioChecks = [createListDelete, recordsStep, finishedUploadStays, addedRowsStayBusy, pageWidths, renamePersists, builtStatus] satisfies readonly ProductCheck[]
+export const studioChecks = [createListDelete, recordsStep, finishedUploadStays, addedRowsStayBusy, streamingChat, pageWidths, renamePersists, builtStatus] satisfies readonly ProductCheck[]

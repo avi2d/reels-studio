@@ -13,6 +13,12 @@ import { blocksHash } from "../../src/shared/gather.ts"
 import { NO_EDITS, type TimelineView } from "../../src/shared/timeline.ts"
 import { mediaWith, projectAt } from "./server-fixtures.ts"
 
+const chat = Chat.of({
+  history: () => Effect.die("unexpected service call"), send: () => Effect.die("unexpected service call"),
+  stop: () => Effect.die("unexpected service call"), gather: () => Effect.die("unexpected service call"),
+  withoutTurn: (_id, use) => use
+})
+
 test("polling stays active after chat writes changed blocks until pause shortening catches up", async () => {
   const dir = await mkdtemp(join(tmpdir(), "gather-server-"))
   try {
@@ -22,10 +28,6 @@ test("polling stays active after chat writes changed blocks until pause shorteni
     await writeFile(join(dir, "blocks.json"), changed)
     const timeline: TimelineView = { looks: [{ video: "a", state: "measured" }], faces: [], pictures: [], inserts: { state: "none" }, texts: { state: "none" }, timeline: { state: "ready", blocks: [], dropped: 0, edits: NO_EDITS } }
     const media = mediaWith(() => [{ name: "a", state: "ready", transcript: { duration: 1, words: [] } }], timeline)
-    const chat = Chat.of({
-      history: () => Effect.die("unexpected service call"), send: () => Effect.die("unexpected service call"),
-      gather: () => Effect.die("unexpected service call"), withoutTurn: (_id, use) => use
-    })
     const dependencies = Layer.mergeAll(BunServices.layer, GatherState.layer, Layer.succeed(Media, media.service), Layer.succeed(Projects, projectAt(dir)), Layer.succeed(Chat, chat))
     const running = await Effect.runPromise(Effect.gen(function*() {
       const gather = yield* Gather
@@ -46,10 +48,6 @@ test("polling stays idle when changed blocks cannot shorten because the timeline
     await writeFile(join(dir, "blocks.json"), changed)
     const timeline: TimelineView = { looks: [{ video: "a", state: "measured" }], faces: [], pictures: [], inserts: { state: "none" }, texts: { state: "none" }, timeline: { state: "unreadable" } }
     const media = mediaWith(() => [{ name: "a", state: "ready", transcript: { duration: 1, words: [] } }], timeline)
-    const chat = Chat.of({
-      history: () => Effect.die("unexpected service call"), send: () => Effect.die("unexpected service call"),
-      gather: () => Effect.die("unexpected service call"), withoutTurn: (_id, use) => use
-    })
     const dependencies = Layer.mergeAll(BunServices.layer, GatherState.layer, Layer.succeed(Media, media.service), Layer.succeed(Projects, projectAt(dir)), Layer.succeed(Chat, chat))
     const result = await Effect.runPromise(Effect.gen(function*() {
       const gather = yield* Gather

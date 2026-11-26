@@ -1,12 +1,6 @@
 import { Option, Schema } from "effect"
 
-export type ChatEvent =
-  | { readonly type: "delta"; readonly text: string }
-  | { readonly type: "step"; readonly text: string }
-  | { readonly type: "start" }
-  | { readonly type: "retry" }
-  | { readonly type: "error"; readonly message: string }
-  | { readonly type: "done" }
+import type { ChatEvent } from "../shared/chat.ts"
 
 const PiRecord = Schema.Struct({
   type: Schema.String,

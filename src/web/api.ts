@@ -17,16 +17,6 @@ export type { Effort, ProjectView } from "../shared/project.ts"
 
 export type { Message } from "../shared/chat.ts"
 
-export const ChatEvent = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("delta"), text: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("step"), text: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("start") }),
-  Schema.Struct({ type: Schema.Literal("retry") }),
-  Schema.Struct({ type: Schema.Literal("error"), message: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("done") })
-])
-export type ChatEvent = typeof ChatEvent.Type
-
 const ErrorBody = Schema.Struct({ error: Schema.String })
 const decodeError = Schema.decodeUnknownOption(ErrorBody)
 
@@ -161,6 +151,9 @@ export const removeProject = (id: string): Effect.Effect<{ readonly removed: str
 
 export const postChat = (id: string, text: string, files: ReadonlyArray<string>, model: string, effort: Effort): Effect.Effect<Response, Offline> =>
   send(`/api/projects/${id}/chat`, post({ text, files, model, effort }))
+
+export const stopChat = (id: string, token: string): Effect.Effect<void, Failed> =>
+  call(Schema.Struct({ ok: Schema.Literal(true) }), `/api/projects/${id}/chat/stop`, post({ token })).pipe(Effect.asVoid)
 
 export const getBrief = (id: string): Effect.Effect<BriefView, Failed> =>
   call(BriefView, `/api/projects/${id}/brief`)

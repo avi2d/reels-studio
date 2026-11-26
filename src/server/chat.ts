@@ -1,15 +1,15 @@
-import { Array as Arr, Context, Deferred, Effect, Fiber, FileSystem, Layer, Option, Path, type PlatformError, Ref, Schema, Stream } from "effect"
+import { Array as Arr, Context, Crypto, Deferred, Effect, Fiber, FileSystem, Layer, Option, Path, type PlatformError, Ref, Schema, Stream } from "effect"
 import { type ChildProcessSpawner } from "effect/process"
 import { approves } from "../shared/brief.ts"
-import { Message, MAX_FILES } from "../shared/chat.ts"
+import { type ChatEvent, Message, MAX_FILES } from "../shared/chat.ts"
 import { ApiError, badRequest, orUnavailable } from "./api-error.ts"
 import { Attachments } from "./attachments.ts"
-import { piCommand, type Session } from "./pi-command.ts"
+import { piCommand } from "./pi-command.ts"
 import { Brief } from "./brief.ts"
 import { Media } from "./media.ts"
 import type { VideoView } from "../shared/plan.ts"
 import type { TimelineView } from "../shared/timeline.ts"
-import { toChatEvents, type ChatEvent } from "./pi-events.ts"
+import { toChatEvents } from "./pi-events.ts"
 import { Projects, type Effort } from "./projects.ts"
 import { Settings } from "./settings.ts"
 import { completedName } from "./tus.ts"
@@ -88,12 +88,13 @@ const brokenStream = <A, E, R>(stream: Stream.Stream<A, E, R>): Stream.Stream<A,
   )
 
 interface Turn {
+  readonly token: string | undefined
   readonly stop: Deferred.Deferred<void>
   readonly finished: Deferred.Deferred<void>
 }
 
-const makeTurn = (): Effect.Effect<Turn> =>
-  Effect.all({ stop: Deferred.make<void>(), finished: Deferred.make<void>() })
+const makeTurn = (token?: string): Effect.Effect<Turn> =>
+  Effect.all({ stop: Deferred.make<void>(), finished: Deferred.make<void>() }).pipe(Effect.map((signals) => ({ token, ...signals })))
 
 const makeTurns = Effect.gen(function*() {
   const turns = yield* Ref.make<ReadonlyMap<string, Turn>>(new Map())
@@ -120,7 +121,11 @@ const makeTurns = Effect.gen(function*() {
       () => use,
       (turn) => release(id, turn)
     )
-  return { claim, release, withoutTurn }
+  const stop = Effect.fnUntraced(function*(id: string, token: string) {
+    const held = (yield* Ref.get(turns)).get(id)
+    if (held?.token === token) yield* Deferred.succeed(held.stop, undefined)
+  })
+  return { claim, release, stop, withoutTurn }
 })
 
 interface RunState {
@@ -131,9 +136,10 @@ interface RunState {
   readonly settled: boolean
 }
 
-const lastWords = (state: RunState): Message => {
-  const failed = state.failed ?? state.pending ?? (state.settled ? undefined : INTERRUPTED)
+const lastWords = (state: RunState, stopped: boolean): Message => {
   const text = state.text.trim()
+  if (stopped && !state.settled) return { role: "assistant", text, stopped: true }
+  const failed = state.failed ?? state.pending ?? (state.settled ? undefined : INTERRUPTED)
   return failed === undefined ? { role: "assistant", text } : { role: "assistant", text, failed }
 }
 
@@ -211,7 +217,7 @@ const makeExpand = (state: Ref.Ref<RunState>) => (event: ChatEvent): Effect.Effe
   if (event.type === "step") return expandStep(state, event.text)
   if (event.type === "retry") return expandRetry(state)
   if (event.type === "error") return expandError(state, event.message)
-  return expandSettled(state, event)
+  return event.type === "done" ? expandSettled(state, event) : Effect.succeed([])
 }
 
 const endedWith = (state: Ref.Ref<RunState>, message: string): Effect.Effect<Stream.Stream<ChatEvent>> =>
@@ -254,7 +260,8 @@ const piStream = <E>(
     Stream.concat(stopped)
   )
 
-type Run = (id: string, dir: string, text: string, names: ReadonlyArray<string>, model: string, effort: Effort, approving: boolean, asker: Session) => Stream.Stream<ChatEvent, ApiError>
+type Asker = { readonly kind: "person"; readonly turn: Turn } | { readonly kind: "studio" }
+type Run = (id: string, dir: string, text: string, names: ReadonlyArray<string>, model: string, effort: Effort, approving: boolean, asker: Asker) => Stream.Stream<ChatEvent, ApiError>
 
 
 
@@ -272,7 +279,7 @@ const gatherWith = ({ projects, settings, makeDirectory, run }: GatherNeeds) =>
     const model = project.model !== undefined && settings.models.includes(project.model) ? project.model : settings.models[0]
     if (model === undefined) return yield* new ApiError({ status: 500, message: "В студии не задана ни одна модель" })
     yield* makeDirectory(dir)
-    const failed = yield* run(id, dir, GATHER_PROMPT, [], model, project.effort ?? "medium", false, "studio").pipe(
+    const failed = yield* run(id, dir, GATHER_PROMPT, [], model, project.effort ?? "medium", false, { kind: "studio" }).pipe(
       Stream.runFold(() => false, (seen, event) => seen || event.type === "error")
     )
     if (failed) return yield* new ApiError({ status: 500, message: "Модель не собрала блоки" })
@@ -286,13 +293,15 @@ export class Chat extends Context.Service<Chat, {
     uploads: ReadonlyArray<string>,
     model: string,
     effort: Effort
-  ) => Effect.Effect<Stream.Stream<ChatEvent, ApiError>, ApiError>
+  ) => Effect.Effect<{ readonly token: string; readonly events: Stream.Stream<ChatEvent, ApiError> }, ApiError>
+  readonly stop: (id: string, token: string) => Effect.Effect<void>
   readonly gather: (id: string) => Effect.Effect<void, ApiError>
   readonly withoutTurn: <A, E, R>(id: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }>()("reels-studio/Chat") {
   static readonly layer = Layer.effect(
     Chat,
     Effect.gen(function*() {
+      const crypto = yield* Crypto.Crypto
       const fs = yield* FileSystem.FileSystem
       const path = yield* Path.Path
       const settings = yield* Settings
@@ -301,7 +310,7 @@ export class Chat extends Context.Service<Chat, {
       const attachments = yield* Attachments
       const brief = yield* Brief
       const context = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>()
-      const { claim, release, withoutTurn } = yield* makeTurns
+      const { claim, release, stop, withoutTurn } = yield* makeTurns
       const systemPrompt = yield* fs.readFileString(path.join(settings.root, "prompts", "studio.md")).pipe(orBroken)
       const append = Effect.fn("Chat.append")(function*(dir: string, message: Message) {
         const line = yield* encodeLine(message).pipe(orBroken)
@@ -319,27 +328,33 @@ export class Chat extends Context.Service<Chat, {
       }, orBroken)
       const attachedNote = (listed: string): string => listed === "" ? "" : `\nThe files the person attached in the chat:\n${listed}\n`
       const run: Run = (id, dir, text, names, model, effort, approving, asker) =>
-        Stream.concat(names.length === 0 ? Stream.empty : Stream.make(LOOKING), Stream.unwrap(Effect.gen(function*() {
+        Stream.unwrap(Effect.gen(function*() {
           const state = yield* Ref.make<RunState>({ text: "", base: "", pending: undefined, failed: undefined, settled: false })
-          if (asker === "person") {
+          if (asker.kind === "person") {
             yield* Effect.addFinalizer(() =>
-              Ref.get(state).pipe(Effect.flatMap((last) => append(dir, lastWords(last))),
+              Effect.all({ last: Ref.get(state), stopped: Deferred.isDone(asker.turn.stop) }).pipe(
+                Effect.flatMap(({ last, stopped }) => append(dir, lastWords(last, stopped))),
                 Effect.catchTag("ApiError", (error) => Effect.logError("the reply was not saved", error.message))
               ))
           }
-          const files = yield* attachments.show(dir, names)
-          const task = briefNote((yield* brief.view(id)).brief) + (approving ? YES_NOTE : "")
-          const known = `${yield* heardVideos(id)}\n${task}${attachedNote(yield* attachments.listed(dir, files))}`
-          const launched = yield* piCommand(settings.pi, settings.root, (...parts: Array<string>) => path.join(...parts), systemPrompt, dir, text, files, model, effort, known, asker).pipe(
-            Effect.tapError((error) => Effect.logError("pi did not start", error)),
-            Effect.option
-          )
-          if (Option.isNone(launched)) return yield* endedWith(state, NOT_STARTED)
-          const handle = launched.value
-          const complaints = yield* handle.stderr.pipe(Stream.decodeText(), Stream.mkString, Effect.forkScoped)
-          const exited = yield* handle.exitCode.pipe(Effect.forkScoped)
-          return piStream(handle.stdout, makeExpand(state), stoppedStream(state, exited, complaints))
-        }))).pipe(brokenStream, Stream.provideContext(context))
+          const reply = Stream.unwrap(Effect.gen(function*() {
+            const files = yield* attachments.show(dir, names)
+            const task = briefNote((yield* brief.view(id)).brief) + (approving ? YES_NOTE : "")
+            const known = `${yield* heardVideos(id)}\n${task}${attachedNote(yield* attachments.listed(dir, files))}`
+            const launched = yield* piCommand(settings.pi, settings.root, (...parts: Array<string>) => path.join(...parts), systemPrompt, dir, text, files, model, effort, known, asker.kind).pipe(
+              Effect.tapError((error) => Effect.logError("pi did not start", error)),
+              Effect.option
+            )
+            if (Option.isNone(launched)) return yield* endedWith(state, NOT_STARTED)
+            const handle = launched.value
+            const complaints = yield* handle.stderr.pipe(Stream.decodeText(), Stream.mkString, Effect.forkScoped)
+            const exited = yield* handle.exitCode.pipe(Effect.forkScoped)
+            return piStream(handle.stdout, makeExpand(state), stoppedStream(state, exited, complaints))
+          }))
+          if (asker.kind === "studio") return reply
+          const starting: ChatEvent = names.length === 0 ? { type: "step", text: "Готовлю ответ" } : LOOKING
+          return Stream.concat(Stream.make(starting), reply)
+        })).pipe(brokenStream, Stream.provideContext(context))
       const send = Effect.fn("Chat.send")(function*(id: string, text: string, uploads: ReadonlyArray<string>, model: string, effort: Effort) {
         const trimmed = text.trim()
         if (trimmed === "" && uploads.length === 0) return yield* badRequest("Напишите сообщение")
@@ -349,7 +364,8 @@ export class Chat extends Context.Service<Chat, {
         const names = Arr.dedupe(yield* Effect.forEach(uploads, (upload) => completedName(dir, upload, "attached").pipe(Effect.provideService(FileSystem.FileSystem, fs), Effect.provideService(Path.Path, path))))
         const plan = approves(trimmed) && names.length === 0 ? yield* brief.plan(id) : undefined
         const approved = plan === undefined || plan.state === "none" ? undefined : plan.text
-        const turn = yield* makeTurn()
+        const token = yield* crypto.randomUUIDv4.pipe(orBroken)
+        const turn = yield* makeTurn(token)
         if ((yield* claim(id, turn)) !== undefined) return yield* new ApiError({ status: 409, message: "Дождитесь ответа на прошлое сообщение" })
         yield* Effect.gen(function*() {
           yield* fs.makeDirectory(path.join(dir, "chat"), { recursive: true }).pipe(orBroken)
@@ -364,13 +380,17 @@ export class Chat extends Context.Service<Chat, {
             ))
           }
         }
-        return run(id, dir, trimmed, names, model, effort, approved !== undefined, "person").pipe(
+        const events = run(id, dir, trimmed, names, model, effort, approved !== undefined, { kind: "person", turn }).pipe(
           Stream.interruptWhen(Deferred.await(turn.stop)),
-          Stream.ensuring(release(id, turn))
+          Stream.ensuring(release(id, turn)),
+          Stream.concat(Stream.unwrap(Effect.map(Deferred.isDone(turn.stop), (stopped) =>
+            stopped ? Stream.make<ReadonlyArray<ChatEvent>>({ type: "stopped" }, { type: "done" }) : Stream.empty))),
+          Stream.takeUntil((event) => event.type === "done")
         )
+        return { token, events }
       })
       const gather = gatherWith({ projects, settings, makeDirectory: (dir) => fs.makeDirectory(path.join(dir, "gather"), { recursive: true }).pipe(orBroken), run })
-      return Chat.of({ history, send, gather, withoutTurn })
+      return Chat.of({ history, send, stop, gather, withoutTurn })
     })
   )
 }

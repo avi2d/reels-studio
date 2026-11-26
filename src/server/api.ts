@@ -1,4 +1,5 @@
 import { Effect, FileSystem, Layer, Option, Schema, Stream } from "effect"
+import { CHAT_TURN_HEADER } from "../shared/chat.ts"
 import { Pick } from "../shared/library.ts"
 import { Face } from "../shared/face.ts"
 import { RetouchPicture } from "../shared/retouch.ts"
@@ -129,15 +130,21 @@ const chat = Layer.mergeAll(
   HttpRouter.add("POST", "/api/projects/:id/chat", reply(Effect.gen(function*() {
     const talk = yield* Chat
     const input = yield* body(NewMessage)
-    const events = yield* talk.send(yield* param("id"), input.text, input.files ?? [], input.model, input.effort)
+    const { token, events } = yield* talk.send(yield* param("id"), input.text, input.files ?? [], input.model, input.effort)
     const lines = events.pipe(
       Stream.catch((error) => Stream.make({ type: "error" as const, message: error.message }, { type: "done" as const })),
       Stream.map((event) => `data: ${JSON.stringify(event)}\n\n`)
     )
     return HttpServerResponse.stream(
       Stream.merge(lines, KEEP_ALIVE, { haltStrategy: "left" }).pipe(Stream.encodeText),
-      { contentType: "text/event-stream", headers: { "cache-control": "no-store", "x-accel-buffering": "no" } }
+      { contentType: "text/event-stream", headers: { "cache-control": "no-store", "x-accel-buffering": "no", [CHAT_TURN_HEADER]: token } }
     )
+  }))),
+  HttpRouter.add("POST", "/api/projects/:id/chat/stop", reply(Effect.gen(function*() {
+    const talk = yield* Chat
+    const { token } = yield* body(Schema.Struct({ token: Schema.NonEmptyString }))
+    yield* talk.stop(yield* param("id"), token)
+    return json({ ok: true })
   })))
 )
 

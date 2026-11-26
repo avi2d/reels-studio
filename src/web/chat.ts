@@ -1,11 +1,12 @@
-import { Effect, Option, Schema } from "effect"
+import { Effect } from "effect"
 import * as Api from "./api.ts"
 import type WaSelect from "@awesome.me/webawesome/dist/components/select/select.js"
 import type WaTextarea from "@awesome.me/webawesome/dist/components/textarea/textarea.js"
 import { attachTray, sentFiles, type Tray } from "./attach.ts"
 import { button, iconButton, setExpanded, tooltip } from "./controls.ts"
 import { h } from "./dom.ts"
-import { modelName, parseEventBlock } from "./format.ts"
+import { readReply } from "./chat-stream.ts"
+import { modelName } from "./format.ts"
 import { run } from "./run.ts"
 
 const EFFORTS: ReadonlyArray<readonly [Api.Effort, string]> = [["low", "низкая"], ["medium", "средняя"], ["high", "высокая"]]
@@ -24,29 +25,6 @@ const bubble = (message: Api.Message, files: HTMLElement | undefined): HTMLEleme
 
 const savedBubble = (projectId: string) => (message: Api.Message): HTMLElement =>
   bubble(message, message.files === undefined ? undefined : sentFiles(projectId, message.files))
-
-const decodeEvent = Schema.decodeUnknownOption(Api.ChatEvent)
-
-const readReply = (
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  onEvent: (event: Api.ChatEvent) => void
-): Effect.Effect<void> => {
-  const decoder = new TextDecoder()
-  const pump = (rest: string): Effect.Effect<void> =>
-    Effect.gen(function*() {
-      const chunk = yield* Effect.tryPromise({ try: () => reader.read(), catch: () => new Api.Offline() }).pipe(
-        Effect.catchTag("Offline", () => Effect.succeed({ done: true as const, value: undefined }))
-      )
-      if (chunk.done) return
-      const blocks = (rest + decoder.decode(chunk.value, { stream: true })).split("\n\n")
-      for (const block of blocks.slice(0, -1)) {
-        const event = Option.getOrUndefined(decodeEvent(parseEventBlock(block)))
-        if (event !== undefined) onEvent(event)
-      }
-      yield* pump(blocks.at(-1) ?? "")
-    })
-  return pump("")
-}
 
 const chosenOf = (select: WaSelect): string => typeof select.value === "string" ? select.value : ""
 

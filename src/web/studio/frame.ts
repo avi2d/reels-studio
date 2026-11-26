@@ -24,6 +24,7 @@ const removeReel = (project: Api.ProjectView, onRemoved: () => void): void => {
 
 interface ReelBar {
   readonly project: Api.ProjectView
+  readonly chat: HTMLButtonElement
   readonly removed: () => void
   readonly renamed: (title: string) => void
 }
@@ -42,7 +43,7 @@ export const topBar = (reel?: ReelBar): HTMLElement => {
       reel.renamed(project.title)
     }))
   }
-  header.append(name, menuButton("Ещё", [
+  header.append(name, reel.chat, menuButton("Ещё", [
     { label: "Переименовать", icon: "pencil", danger: false, run: rename },
     { label: "Удалить ролик", icon: "trash", danger: true, run: () => { removeReel(project, reel.removed) } }
   ]))
