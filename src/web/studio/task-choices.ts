@@ -104,7 +104,10 @@ export const fileRow = (projectId: string, initial: ReadonlyArray<TaskEntry>, ch
   }
 
   const add = (files: ReadonlyArray<File>): void => {
-    const fresh = files.filter((file) => !rows.some((row) => entryName(row.entry) === file.name))
+    const listed = (file: File): boolean => rows.some((row) => entryName(row.entry) === file.name)
+    const repeated = files.find(listed)
+    if (repeated !== undefined) onProblem(`Файл «${repeated.name}» уже есть в списке.`)
+    const fresh = files.filter((file) => !listed(file))
     const room = MAX_FILES - rows.length
     if (fresh.length > room) onProblem(`К заданию можно приложить не больше ${MAX_FILES} файлов.`)
     const kept = fresh.slice(0, room)
@@ -135,7 +138,7 @@ export const fileRow = (projectId: string, initial: ReadonlyArray<TaskEntry>, ch
       uploaded.set(file, id)
       row.status.textContent = formatSize(file.size)
       return { upload: id }
-    }))
+    }), Effect.tapError(() => Effect.sync(() => { row.status.textContent = formatSize(file.size) })))
   }
 
   const showEntries = (entries: ReadonlyArray<TaskEntry>): void => {

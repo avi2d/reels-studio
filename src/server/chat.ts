@@ -334,9 +334,10 @@ export class Chat extends Context.Service<Chat, {
                 Effect.catchTag("ApiError", (error) => Effect.logError("the reply was not saved", error.message))
               ))
           }
+          const saved = yield* brief.view(id)
+          const looking = names.length > 0 || !(yield* attachments.allSeen(dir, saved.files))
           const reply = Stream.unwrap(Effect.gen(function*() {
             const files = yield* attachments.show(dir, names)
-            const saved = yield* brief.view(id)
             yield* attachments.examine(dir, saved.files)
             const task = taskNote(saved) + (approving ? YES_NOTE : "")
             const known = `${yield* heardVideos(id)}\n${task}${attachedNote(yield* attachments.listed(dir, files))}`
@@ -351,7 +352,7 @@ export class Chat extends Context.Service<Chat, {
             return piStream(handle.stdout, makeExpand(state), stoppedStream(state, exited, complaints))
           }))
           if (asker.kind === "studio") return reply
-          const starting: ChatEvent = names.length === 0 ? { type: "step", text: "Готовлю ответ" } : LOOKING
+          const starting: ChatEvent = looking ? LOOKING : { type: "step", text: "Готовлю ответ" }
           return Stream.concat(Stream.make(starting), reply)
         })).pipe(brokenStream, Stream.provideContext(context))
       const send = Effect.fn("Chat.send")(function*(id: string, text: string, uploads: ReadonlyArray<string>, model: string, effort: Effort) {
