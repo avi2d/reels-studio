@@ -19,21 +19,6 @@
 .viewer { grid-area: viewer; min-height: 0; width: clamp(250px, (100dvh - 220px) * 9 / 16, 40vw); padding-bottom: 14px; }
 .viewbox { display: flex; flex-direction: column; gap: 10px; height: 100%; }
 .stage { flex: 1; min-height: 0; display: grid; justify-items: center; align-items: start; container-type: size; }
-.frame { container-type: inline-size; position: relative; height: min(100cqh, 100cqw * 16 / 9); aspect-ratio: 9 / 16; border-radius: 18px; overflow: hidden; background: #000; }
-.frame .screen { position: absolute; inset: 0; }
-@font-face { font-family: "Subtitle"; src: url("/fonts/subtitle.ttf") format("truetype"); font-display: swap; }
-.subtitle-preview { position: absolute; z-index: 2; left: 19.91%; right: 19.91%; bottom: 22.6%; text-align: center; color: #fefcfd; font: 7.22cqw/1.15 "Subtitle", Georgia, serif; -webkit-text-stroke: .28cqw black; paint-order: stroke fill; pointer-events: none; white-space: nowrap; }
-.frame .player { position: absolute; inset: 0; display: block; width: 100%; height: 100%; max-width: none; border-radius: 0; object-fit: cover; transform-origin: 0 0; }
-.frame .player:not(.shown) { visibility: hidden; }
-.insert-view { position: absolute; z-index: 1; inset: 0; pointer-events: none; container-type: size; }
-.insert-view:not([data-shape]) { visibility: hidden; }
-.insert-box { position: absolute; display: flex; align-items: center; justify-content: center; }
-.insert-card { overflow: hidden; line-height: 0; }
-.insert-card :is(img, video) { display: block; max-width: none; border-radius: 0; }
-.insert-view[data-shape="fill"] :is(.insert-box, .insert-card, img, video) { inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.insert-view[data-shape="card"] .insert-box { left: 6.019%; top: 14.01%; width: 87.963%; height: 50.99%; }
-.insert-view[data-shape="card"] .insert-card { border: 1.111cqw solid #fff; }
-.insert-view[data-shape="card"] :is(img, video) { width: min(calc(87.963cqw - 2.222cqw), calc((50.99cqh - 2.222cqw) * var(--ar, 1))); height: auto; max-width: calc(87.963cqw - 2.222cqw); max-height: calc(50.99cqh - 2.222cqw); }
 .tag { position: absolute; z-index: 2; left: 8px; top: 8px; max-width: calc(100% - 16px); padding: 3px 10px; border-radius: 99px; background: var(--wa-color-overlay-media); font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tag b { margin-right: 6px; color: var(--wa-color-brand-fill-loud); }
 

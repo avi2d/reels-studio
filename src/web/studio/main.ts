@@ -6,6 +6,7 @@ import { run } from "../run.ts"
 import { studioChat, type StudioChat } from "./chat.ts"
 import { rail, stepBody, stepName, topBar } from "./frame.ts"
 import { listView } from "./list.ts"
+import { montageStep } from "./montage.ts"
 import { planStep } from "./plan.ts"
 import { recordsStep } from "./records.ts"
 import { uploaderSection } from "./uploader.ts"
@@ -80,6 +81,10 @@ const reelPage = (id: string, step: Step): Effect.Effect<void, Api.Failed> =>
         keepDraft: (value) => { if (value === undefined) drafts.delete(id); else drafts.set(id, value) },
         advance: () => { if (location.pathname === stepPath(id, "plan")) navigate(stepPath(id, "montage")) }
       })
+      body = view.body
+      leaveStep = view.dispose
+    } else if (step === "montage") {
+      const view = montageStep(id, chat)
       body = view.body
       leaveStep = view.dispose
     } else {
