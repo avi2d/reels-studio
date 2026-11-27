@@ -19,7 +19,7 @@ import {
 } from "./timeline-draw.ts"
 import { onKeys } from "./timeline-keys.ts"
 import { editHistory, type EditHistory } from "./edit-history.ts"
-import { loader } from "./timeline-load.ts"
+import { adoptLoaded, loader } from "./timeline-load.ts"
 import { saver, takeServer, type Ticket } from "./timeline-save.ts"
 import { correctSubtitle, editableSubtitles, paintSubtitle, playback } from "./timeline-subtitles.ts"
 
@@ -259,15 +259,7 @@ const showLoaded = (card: Card, draw: () => void, loaded: Loaded, ticket: Ticket
     state.loaded = loaded
     return
   }
-  const timeline = loaded.view.timeline
-  if (timeline.state === "ready" && takeServer(state.edits, state.acked, timeline.edits, ticket, state.changes, saving.busy())) {
-    state.edits = timeline.edits
-    state.acked = timeline.edits
-  }
-  state.loaded = loaded
-  const drawn = JSON.stringify([loaded.view, [...loaded.transcripts.keys()], state.edits])
-  if (drawn === state.drawn) return
-  state.drawn = drawn
+  if (!adoptLoaded(state, loaded, ticket, saving.busy())) return
   const content = playedKey(loaded, state.edits)
   const changed = content !== state.content
   state.content = content

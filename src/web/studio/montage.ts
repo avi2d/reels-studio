@@ -2,8 +2,8 @@ import { mergeEdits } from "../../shared/timeline.ts"
 import { editHistory } from "../edit-history.ts"
 import { montage } from "../montage.ts"
 import type { Loaded } from "../timeline-draw.ts"
-import { loader } from "../timeline-load.ts"
-import { saver, takeServer, type Ticket } from "../timeline-save.ts"
+import { adoptLoaded, loader } from "../timeline-load.ts"
+import { saver, type Ticket } from "../timeline-save.ts"
 import { playback } from "../timeline-subtitles.ts"
 import type { StudioChat } from "./chat.ts"
 import { partActions } from "./montage-actions.ts"
@@ -28,16 +28,7 @@ const shower = (screen: Screen, state: State, busy: () => boolean, draw: () => v
       state.pending = { loaded, ticket }
       return
     }
-    const { timeline } = loaded.view
-    if (timeline.state === "ready" && takeServer(state.edits, state.acked, timeline.edits, ticket, state.changes, busy())) {
-      state.edits = timeline.edits
-      state.acked = timeline.edits
-    }
-    state.loaded = loaded
-    const drawn = JSON.stringify([loaded.view, [...loaded.transcripts.keys()], state.edits])
-    if (drawn === state.drawn) return
-    state.drawn = drawn
-    draw()
+    if (adoptLoaded(state, loaded, ticket, busy())) draw()
   }
   const showPending = (): void => {
     const deferred = state.pending

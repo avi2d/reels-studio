@@ -1,23 +1,18 @@
 import type { InsertPlace } from "../../shared/inserts.ts"
-import type { Join, Place } from "../../shared/joins.ts"
+import type { Place } from "../../shared/joins.ts"
 import type { Span } from "../../shared/plan.ts"
-import type { InsertAnswer, JoinAnswer } from "../../shared/timeline.ts"
+import type { InsertAnswer } from "../../shared/timeline.ts"
 import { h } from "../dom.ts"
 import { formatLength } from "../format.ts"
 import { canReplace, doneOf as insertDone, KEEP, KEEP_CLIP, pictureChooser, REMOVE, REPLACE, SOUND } from "../timeline-inserts.ts"
-import { alignNote, COVER, doneOf as joinDone, offered, trimNote } from "../timeline-places.ts"
+import { alignNote, COVER, doneOf as joinDone, offered, type PlaceActions, trimNote } from "../timeline-places.ts"
 import { visualName } from "../timeline-row.ts"
 import { joinKey, type Numbered } from "./montage-model.ts"
 import { button } from "./ui.ts"
 
-export interface AskActions {
-  readonly hearJoin: (join: Join) => void
-  readonly hearUnaligned: (join: Join) => void
-  readonly answer: (join: Join, answer: JoinAnswer) => void
-  readonly cover: (join: Join, picture: string) => void
+export interface AskActions extends PlaceActions {
   readonly showInsert: (span: Span) => void
   readonly answerInsert: (answer: InsertAnswer) => void
-  readonly pictureUrl: (picture: string) => string
   readonly visualUrl: (visual: InsertPlace["visual"]) => string
 }
 
