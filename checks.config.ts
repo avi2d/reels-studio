@@ -1,7 +1,6 @@
 import { defineConfig } from "@avi2dg/checks/config"
 
 export default defineConfig({
-  repositoryVisibility: "private",
   agentTests: { allowLocal: false },
   reach: { "tools/ci/{provide-media,test}.sh": ["tests/e2e/*.test.ts"] },
   browserRoutes: {

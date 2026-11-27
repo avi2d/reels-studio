@@ -89,6 +89,13 @@ During playback, a play mark shows the current block in the numbered strip and t
 «Собрать ролик» on the «Готовый ролик» stage builds one file from the original videos, not from the previews.
 The file holds the chosen takes in row order, without removed pauses, with the same 0.06 s sound fade at each cut.
 It is 1080 by 1920 at 30 frames a second, H.264 High with AAC sound in an MP4.
+For a source wider than 9:16, the studio centres the crop on the median horizontal face position and keeps it inside the source edges.
+Without a measured face or frame shape, it crops the middle.
+The page uses the same face window, and join zooms move inside that window.
+The build keeps one crop window per video for all its parts and colour-comparison pictures.
+The saved reel records those windows.
+If measurements change a window, the file no longer matches the cut.
+A file with no recorded windows also needs a rebuild.
 An iPhone HDR original is turned into ordinary BT.709 colours, so the reel does not look washed out in Instagram.
 The studio cuts each clip to whole frames, encodes the clips one by one through `REELS_HEAVY` with `REELS_ENCODER`, then joins them without encoding again.
 When the person turned the sound of a clip insert on, the studio mixes the clip's sound under the voice of the joined file.
@@ -303,7 +310,7 @@ Each video folder holds these next to `plan.json`:
 | `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
 | `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |
-| `reel/reel.json` | The build time, the video file it published, the parts, the inserts, a hash of the subtitles and key thoughts, the face setting, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
+| `reel/reel.json` | The build time, the video file it published, the parts, the crop window of each video, the inserts, a hash of the subtitles and key thoughts, the face setting, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
 | `reel/sound.json` | The parts of the last checked cut with the heard clip inserts, its measured loudness before and after levelling, and the gain of each part over its source time, which the montage plays |
 | `reel/sound-work/` | The sound of each clip and the levelled sound while a check runs, removed when it ends |
 | `looks.json` | The face setting of the reel, `off` or `light`, written when the person picks it |

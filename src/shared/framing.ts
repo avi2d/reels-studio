@@ -3,14 +3,31 @@ import type { Frame, Head } from "./timeline.ts"
 export const VIEW_WIDTH = 9 / 16
 const MAX_ZOOM = 1.15
 
-// The reel scales a source to cover 9 by 16 and crops the middle, and the head comes in units of the source height.
-export const inView = (head: Head, aspect: number): Head => {
+const centredLeft = (aspect: number): number => Math.max(0, aspect - VIEW_WIDTH) / 2
+
+// Head and left are both in units of the source height.
+export const inView = (head: Head, aspect: number, left: number | undefined): Head => {
   const grow = Math.max(1, VIEW_WIDTH / aspect)
   return {
-    x: head.x * grow - (aspect * grow - VIEW_WIDTH) / 2,
+    x: head.x * grow - (left ?? centredLeft(aspect)),
     y: head.y * grow - (grow - 1) / 2,
     size: head.size * grow
   }
+}
+
+// The median, not the mean, so one detection far from the face does not move the window.
+const median = (values: ReadonlyArray<number>): number => {
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = (sorted.length - 1) / 2
+  return ((sorted[Math.floor(middle)] ?? 0) + (sorted[Math.ceil(middle)] ?? 0)) / 2
+}
+
+// Undefined when no face was found or the source is no wider than the window, so the caller keeps the middle.
+export const faceLeft = (heads: ReadonlyArray<Head | null> | undefined, aspect: number): number | undefined => {
+  const found = (heads ?? []).flatMap((head) => head === null ? [] : [head.x])
+  const room = aspect - VIEW_WIDTH
+  if (found.length === 0 || room <= 0) return undefined
+  return clamp(median(found) - VIEW_WIDTH / 2, 0, room)
 }
 
 export const framedHead = (head: Head, frame: Frame | undefined): Head =>

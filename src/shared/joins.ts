@@ -1,4 +1,4 @@
-import { framedHead, frameToward, inView } from "./framing.ts"
+import { faceLeft, framedHead, frameToward, inView } from "./framing.ts"
 import type { Transcript } from "./plan.ts"
 import { FADE, type AnsweredJoin, type Clip, type Edits, type Frame, type Head, type JoinAnswer, type JoinState, type VideoFaces } from "./timeline.ts"
 
@@ -86,7 +86,7 @@ interface Seen { readonly head: Head; readonly measured: boolean }
 const seenAt = (faces: VideoFaces | undefined, time: number, side: "before" | "after"): Seen | undefined => {
   const head = faces === undefined ? undefined : headAt(faces, time, side)
   if (head === undefined) return undefined
-  return faces?.aspect === undefined ? { head, measured: false } : { head: inView(head, faces.aspect), measured: true }
+  return faces?.aspect === undefined ? { head, measured: false } : { head: inView(head, faces.aspect, faceLeft(faces.heads, faces.aspect)), measured: true }
 }
 
 const answerOf = (given: JoinState | undefined, align: Align): JoinState | undefined => {
