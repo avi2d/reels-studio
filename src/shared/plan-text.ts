@@ -10,19 +10,44 @@ export type PlanBlock =
 const HEADING = /^План ролика:?$/u
 const ITEM = /^-\s+(.*)$/u
 
-export const planBlocks = (text: string): ReadonlyArray<PlanBlock> => {
-  const lines = text.split(/\r?\n/u)
+interface PathEntry {
+  readonly indent: number
+  readonly item: PlanItem
+}
+
+const popDeeper = (path: PathEntry[], indent: number, floor: number): void => {
+  while (path.length > floor && (path.at(-1)?.indent ?? 0) >= indent) path.pop()
+}
+
+const addItem = (list: PlanItem[], path: PathEntry[], indent: number, text: string): void => {
+  popDeeper(path, indent, 0)
+  const item: PlanItem = { text, children: [] }
+  const siblings = path.at(-1)?.item.children ?? list
+  siblings.push(item)
+  path.push({ indent, item })
+}
+
+const continueItem = (path: PathEntry[], indent: number, text: string): void => {
+  popDeeper(path, indent, 1)
+  const item = path.at(-1)?.item
+  if (item !== undefined) item.text += ` ${text}`
+}
+
+const withoutHeading = (lines: ReadonlyArray<string>): ReadonlyArray<string> => {
   const start = lines.findIndex((line) => line.trim() !== "")
-  const body = start !== -1 && HEADING.test((lines[start] ?? "").trim()) ? lines.slice(start + 1) : lines
+  return start !== -1 && HEADING.test((lines[start] ?? "").trim()) ? lines.slice(start + 1) : lines
+}
+
+export const planBlocks = (text: string): ReadonlyArray<PlanBlock> => {
   const blocks: PlanBlock[] = []
   let list: PlanItem[] | undefined
-  const path: { readonly indent: number; readonly item: PlanItem }[] = []
+  const path: PathEntry[] = []
   const close = (): void => {
     if (list !== undefined) blocks.push({ kind: "list", items: list })
     list = undefined
     path.length = 0
   }
-  for (const line of body) {
+  for (const line of withoutHeading(text.split(/\r?\n/u))) {
     const trimmed = line.trim()
     if (trimmed === "") {
       close()
@@ -31,18 +56,12 @@ export const planBlocks = (text: string): ReadonlyArray<PlanBlock> => {
     const itemText = ITEM.exec(trimmed)?.[1]
     const indent = line.length - line.trimStart().length
     if (itemText !== undefined) {
-      while (path.length > 0 && (path.at(-1)?.indent ?? 0) >= indent) path.pop()
       list ??= []
-      const item: PlanItem = { text: itemText, children: [] }
-      const siblings = path.at(-1)?.item.children ?? list
-      siblings.push(item)
-      path.push({ indent, item })
+      addItem(list, path, indent, itemText)
       continue
     }
     if (list !== undefined && indent > 0) {
-      while (path.length > 1 && (path.at(-1)?.indent ?? 0) >= indent) path.pop()
-      const item = path.at(-1)?.item
-      if (item !== undefined) item.text += ` ${trimmed}`
+      continueItem(path, indent, trimmed)
       continue
     }
     close()
