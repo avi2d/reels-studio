@@ -258,7 +258,7 @@ It shows the chosen picture from 1 s before the join to 1.5 s after it, and take
 
 An insert shows a file the person attached in the chat or to the task over the video while a phrase is said: a picture or a screenshot, a video clip, or one page of a PDF.
 The chat model chooses the phrase by its meaning and writes it to `inserts.json`, as the reels-inserts skill says.
-The studio leaves out an insert with a repeated id, a file that is not in `attached/` or is not of its kind, a quote that the text of its PDF page does not hold, or word numbers the transcript does not hold, and the page says how many it left out.
+The studio leaves out an insert with a repeated id, a file that is not in `attached/`, that the person removed from the task and no chat message names, or that is not of its kind, a quote that the text of its PDF page does not hold, or word numbers the transcript does not hold, and the page says how many it left out.
 The quote is matched without regard to case, ё, line breaks and hyphens.
 An insert covers the words of its phrase that the cut plays, and at least 2 s.
 Two inserts never stand at once: the later one starts where the earlier one ends, and one left shorter than 1 s is dropped.

@@ -43,6 +43,7 @@ On step «План», «Как в прошлый раз» fills an empty task wi
 Under the task, «Куда» holds a button for each app: Instagram, YouTube Shorts and TikTok.
 A new reel goes to every app, and a plan needs at least one.
 «Файлы» lists the files for the task, and «Приложить» adds up to 10.
+A file removed with «Убрать» stays in `attached/`, but the plan, the inserts and the chat model's list of attached files no longer include it, unless a chat message names it.
 «Составить план» uploads the new files, saves the task, the apps and the files, and asks for a plan.
 A reel with no recording gets no plan: the page says to add a recording on the step «Записи» first, and saves nothing.
 The chat model gets the chosen apps and the task files with every message, and the plan names them.

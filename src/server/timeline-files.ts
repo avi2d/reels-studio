@@ -13,6 +13,7 @@ import { NO_CAPTIONS, type Captions } from "../shared/captions.ts"
 import { readCaptions, readTexts } from "./captions.ts"
 import { quoteOnPage } from "./insert-files.ts"
 import { places, readGaze, readTranscript } from "./media-jobs.ts"
+import { readReachable } from "./attached-files.ts"
 import { reelRules } from "./rules.ts"
 
 const decodeBlocks = Schema.decodeUnknownOption(Schema.fromJsonString(Blocks))
@@ -66,16 +67,7 @@ const readBlocks = Effect.fnUntraced(function*(dir: string) {
   return "unreadable" as const
 })
 
-export const readAttached = Effect.fnUntraced(function*(dir: string) {
-  const fs = yield* FileSystem.FileSystem
-  const folder = `${dir}/attached`
-  if (!(yield* fs.exists(folder))) return []
-  return (yield* fs.readDirectory(folder)).toSorted()
-})
-
-const readPictures = Effect.fnUntraced(function*(dir: string) {
-  return (yield* readAttached(dir)).filter((name) => kindOfName(name) === "picture")
-})
+const picturesOf = (attached: ReadonlyArray<string>) => attached.filter((name) => kindOfName(name) === "picture")
 
 const shownExists = Effect.fnUntraced(function*(dir: string, attached: ReadonlyArray<string>, planned: PlannedInsert) {
   const visual = plannedVisual(planned)
@@ -86,7 +78,7 @@ const shownExists = Effect.fnUntraced(function*(dir: string, attached: ReadonlyA
   return true
 })
 
-const readInserts = Effect.fnUntraced(function*(dir: string, transcripts: ReadonlyMap<string, Transcript>) {
+const readInserts = Effect.fnUntraced(function*(dir: string, transcripts: ReadonlyMap<string, Transcript>, attached: ReadonlyArray<string>) {
   const fs = yield* FileSystem.FileSystem
   const file = `${dir}/inserts.json`
   if (!(yield* fs.exists(file))) return { state: "none" } satisfies PlannedInserts
@@ -95,7 +87,6 @@ const readInserts = Effect.fnUntraced(function*(dir: string, transcripts: Readon
     yield* Effect.logError("the inserts are unreadable", file)
     return { state: "unreadable" } satisfies PlannedInserts
   }
-  const attached = yield* readAttached(dir)
   const shown = yield* Effect.forEach(written.inserts, (one) => shownExists(dir, attached, one))
   const planned = written.inserts.filter((one, index) => {
     const words = transcripts.get(one.video)?.words ?? []
@@ -134,8 +125,9 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
   const { transcripts, gazes, gazeWritten, faces } = yield* readHeard(dir, names)
   const looks: ReadonlyArray<Look> = [...transcripts.keys()].map((name) =>
     lookOf(name, gazes.get(name), gazeWritten.has(name), unseen.get(places({ dir, name }).source)))
-  const pictures = yield* readPictures(dir)
-  const inserts = yield* readInserts(dir, transcripts)
+  const attached = yield* readReachable(dir)
+  const pictures = picturesOf(attached)
+  const inserts = yield* readInserts(dir, transcripts, attached)
   const texts = yield* readTexts(dir)
   const written = yield* readBlocks(dir)
   if (written === "none" || written === "unreadable") return { looks, faces, pictures, inserts, texts, timeline: { state: written } } satisfies TimelineView
@@ -154,11 +146,12 @@ export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyA
   if (written === "none" || written === "unreadable") return { clips: [], inserts: [], captions: NO_CAPTIONS } satisfies Cut
   const { blocks } = soundBlocks(written, transcripts, new Map())
   const edits = yield* readEdits(dir)
-  const pictures = yield* readPictures(dir)
+  const attached = yield* readReachable(dir)
+  const pictures = picturesOf(attached)
   const base = cutOf(clipsOf(assemble(blocks, edits, transcripts, (yield* reelRules(dir)).pause)), facesByVideo(faces), transcripts, edits)
   const resolved = coversOf(base, edits, pictures)
   const clips = onFrames(base)
-  const planned = yield* readInserts(dir, transcripts)
+  const planned = yield* readInserts(dir, transcripts, attached)
   const placesNow = insertPlaces(planned.state === "ready" ? planned.planned : [], clips, transcripts, edits, pictures)
   return { clips, inserts: shownInserts(placesNow, clips, edits, pictures, resolved), captions: yield* readCaptions(dir, clips, transcripts, blocks, edits) } satisfies Cut
 })
