@@ -6,6 +6,7 @@ import { run } from "../run.ts"
 import { studioChat, type StudioChat } from "./chat.ts"
 import { rail, stepBody, stepName, topBar } from "./frame.ts"
 import { listView } from "./list.ts"
+import { montageStep } from "./montage.ts"
 import { planStep, type TaskDraft } from "./plan.ts"
 import { recordsStep } from "./records.ts"
 import { hasRules, rulesPanel } from "./rules.ts"
@@ -73,6 +74,7 @@ const reelPage = (id: string, step: Step): Effect.Effect<void, Api.Failed> =>
     let stage = project.stage
     const chat = chatFor(project)
     let body: HTMLElement
+    let refreshRules: (() => void) | undefined
     if (step === "plan") {
       const saved = yield* Api.getBrief(id)
       const view = planStep(id, saved, {
@@ -81,6 +83,11 @@ const reelPage = (id: string, step: Step): Effect.Effect<void, Api.Failed> =>
         keepDraft: (value) => { if (value === undefined) drafts.delete(id); else drafts.set(id, value) },
         advance: () => { if (location.pathname === stepPath(id, "plan")) navigate(stepPath(id, "montage")) }
       })
+      body = view.body
+      leaveStep = view.dispose
+    } else if (step === "montage") {
+      const view = montageStep(id, chat)
+      refreshRules = view.refresh
       body = view.body
       leaveStep = view.dispose
     } else {
@@ -93,7 +100,7 @@ const reelPage = (id: string, step: Step): Effect.Effect<void, Api.Failed> =>
       })
     }
     if (hasRules(step)) {
-      const rules = rulesPanel(id, step, chat)
+      const rules = rulesPanel(id, step, chat, refreshRules)
       body.append(rules.node)
       const leave = leaveStep
       leaveStep = () => {

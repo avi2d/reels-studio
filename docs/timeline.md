@@ -291,7 +291,7 @@ A key thought the reel cannot show stays in the list, marked «не встане
 | Its word numbers are not in the transcript, or the first comes after the last | The video text has no such words |
 | The cut removed every word of its phrase | The phrase is not in the reel now |
 | It has no line with text | There is nothing to show |
-| The thought before it stands for the whole phrase | The earlier thought holds the screen |
+| An earlier thought in time already stands for the whole phrase | The list names that thought by its number and says it holds the screen |
 
 When `texts.json` does not read, the list says so.
 

@@ -27,7 +27,7 @@ const linesIn = (node: Drawn | string): ReadonlyArray<string> => typeof node ===
 const itemsIn = (node: Drawn): ReadonlyArray<Drawn> => node.kids.flatMap((kid) => typeof kid === "string" ? [] : kid.tag === "li" ? [kid] : itemsIn(kid))
 
 const planned = (id: string, video: string) => ({ id, video, from: 0, to: 0, lines: [{ text: id, accent: false }] })
-const dropped = (id: string, reason: Extract<TextPlace, { state: "dropped" }>["reason"]): TextPlace => ({ planned: planned(id, "a.mov"), state: "dropped", reason })
+const dropped = (id: string, reason: Exclude<Extract<TextPlace, { state: "dropped" }>["reason"], "covered">): TextPlace => ({ planned: planned(id, "a.mov"), state: "dropped", reason })
 
 const render = (places: ReadonlyArray<TextPlace>, state: "ready" | "unreadable" = "ready"): Drawn => {
   const view = state === "ready" ? { state, planned: places.map((place) => place.planned) } : { state }
@@ -35,6 +35,17 @@ const render = (places: ReadonlyArray<TextPlace>, state: "ready" | "unreadable" 
   if (!isDrawn(list)) throw new Error("no key thought list")
   return list
 }
+
+test("a covered key thought names the number of the thought holding the screen, not the one listed before it", () => {
+  const holder = planned("Держит", "a.mov")
+  const places: ReadonlyArray<TextPlace> = [
+    { planned: planned("Закрыта", "a.mov"), state: "dropped", reason: "covered", by: holder },
+    dropped("Вырезано", "cut"),
+    { planned: holder, state: "shown", shown: { id: holder.id, lines: holder.lines, start: 0, end: 2.5 } }
+  ]
+  const [covered] = itemsIn(render(places)).map((item) => linesIn(item).at(-1) ?? "")
+  expect(covered).toContain("Мысль 3 ")
+})
 
 test("a broken texts.json says the key thoughts did not read instead of drawing an empty list", () => {
   const text = linesIn(render([], "unreadable")).join("\n")

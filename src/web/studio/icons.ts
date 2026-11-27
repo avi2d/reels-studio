@@ -16,8 +16,13 @@ import attach from "lucide-static/icons/paperclip.svg" with { type: "text" }
 import file from "lucide-static/icons/file-text.svg" with { type: "text" }
 import send from "lucide-static/icons/arrow-up.svg" with { type: "text" }
 import stop from "lucide-static/icons/square.svg" with { type: "text" }
+import play from "lucide-static/icons/play.svg" with { type: "text" }
+import undo from "lucide-static/icons/undo-2.svg" with { type: "text" }
+import redo from "lucide-static/icons/redo-2.svg" with { type: "text" }
+import up from "lucide-static/icons/arrow-up.svg" with { type: "text" }
+import lower from "lucide-static/icons/arrow-down.svg" with { type: "text" }
 
-const ICONS = { attach, chat, check, close, down, file, film, left, more, pencil, pin, plus, retry, right, send, stop, trash, upload }
+const ICONS = { attach, chat, check, close, down, file, film, left, lower, more, pencil, pin, play, plus, redo, retry, right, send, stop, trash, undo, up, upload }
 
 export type IconName = keyof typeof ICONS
 

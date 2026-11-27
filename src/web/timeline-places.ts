@@ -17,7 +17,7 @@ export interface PlaceCoverage {
   readonly failed: ReadonlyArray<string>
 }
 
-interface AnswerText {
+export interface AnswerText {
   readonly label: string
   readonly does: string
   readonly done: string
@@ -37,7 +37,7 @@ const ANSWERS: ReadonlyArray<readonly [JoinAnswer, AnswerText]> = [
   ["leave", { label: "Оставить как есть", does: "Склейка остаётся такой, как сейчас.", done: "склейка остаётся" }]
 ]
 
-const COVER = {
+export const COVER = {
   label: "Закрыть картинкой",
   does: "Вашу картинку видно секунду до склейки и полторы после, а голос продолжается."
 }
@@ -52,13 +52,13 @@ const doneText = ({ answer, trim, align }: Place, text: AnswerText): string => {
   return text.done
 }
 
-const doneOf = (place: Place): ReadonlyArray<string> => {
+export const doneOf = (place: Place): ReadonlyArray<string> => {
   const { answered } = place
   if (answered?.answer === "cover") return [`закрыта картинкой «${answered.picture}»`]
   return ANSWERS.flatMap(([one, text]) => one !== place.answer ? [] : [doneText(place, text)])
 }
 
-const alignNote = ({ align, answer }: Place): string => {
+export const alignNote = ({ align, answer }: Place): string => {
   if (answer !== undefined) return ""
   if (align.kind === "zoom") return `глаза можно выровнять: картинка после склейки станет крупнее на ${percent(align.frame.scale)}`
   if (align.kind === "far") return "выровнять нельзя: сдвиг слишком большой, приближением его не скрыть"
@@ -71,7 +71,7 @@ const bare = (word: string): string => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N
 const wordNote = ({ trim }: Place): string | undefined =>
   trim.spoken === undefined ? undefined : `взгляд опущен и на слове «${bare(trim.spoken)}», а слова студия не режет`
 
-const trimNote = (place: Place): string => {
+export const trimNote = (place: Place): string => {
   const word = wordNote(place)
   if (place.answer !== undefined) return word ?? ""
   if (place.trim.cut === 0) return word === undefined ? "опущенного взгляда нет, обрезать нечего" : `${word}, поэтому обрезать нечего`
@@ -79,7 +79,7 @@ const trimNote = (place: Place): string => {
   return word === undefined ? can : `${can}, но ${word}`
 }
 
-const offered = (place: Place): ReadonlyArray<readonly [JoinAnswer, AnswerText]> =>
+export const offered = (place: Place): ReadonlyArray<readonly [JoinAnswer, AnswerText]> =>
   ANSWERS.filter(([answer]) => answer === "leave" || (answer === "trim" ? place.trim.cut > 0 : place.align.kind === "zoom"))
 
 const blockNumber = (placed: ReadonlyArray<Placed>, block: string): number => placed.findIndex((one) => one.block.id === block) + 1

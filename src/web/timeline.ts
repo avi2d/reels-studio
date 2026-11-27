@@ -1,4 +1,3 @@
-import { Effect } from "effect"
 import { aroundInsert, insertPlaces, lookAt, reelWithin, shiftedBy, shownInserts, withInsert, type InsertLook, type Shown } from "../shared/inserts.ts"
 import { AROUND_JOIN_SECONDS, aroundJoin, cutOf, facesByVideo, withAnswer, withCover } from "../shared/joins.ts"
 import { lengthOf } from "../shared/plan.ts"
@@ -19,7 +18,9 @@ import {
   type Actions, type Frame, type Hooks, type Loaded, type Panels, type Parts
 } from "./timeline-draw.ts"
 import { onKeys } from "./timeline-keys.ts"
-import { POLL_MS, saver, takeServer, type Ticket } from "./timeline-save.ts"
+import { editHistory, type EditHistory } from "./edit-history.ts"
+import { adoptLoaded, loader } from "./timeline-load.ts"
+import { saver, takeServer, type Ticket } from "./timeline-save.ts"
 import { correctSubtitle, editableSubtitles, paintSubtitle, playback } from "./timeline-subtitles.ts"
 
 export type { Status } from "./timeline-draw.ts"
@@ -67,8 +68,6 @@ interface State {
   edits: Edits
   acked: Edits
   changes: number
-  history: Array<{ readonly before: Edits; readonly after: Edits }>
-  undone: Array<{ readonly before: Edits; readonly after: Edits }>
   selected: string | undefined
   open: Placed | undefined
   base: number | undefined
@@ -151,9 +150,10 @@ interface Desk {
   readonly view: ReturnType<typeof display>
   readonly player: ReturnType<typeof montage>
   readonly hooks: Hooks
+  readonly history: EditHistory
 }
 
-const redraw = ({ hooks, parts, player, state, ui, view }: Desk, actions: Actions): void => {
+const redraw = ({ history, hooks, parts, player, state, ui, view }: Desk, actions: Actions): void => {
   const loaded = state.loaded
   if (loaded === undefined) return
   const active = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.key : undefined
@@ -176,8 +176,8 @@ const redraw = ({ hooks, parts, player, state, ui, view }: Desk, actions: Action
   state.shown = drawn?.shown ?? []
   parts.go.disabled = open === undefined
   if (open === undefined) for (const button of [parts.strip, parts.prev, parts.next]) button.disabled = true
-  parts.undo.disabled = state.history.length === 0
-  parts.redo.disabled = state.undone.length === 0
+  parts.undo.disabled = !history.canUndo()
+  parts.redo.disabled = !history.canRedo()
   if (!isReady) parts.summary.textContent = ""
   const first = open === undefined ? undefined : view.reelNow().find((clip) => clip.block === open.block.id)
   if (first !== undefined) player.show(first)
@@ -192,28 +192,6 @@ const redraw = ({ hooks, parts, player, state, ui, view }: Desk, actions: Action
     placesComplete: drawn?.status.placesComplete ?? false
   })
   refocus([ui.panels.viewer, ui.panels.tracks, ui.panels.takes, ui.panels.pauses], active)
-}
-
-const loader = (projectId: string, anchor: HTMLElement, show: (loaded: Loaded, ticket: Ticket) => void, stamp: () => Ticket): () => void => {
-  const state = { timer: 0 }
-  const later = (): void => {
-    globalThis.clearTimeout(state.timer)
-    state.timer = Number(globalThis.setTimeout(refresh, POLL_MS))
-  }
-  function refresh(): void {
-    globalThis.clearTimeout(state.timer)
-    if (!anchor.isConnected) return
-    const ticket = stamp()
-    Effect.runFork(Effect.all([Api.getVideos(projectId), Api.getTimeline(projectId)], { concurrency: 2 }).pipe(
-      Effect.map(([{ videos }, view]) => {
-        const heard = videos.flatMap((video) => video.state === "ready" ? [[video.name, video.transcript] as const] : [])
-        show({ transcripts: new Map(heard), view }, ticket)
-        if (view.gathering || videos.some((video) => video.state === "waiting") || view.looks.some((look) => look.state === "waiting")) later()
-      }),
-      Effect.catchTag("Failed", () => Effect.sync(later))
-    ))
-  }
-  return refresh
 }
 
 interface Card {
@@ -282,15 +260,7 @@ const showLoaded = (card: Card, draw: () => void, loaded: Loaded, ticket: Ticket
     state.loaded = loaded
     return
   }
-  const timeline = loaded.view.timeline
-  if (timeline.state === "ready" && takeServer(state.edits, state.acked, timeline.edits, ticket, state.changes, saving.busy())) {
-    state.edits = timeline.edits
-    state.acked = timeline.edits
-  }
-  state.loaded = loaded
-  const drawn = JSON.stringify([loaded.view, [...loaded.transcripts.keys()], state.edits])
-  if (drawn === state.drawn) return
-  state.drawn = drawn
+  if (!adoptLoaded(state, loaded, ticket, saving.busy())) return
   const content = playedKey(loaded, state.edits)
   const changed = content !== state.content
   state.content = content
@@ -302,7 +272,7 @@ export const timelineCard = (projectId: string, hooks: Hooks, levelAt: LevelAt):
   const parts = partsOf()
   const ui = frameOf(parts)
   const state: State =
-    { loaded: undefined, edits: NO_EDITS, acked: NO_EDITS, changes: 0, history: [], undone: [], selected: undefined, open: undefined, base: undefined, playing: undefined, shown: [], overlay: [], words: [], drawn: "", content: "", pending: undefined }
+    { loaded: undefined, edits: NO_EDITS, acked: NO_EDITS, changes: 0, selected: undefined, open: undefined, base: undefined, playing: undefined, shown: [], overlay: [], words: [], drawn: "", content: "", pending: undefined }
   const overlay = insertView(Api.insertUrls(projectId))
   const subtitle = h("div", { class: "subtitle-preview", "aria-hidden": "true" })
   const view = display(parts, state, overlay.paint, subtitle)
@@ -323,7 +293,7 @@ export const timelineCard = (projectId: string, hooks: Hooks, levelAt: LevelAt):
   }, (ok) => { hooks.settled?.(ok) })
   const card: Card = { projectId, parts, ui, state, view, player, saving, hooks }
   const draw = (): void => {
-    redraw({ parts, ui, state, view, player, hooks }, actions)
+    redraw({ parts, ui, state, view, player, hooks, history }, actions)
     const deferred = state.pending
     if (deferred === undefined) return
     state.pending = undefined
@@ -342,25 +312,8 @@ export const timelineCard = (projectId: string, hooks: Hooks, levelAt: LevelAt):
     draw()
   }
 
-  const change = (edits: Edits): void => {
-    state.history.push({ before: state.edits, after: edits })
-    state.undone.length = 0
-    apply(edits)
-  }
-
-  const undo = (): void => {
-    const step = state.history.pop()
-    if (step === undefined) return
-    state.undone.push(step)
-    apply(mergeEdits(step.after, step.before, state.edits))
-  }
-
-  const redo = (): void => {
-    const step = state.undone.pop()
-    if (step === undefined) return
-    state.history.push(step)
-    apply(mergeEdits(step.before, step.after, state.edits))
-  }
+  const history = editHistory(() => state.edits, apply)
+  const { change, undo, redo } = history
 
   const select = (block: string): void => {
     player.stop()

@@ -28,11 +28,11 @@ interface AnswerText {
   readonly does: string
 }
 
-const KEEP: AnswerText = { label: "Оставить", does: "Вставка остаётся в ролике." }
-const KEEP_CLIP: AnswerText = { label: KEEP.label, does: "Вставка остаётся в ролике. Видео идёт без своего звука." }
-const SOUND: AnswerText = { label: "Со звуком", does: "Видео остаётся в ролике, и его звук слышен вместе с вашим голосом." }
-const REPLACE: AnswerText = { label: "Заменить", does: "На этом месте встанет другая картинка из тех, что вы прикрепили в чате." }
-const REMOVE: AnswerText = { label: "Убрать", does: "Ролик идёт без этой вставки." }
+export const KEEP: AnswerText = { label: "Оставить", does: "Вставка остаётся в ролике." }
+export const KEEP_CLIP: AnswerText = { label: KEEP.label, does: "Вставка остаётся в ролике. Видео идёт без своего звука." }
+export const SOUND: AnswerText = { label: "Со звуком", does: "Видео остаётся в ролике, и его звук слышен вместе с вашим голосом." }
+export const REPLACE: AnswerText = { label: "Заменить", does: "На этом месте встанет другая картинка из тех, что вы прикрепили в чате." }
+export const REMOVE: AnswerText = { label: "Убрать", does: "Ролик идёт без этой вставки." }
 
 export const pictureChooser = (
   text: { readonly label: string; readonly does: string; readonly name: string },
@@ -56,7 +56,7 @@ export const pictureChooser = (
       }, h("img", { src: pictureUrl(picture), alt: "", loading: "lazy" }), h("span", {}, picture))))),
     h("p", { class: "muted" }, "Новую картинку прикрепите в чате, и она появится здесь."))
 
-const doneOf = (place: InsertPlace): string | undefined => {
+export const doneOf = (place: InsertPlace): string | undefined => {
   if (place.answer === "keep") return "остаётся"
   if (place.answer === "sound") return "остаётся со звуком"
   if (place.answer === "remove") return "убрана"
@@ -64,7 +64,7 @@ const doneOf = (place: InsertPlace): string | undefined => {
   return undefined
 }
 
-const canReplace = (place: InsertPlace, pictures: ReadonlyArray<string>): boolean =>
+export const canReplace = (place: InsertPlace, pictures: ReadonlyArray<string>): boolean =>
   pictures.some((picture) => place.visual.kind !== "picture" || place.visual.file !== picture)
 
 const insertItem = (place: InsertPlace, number: number, data: InsertData, actions: InsertActions): HTMLElement => {
