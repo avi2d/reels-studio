@@ -163,7 +163,8 @@ const listen = (live: Live): void => {
       return
     }
     switch (change.kind) {
-      case "moved": return render(live)
+      case "moved":
+      case "known": return render(live)
       case "listed":
       case "unlisted": return refresh(live)
     }

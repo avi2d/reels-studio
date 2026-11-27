@@ -115,6 +115,9 @@ const listen = (live: Live): void => {
         live.generation += 1
         return settle(live, change.uploaded)
       case "unlisted": return refresh(live)
+      case "known":
+        problem.textContent = `«${change.name}» уже загружено. Добавьте его в ролик на шаге «Записи».`
+        return render(live)
     }
   })
   input.addEventListener("change", () => {
