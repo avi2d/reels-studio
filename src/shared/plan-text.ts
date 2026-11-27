@@ -27,7 +27,7 @@ const addItem = (list: PlanItem[], path: PathEntry[], indent: number, text: stri
   path.push({ indent, item })
 }
 
-const continueItem = (path: PathEntry[], text: string): void => {
+const continueItem = (path: ReadonlyArray<PathEntry>, text: string): void => {
   const item = path.at(-1)?.item
   if (item !== undefined) item.text += ` ${text}`
 }
