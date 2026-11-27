@@ -24,11 +24,12 @@ export const NO_CAPTIONS: Captions = { words: [], texts: [] }
 const TEXT_SHORTEST = 2.5
 const MOST_LINES = 3
 
-export type TextDrop = "unknown-video" | "out-of-range" | "cut" | "empty" | "covered"
+type TextDrop = "unknown-video" | "out-of-range" | "cut" | "empty" | "covered"
 
 export type TextPlace =
   | { readonly planned: PlannedText; readonly state: "shown"; readonly shown: ShownText }
-  | { readonly planned: PlannedText; readonly state: "dropped"; readonly reason: TextDrop }
+  | { readonly planned: PlannedText; readonly state: "dropped"; readonly reason: Exclude<TextDrop, "covered"> }
+  | { readonly planned: PlannedText; readonly state: "dropped"; readonly reason: "covered"; readonly by: PlannedText }
 
 const wantedOf = (one: PlannedText, clips: ReadonlyArray<Clip>, transcripts: ReadonlyMap<string, Transcript>, total: number): ShownText | Exclude<TextDrop, "covered"> => {
   const transcript = transcripts.get(one.video)
@@ -45,21 +46,22 @@ const wantedOf = (one: PlannedText, clips: ReadonlyArray<Clip>, transcripts: Rea
 export const textPlaces = (planned: ReadonlyArray<PlannedText>, clips: ReadonlyArray<Clip>, transcripts: ReadonlyMap<string, Transcript>): ReadonlyArray<TextPlace> => {
   const total = clips.reduce((sum, clip) => sum + clip.end - clip.start, 0)
   const wanted = planned.map((one) => ({ planned: one, want: wantedOf(one, clips, transcripts, total) }))
-  const byStart = wanted.flatMap(({ want }, index) => typeof want === "string" ? [] : [{ one: want, index }]).toSorted((left, right) => left.one.start - right.one.start)
-  const placed = new Map<number, ShownText | "covered">()
-  let shownEnd = 0
-  for (const { one, index } of byStart) {
-    const start = Math.max(one.start, shownEnd)
-    if (one.end <= start) {
-      placed.set(index, "covered")
+  const byStart = wanted.flatMap(({ planned: from, want }, index) => typeof want === "string" ? [] : [{ one: want, from, index }]).toSorted((left, right) => left.one.start - right.one.start)
+  const placed = new Map<number, ShownText | { readonly by: PlannedText }>()
+  let last: { readonly end: number; readonly planned: PlannedText } | undefined
+  for (const { one, from, index } of byStart) {
+    const start = Math.max(one.start, last?.end ?? 0)
+    if (last !== undefined && one.end <= start) {
+      placed.set(index, { by: last.planned })
       continue
     }
     placed.set(index, { ...one, start })
-    shownEnd = one.end
+    last = { end: one.end, planned: from }
   }
   return wanted.map(({ planned: one, want }, index): TextPlace => {
     const place = placed.get(index) ?? want
-    return typeof place === "object" ? { planned: one, state: "shown", shown: place } : { planned: one, state: "dropped", reason: place }
+    if (typeof place === "string") return { planned: one, state: "dropped", reason: place }
+    return "by" in place ? { planned: one, state: "dropped", reason: "covered", by: place.by } : { planned: one, state: "shown", shown: place }
   })
 }
 

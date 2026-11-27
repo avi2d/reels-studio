@@ -1,20 +1,13 @@
-import type { TextDrop, TextPlace } from "../shared/captions.ts"
+import type { TextPlace } from "../shared/captions.ts"
 import type { PlannedText, PlannedTexts } from "../shared/texts.ts"
 import { h } from "./dom.ts"
 import { formatLength } from "./format.ts"
+import { whyDropped } from "./text-drops.ts"
 
 export interface TextData {
   readonly planned: PlannedTexts
   readonly places: ReadonlyArray<TextPlace>
   readonly phraseOf: (planned: PlannedText) => string
-}
-
-const whyDropped = (reason: TextDrop, planned: PlannedText): string => {
-  if (reason === "unknown-video") return `Видео «${planned.video}» нет в проекте, поэтому студия не знает, где показать мысль.`
-  if (reason === "out-of-range") return `В тексте видео «${planned.video}» нет слов, к которым привязана мысль, поэтому студия не знает, где её показать.`
-  if (reason === "cut") return "Этой фразы сейчас нет в ролике, поэтому мысль в ролик не встанет."
-  if (reason === "empty") return "У мысли нет ни одной строки текста, поэтому показывать нечего."
-  return "Предыдущая мысль займёт экран на всё время этой фразы, поэтому эта мысль в ролик не встанет."
 }
 
 const linesOf = (planned: PlannedText): string => {
@@ -35,7 +28,7 @@ const textItem = (place: TextPlace, number: number, data: TextData): HTMLElement
       h("b", {}, place.state === "shown" ? `Мысль ${number}` : `Мысль ${number} не встанет в ролик`),
       h("span", { class: "text-lines" }, linesOf(place.planned)),
       ...(said === undefined ? [] : [h("span", {}, said)]),
-      ...(place.state === "dropped" ? [h("span", { class: "error" }, whyDropped(place.reason, place.planned))] : [])))
+      ...(place.state === "dropped" ? [h("span", { class: "error" }, whyDropped(place, (by) => data.places.findIndex((one) => one.planned.id === by.id) + 1))] : [])))
 }
 
 const statusOf = ({ planned, places }: TextData): ReadonlyArray<HTMLElement> => {

@@ -134,6 +134,12 @@ test("a key thought with only blank lines, or wholly under the one before it, is
   expect(reasons([thought("a", "a.mov", 1, 1), thought("b", "a.mov", 3, 3)])).toEqual(["shown", "covered"])
 })
 
+test("a covered key thought names the thought that holds the screen, not the one listed before it", () => {
+  const planned = [thought("late", "a.mov", 3, 3), thought("middle", "a.mov", 1, 1), thought("early", "a.mov", 0, 0)]
+  const covered = textPlaces(planned, withoutPercent, heard).flatMap((place) => place.state === "dropped" && place.reason === "covered" ? [[place.planned.id, place.by.id]] : [])
+  expect(covered).toEqual([["late", "middle"]])
+})
+
 test("a key thought kept beside dropped ones stands from its first word for 2.5 s, not shifted by the dropped ones", () => {
   const planned = [thought("gone", "b.mov", 0, 0), thought("kept", "a.mov", 0, 0), thought("cut", "a.mov", 2, 2)]
   expect(shownTexts(planned, withoutPercent, heard)).toEqual([{ id: "kept", lines: [{ text: "kept", accent: false }], start: 0, end: 2.5 }])
