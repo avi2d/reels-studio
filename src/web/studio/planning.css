@@ -33,6 +33,20 @@
 .studio-plan__work { border-top: 1px solid var(--line); padding-top: 12px; }
 .studio-plan__work ul { list-style: disc; padding-inline-start: 1.25em; }
 .studio-plan__work li + li { margin-top: 0.35em; }
+.studio-rules__list { display: grid; gap: 4px; }
+.studio-rules__list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; }
+.studio-rules__list li > span { min-width: 0; overflow-wrap: anywhere; }
+.studio-rules__pin { padding: 0 10px; font-size: 14px; font-weight: 500; }
+.studio-rules__pin .ic svg { width: 16px; height: 16px; }
+.studio-rules__pin--on { color: var(--blue); background: var(--blue-soft); }
+.studio-rules__pin--on .ic svg { fill: currentColor; }
+.studio-rules__change { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.studio-rules__change > p { overflow-wrap: anywhere; }
+.studio-rules__change > button { justify-self: start; }
+.studio-rules__pauses { list-style: decimal; padding-inline-start: 1.5em; font-variant-numeric: tabular-nums; }
+.studio-rules__pauses li + li { margin-top: 0.25em; }
+.studio-rules > .error:empty, .studio-rules > div:empty { display: none; }
+
 .studio-plan__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 .studio-plan__actions > p { flex: 1 1 14em; }
 .studio-plan__actions > p:empty { display: none; }

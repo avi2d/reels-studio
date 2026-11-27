@@ -8,6 +8,7 @@ import { rail, stepBody, stepName, topBar } from "./frame.ts"
 import { listView } from "./list.ts"
 import { planStep, type TaskDraft } from "./plan.ts"
 import { recordsStep } from "./records.ts"
+import { hasRules, rulesPanel } from "./rules.ts"
 import { uploaderSection } from "./uploader.ts"
 
 type Page = { readonly kind: "list" } | { readonly kind: "reel"; readonly id: string; readonly step: Step | undefined }
@@ -90,6 +91,15 @@ const reelPage = (id: string, step: Step): Effect.Effect<void, Api.Failed> =>
         steps = fresh
         stage = now.stage
       })
+    }
+    if (hasRules(step)) {
+      const rules = rulesPanel(id, step, chat)
+      body.append(rules.node)
+      const leave = leaveStep
+      leaveStep = () => {
+        leave?.()
+        rules.dispose()
+      }
     }
     const setPageTitle = (title: string): void => { document.title = `${stepName(step)} · ${title} · ${TITLE}` }
     setPageTitle(project.title)

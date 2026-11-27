@@ -40,6 +40,7 @@ Each reel card shows its status, and the reel's top bar menu lets you rename it.
 The reel list at `/new` shows reels and uploaded takes five to a page, uploads takes and resumes an interrupted upload.
 Step 1, «Записи», adds the uploaded takes you tick to the reel at once and plays a recording from a word you press.
 Step 2, «План», saves the task with its apps and files, shows the plan and takes the yes, and the chat on every step streams its reply and has «Остановить».
+The rules, now the length of a pause, show as «Правила» on the step they belong to, change from a chat sentence and carry to the next reels with a pin, as [Takes and blocks](docs/timeline.md) says.
 
 The studio answers the home network and the owner's Mac through the `local-apps` gateway.
 The gateway must listen only on that Mac's loopback address.

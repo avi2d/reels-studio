@@ -9,6 +9,7 @@ import { ReelView, SoundCheck, type PictureSide } from "../shared/reel.ts"
 import type { Face } from "../shared/face.ts"
 import { RetouchView, type RetouchPicture } from "../shared/retouch.ts"
 import { Edits, TimelinePage } from "../shared/timeline.ts"
+import { RulesView, type RuleId } from "../shared/rules.ts"
 
 export class Failed extends Data.TaggedError("Failed")<{ readonly message: string }> {}
 export class Offline extends Data.TaggedError("Offline")<{}> {}
@@ -160,6 +161,15 @@ export const getBrief = (id: string): Effect.Effect<BriefView, Failed> =>
 
 export const saveBrief = (id: string, task: NewTask): Effect.Effect<BriefView, Failed> =>
   call(BriefView, `/api/projects/${id}/brief`, { ...post(task), method: "PUT" })
+
+export const getRules = (id: string): Effect.Effect<RulesView, Failed> =>
+  call(RulesView, `/api/projects/${id}/rules`)
+
+export const keepRule = (id: string, rule: RuleId, kept: boolean): Effect.Effect<RulesView, Failed> =>
+  call(RulesView, `/api/projects/${id}/rules/${rule}/kept`, { ...post({ kept }), method: "PUT" })
+
+export const undoRule = (id: string): Effect.Effect<RulesView, Failed> =>
+  call(RulesView, `/api/projects/${id}/rules/undo`, post({}))
 
 export const coverUrl = (id: string, name: string): string =>
   `/api/projects/${id}/attachments/${encodeURIComponent(name)}/cover`

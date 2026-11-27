@@ -3,7 +3,7 @@ import { videoLines } from "../../src/server/chat.ts"
 import { gazeText } from "../../src/server/media-commands.ts"
 import { lengthOf, type Transcript } from "../../src/shared/plan.ts"
 import {
-  arrange, assemble, cameraShare, chosenTake, clipsOf, fadeGain, mergeEdits, NO_EDITS, offsetIn, pausesOf, playedPause, playedSpans, soundBlocks, withChoice, withDeleted,
+  arrange, assemble, cameraShare, chosenTake, clipsOf, fadeGain, mergeEdits, NO_EDITS, offsetIn, PAUSE_REST, pausesOf, playedPause, playedSpans, soundBlocks, withChoice, withDeleted,
   withPauses, within,
   type Block, type Edits, type Gaze, type Pause, type Placed
 } from "../../src/shared/timeline.ts"
@@ -46,17 +46,17 @@ test("silence of half a second or more inside a take is a pause, and a 0.2 s gap
 })
 
 test("a take plays through its pauses up to the next word, not only to the end of its last word", () => {
-  expect(playedSpans(first, take("a", 0, 4), NO_EDITS)).toEqual([{ start: 1, end: 6 }])
+  expect(playedSpans(first, take("a", 0, 4), NO_EDITS, PAUSE_REST)).toEqual([{ start: 1, end: 6 }])
 })
 
 test("a removed pause leaves 0.2 s of rest between its two words, not a cut at the word edges, and the kept pause still plays", () => {
   const edits = withPauses(NO_EDITS, [{ video: "a", after: 1 }], true)
-  expect(playedSpans(first, take("a", 0, 4), edits)).toEqual([{ start: 1, end: 2.1 }, { start: 2.9, end: 6 }])
+  expect(playedSpans(first, take("a", 0, 4), edits, PAUSE_REST)).toEqual([{ start: 1, end: 2.1 }, { start: 2.9, end: 6 }])
 })
 
 test("a removed pause after the last word ends the take 0.2 s after that word, not at the next take", () => {
   const edits = withPauses(NO_EDITS, [{ video: "a", after: 1 }, { video: "a", after: 4 }], true)
-  expect(playedSpans(first, take("a", 0, 4), edits)).toEqual([{ start: 1, end: 2.1 }, { start: 2.9, end: 4.8 }])
+  expect(playedSpans(first, take("a", 0, 4), edits, PAUSE_REST)).toEqual([{ start: 1, end: 2.1 }, { start: 2.9, end: 4.8 }])
 })
 
 test("only the part of a kept pause inside the trimmed reel counts as remaining silence, not the whole pause", () => {
@@ -94,7 +94,7 @@ test("a deleted block leaves the row and comes back to its place when the deleti
 
 test("the montage plays the chosen take of each block in row order across videos, not video by video", () => {
   const edits = withChoice({ ...NO_EDITS, order: ["deposit", "advance", "thanks"] }, "advance", take("a", 0, 4))
-  expect(clipsOf(assemble([advance, deposit, thanks], edits, transcripts))).toEqual([
+  expect(clipsOf(assemble([advance, deposit, thanks], edits, transcripts, PAUSE_REST))).toEqual([
     { video: "a", block: "deposit", start: 6, end: 12 },
     { video: "a", block: "advance", start: 1, end: 6 },
     { video: "b", block: "thanks", start: 3, end: 5 }
