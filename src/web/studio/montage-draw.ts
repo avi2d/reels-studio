@@ -96,14 +96,19 @@ export interface Drawing {
   readonly gather: () => void
 }
 
-const drawHead = ({ screen, history }: Drawing, cut: Cut | undefined): void => {
+export const drawUndo = ({ screen, history }: Pick<Drawing, "screen" | "history">): void => {
+  screen.undo.disabled = !history.canUndo()
+  screen.redo.disabled = !history.canRedo()
+}
+
+const drawHead = (drawing: Drawing, cut: Cut | undefined): void => {
+  const { screen } = drawing
   const open = cut?.questions.filter(isOpen).length ?? 0
   screen.work.hidden = cut === undefined
   screen.figure.textContent = cut === undefined ? "" : formatLength(cut.length)
   screen.asks.hidden = open === 0
   screen.asks.textContent = `Вопросы: ${open}`
-  screen.undo.disabled = !history.canUndo()
-  screen.redo.disabled = !history.canRedo()
+  drawUndo(drawing)
 }
 
 const drawCut = ({ screen, state, actions, player, select }: Drawing, cut: Cut, loaded: Loaded): void => {

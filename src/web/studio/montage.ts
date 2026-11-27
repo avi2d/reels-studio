@@ -7,7 +7,7 @@ import { saver, type Ticket } from "../timeline-save.ts"
 import { playback } from "../timeline-subtitles.ts"
 import type { StudioChat } from "./chat.ts"
 import { partActions } from "./montage-actions.ts"
-import { drawMontage, type Drawing } from "./montage-draw.ts"
+import { drawMontage, drawUndo, type Drawing } from "./montage-draw.ts"
 import { onMontageKeys } from "./montage-keys.ts"
 import { nextAsking, questionKey } from "./montage-model.ts"
 import { freshState, montageScreen, paintPlaying, type Screen, type State } from "./montage-screen.ts"
@@ -64,6 +64,7 @@ export const montageStep = (projectId: string, chat: StudioChat): MontageStep =>
   const draw = (): void => {
     if (pressing || isEditingWord(screen)) {
       redrawPending = true
+      drawUndo(drawing)
       return
     }
     redrawPending = false

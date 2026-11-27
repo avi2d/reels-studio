@@ -48,9 +48,16 @@ const wordButton = (one: Placed, word: EditableSubtitle, data: PartData, actions
   const { block, take } = one
   const key = `word:${block.id}:${take.video}:${word.index}`
   const fixed = isFixed(data.edits, block.id, take.video, word.index)
-  const node = h("button", { class: fixed ? "word word--fixed" : "word", type: "button", "data-key": key, title: fixed ? "Исправлено. Нажмите, чтобы изменить." : "Исправить слово" }, word.text)
+  const node = h("button", { type: "button", "data-key": key }, word.text)
+  const showWord = (text: string, isFixedNow: boolean): void => {
+    node.textContent = text
+    node.className = isFixedNow ? "word word--fixed" : "word"
+    node.title = isFixedNow ? "Исправлено. Нажмите, чтобы изменить." : "Исправить слово"
+  }
+  showWord(word.text, fixed)
   node.addEventListener("click", () => {
-    const field = h("input", { class: "word-field", value: word.text, "aria-label": `Исправить слово «${word.text}»`, "data-key": key, size: String(Math.max(3, word.text.length + 1)) })
+    const shown = node.textContent
+    const field = h("input", { class: "word-field", value: shown, "aria-label": `Исправить слово «${shown}»`, "data-key": key, size: String(Math.max(3, shown.length + 1)) })
     let done = false
     const finish = (save: boolean): void => {
       if (done) return
@@ -58,9 +65,11 @@ const wordButton = (one: Placed, word: EditableSubtitle, data: PartData, actions
       const focused = document.activeElement === field
       const text = field.value.trim()
       field.blur()
+      const saved = save && text !== "" && text !== shown
+      if (saved) showWord(text, true)
       field.replaceWith(node)
       if (focused) node.focus()
-      if (save && text !== "" && text !== word.text) actions.fixWord(block.id, take.video, word.index, text)
+      if (saved) actions.fixWord(block.id, take.video, word.index, text)
     }
     field.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== "Escape") return
