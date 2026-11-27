@@ -3,7 +3,7 @@ import { EVERY_APP, inAppOrder, type NewTask, TaskChoices } from "../shared/brie
 import { MAX_FILES } from "../shared/chat.ts"
 import { badRequest, notFound } from "./api-error.ts"
 import { readText } from "./approval.ts"
-import { readAttached } from "./timeline-files.ts"
+import { readAttached } from "./attached-files.ts"
 import { completedName } from "./tus.ts"
 
 const ChoicesFile = Schema.fromJsonString(TaskChoices)

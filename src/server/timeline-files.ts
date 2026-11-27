@@ -13,6 +13,7 @@ import { NO_CAPTIONS, type Captions } from "../shared/captions.ts"
 import { readCaptions, readTexts } from "./captions.ts"
 import { quoteOnPage } from "./insert-files.ts"
 import { places, readGaze, readTranscript } from "./media-jobs.ts"
+import { readReachable } from "./attached-files.ts"
 import { reelRules } from "./rules.ts"
 
 const decodeBlocks = Schema.decodeUnknownOption(Schema.fromJsonString(Blocks))
@@ -66,15 +67,8 @@ const readBlocks = Effect.fnUntraced(function*(dir: string) {
   return "unreadable" as const
 })
 
-export const readAttached = Effect.fnUntraced(function*(dir: string) {
-  const fs = yield* FileSystem.FileSystem
-  const folder = `${dir}/attached`
-  if (!(yield* fs.exists(folder))) return []
-  return (yield* fs.readDirectory(folder)).toSorted()
-})
-
 const readPictures = Effect.fnUntraced(function*(dir: string) {
-  return (yield* readAttached(dir)).filter((name) => kindOfName(name) === "picture")
+  return (yield* readReachable(dir)).filter((name) => kindOfName(name) === "picture")
 })
 
 const shownExists = Effect.fnUntraced(function*(dir: string, attached: ReadonlyArray<string>, planned: PlannedInsert) {
@@ -95,7 +89,7 @@ const readInserts = Effect.fnUntraced(function*(dir: string, transcripts: Readon
     yield* Effect.logError("the inserts are unreadable", file)
     return { state: "unreadable" } satisfies PlannedInserts
   }
-  const attached = yield* readAttached(dir)
+  const attached = yield* readReachable(dir)
   const shown = yield* Effect.forEach(written.inserts, (one) => shownExists(dir, attached, one))
   const planned = written.inserts.filter((one, index) => {
     const words = transcripts.get(one.video)?.words ?? []
