@@ -39,7 +39,7 @@ export interface RulesPanel {
   readonly dispose: () => void
 }
 
-export const rulesPanel = (id: string, step: Step, chat: Pick<StudioChat, "status" | "watch">): RulesPanel => {
+export const rulesPanel = (id: string, step: Step, chat: Pick<StudioChat, "status" | "watch">, changed?: () => void): RulesPanel => {
   const list = h("ul", { class: "studio-rules__list" })
   const change = h("div", {})
   const problem = h("p", { class: "error", role: "alert" })
@@ -54,7 +54,7 @@ export const rulesPanel = (id: string, step: Step, chat: Pick<StudioChat, "statu
     for (const control of node.querySelectorAll("button")) control.disabled = busy || chat.status() === "busy"
   }
 
-  const load = (work: Effect.Effect<RulesView, Api.Failed>): void => {
+  const load = (work: Effect.Effect<RulesView, Api.Failed>, onChanged?: () => void): void => {
     cancel?.()
     busy = true
     lock()
@@ -62,6 +62,7 @@ export const rulesPanel = (id: string, step: Step, chat: Pick<StudioChat, "statu
       busy = false
       problem.textContent = ""
       show(view)
+      onChanged?.()
     }), (message) => {
       busy = false
       problem.textContent = message
@@ -86,7 +87,7 @@ export const rulesPanel = (id: string, step: Step, chat: Pick<StudioChat, "statu
     const active = document.activeElement
     const focused = active instanceof HTMLElement && node.contains(active) ? active.dataset["key"] : undefined
     list.replaceChildren(...view.rules.filter((rule) => RULE_STEP[rule.id] === step).map(ruleItem))
-    change.replaceChildren(...view.change === undefined || RULE_STEP[view.change.id] !== step ? [] : [changeCard(view.change, () => { if (!busy && chat.status() !== "busy") load(Api.undoRule(id)) })])
+    change.replaceChildren(...view.change === undefined || RULE_STEP[view.change.id] !== step ? [] : [changeCard(view.change, () => { if (!busy && chat.status() !== "busy") load(Api.undoRule(id), changed) })])
     lock()
     node.hidden = false
     if (focused !== undefined) (node.querySelector<HTMLElement>(`[data-key="${focused}"]`) ?? list.querySelector("button"))?.focus()

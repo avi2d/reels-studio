@@ -16,6 +16,7 @@ const GATHER = "Собери блоки из всех видео и расста
 
 export interface MontageStep {
   readonly body: HTMLElement
+  readonly refresh: () => void
   readonly dispose: () => void
 }
 
@@ -91,7 +92,7 @@ export const montageStep = (projectId: string, chat: StudioChat): MontageStep =>
   }
   const loads = shower(screen, state, saving.busy, draw)
   const refresh = loader(projectId, screen.body, loads.show, () => ({ changes: state.changes, busy: saving.busy() }))
-  const gather = (): void => { if (!chat.ask({ text: GATHER, finish: refresh })) chat.open() }
+  const gather = (): void => { if (!chat.ask({ text: GATHER, finish: () => {} })) chat.open() }
   const actions = partActions({ projectId, state, history, toast: screen.toast, hear })
   const drawing: Drawing = { projectId, screen, state, history, actions, player, select, gather }
   const toggle = (): void => {
@@ -120,6 +121,12 @@ export const montageStep = (projectId: string, chat: StudioChat): MontageStep =>
   document.addEventListener("pointerup", release, true)
   document.addEventListener("pointercancel", release, true)
   const stopKeys = onMontageKeys({ toggle, undo: history.undo })
+  let lastChat = chat.status()
+  const stopWatching = chat.watch(() => {
+    const before = lastChat
+    lastChat = chat.status()
+    if (before === "busy" && lastChat !== "busy") refresh()
+  })
   // The loader stops once its anchor leaves the page, so the first load waits until the caller has put the body on the page.
   queueMicrotask(() => {
     refresh()
@@ -127,7 +134,9 @@ export const montageStep = (projectId: string, chat: StudioChat): MontageStep =>
   })
   return {
     body: screen.body,
+    refresh,
     dispose: () => {
+      stopWatching()
       stopKeys()
       document.removeEventListener("pointerup", release, true)
       document.removeEventListener("pointercancel", release, true)

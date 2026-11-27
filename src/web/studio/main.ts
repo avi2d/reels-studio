@@ -74,6 +74,7 @@ const reelPage = (id: string, step: Step): Effect.Effect<void, Api.Failed> =>
     let stage = project.stage
     const chat = chatFor(project)
     let body: HTMLElement
+    let refreshRules: (() => void) | undefined
     if (step === "plan") {
       const saved = yield* Api.getBrief(id)
       const view = planStep(id, saved, {
@@ -86,6 +87,7 @@ const reelPage = (id: string, step: Step): Effect.Effect<void, Api.Failed> =>
       leaveStep = view.dispose
     } else if (step === "montage") {
       const view = montageStep(id, chat)
+      refreshRules = view.refresh
       body = view.body
       leaveStep = view.dispose
     } else {
@@ -98,7 +100,7 @@ const reelPage = (id: string, step: Step): Effect.Effect<void, Api.Failed> =>
       })
     }
     if (hasRules(step)) {
-      const rules = rulesPanel(id, step, chat)
+      const rules = rulesPanel(id, step, chat, refreshRules)
       body.append(rules.node)
       const leave = leaveStep
       leaveStep = () => {
