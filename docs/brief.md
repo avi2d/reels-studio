@@ -14,8 +14,10 @@ A brief holds at most 4,000 characters.
 
 ## The plan and the yes
 
-The chat model writes the plan to `plan.md`, and the card «План ролика» shows it as written.
-The plan covers every stage the studio can do, the takes, the pauses, the players and the open questions.
+The chat model writes the plan to `plan.md`.
+On step «План», the card «План ролика» hides a repeated first line of «План ролика», with or without a colon.
+It turns dash lines into a bulleted list and keeps indented items nested.
+The plan covers every stage the studio can do, the takes, the pauses, the chosen apps, the task files and the open questions.
 The person agrees by pressing «Согласна» under the plan, or by writing «Согласна» or «Согласен» as the whole message.
 After the chat model answers that message, or the request is cut, the studio works in the background without another question:
 
@@ -23,7 +25,8 @@ After the chat model answers that message, or the request is cut, the studio wor
 - It pins the shown take of every block in `timeline.json`, while that take still exists, so later gatherings keep it.
 The take is the take ranked first unless the person chose another, as [docs/timeline.md](timeline.md) says.
 Before the yes the studio pins nothing.
-- It shortens the pauses of half a second or more left in the shown takes to 0.2 s, except the pauses the person returned.
+- It shortens the pauses of half a second or more left in the shown takes to the seconds of the pause rule, except the pauses the person returned.
+The pause rule is 0.2 s unless the reel's rules say another, as [docs/timeline.md](timeline.md) says.
 - It saves the yes with the plan text, the `texts.json` contents captured at the yes, and a list of what it did to `approval.json`.
 Removing a reel stops this work the same way it stops a gathering.
 
@@ -37,7 +40,13 @@ An approval saved without a text snapshot stays valid while the project has no `
 ## The new studio at `/new`
 
 On step «План», «Как в прошлый раз» fills an empty task with the last task from another reel.
-«Составить план» saves the task and asks for a plan.
+Under the task, «Куда» holds a button for each app: Instagram, YouTube Shorts and TikTok.
+A new reel goes to every app, and a plan needs at least one.
+«Файлы» lists the files for the task, and «Приложить» adds up to 10.
+A file removed with «Убрать» stays in `attached/`, but the plan, the inserts and the chat model's list of attached files no longer include it, unless a chat message names it.
+«Составить план» uploads the new files, saves the task, the apps and the files, and asks for a plan.
+A reel with no recording gets no plan: the page says to add a recording on the step «Записи» first, and saves nothing.
+The chat model gets the chosen apps and the task files with every message, and the plan names them.
 After you press «Да, делайте», the studio finishes the work and opens «Монтаж».
 To see what the studio did, return to «План».
 
@@ -52,5 +61,6 @@ Files for the chat go through «Приложить файлы».
 | Path | What it holds |
 | --- | --- |
 | `brief.md` | The brief the person wrote |
+| `task.json` | The apps the person chose and the names of the task files in `attached/` |
 | `plan.md` | The plan of the whole reel, written by the chat model |
 | `approval.json` | The approved plan, the `texts.json` snapshot or null when absent, the time of the yes, and what the studio did |

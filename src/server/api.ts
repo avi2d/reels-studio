@@ -1,4 +1,5 @@
 import { Effect, FileSystem, Layer, Option, Schema, Stream } from "effect"
+import { NewTask } from "../shared/brief.ts"
 import { CHAT_TURN_HEADER } from "../shared/chat.ts"
 import { Pick } from "../shared/library.ts"
 import { Face } from "../shared/face.ts"
@@ -18,6 +19,9 @@ import { Media } from "./media.ts"
 import type { ReelVersion } from "./reel.ts"
 import { Projects } from "./projects.ts"
 import { parseRange } from "./range.ts"
+import { keepRule, undoChange } from "./rules.ts"
+import { orRules, rulesPage } from "./rules-page.ts"
+import { KeptInput, RuleId } from "../shared/rules.ts"
 import { Settings } from "./settings.ts"
 import * as Tus from "./tus.ts"
 
@@ -40,6 +44,7 @@ const queryOf = (request: HttpServerRequest.HttpServerRequest, name: string): st
 const madeOf = (request: HttpServerRequest.HttpServerRequest): string => queryOf(request, "made")
 
 const decodeSide = Schema.decodeUnknownOption(PictureSide)
+const decodeRuleId = Schema.decodeUnknownOption(RuleId)
 
 const pictureOf = (request: HttpServerRequest.HttpServerRequest) => {
   const join = Number(queryOf(request, "join"))
@@ -101,7 +106,6 @@ const NewMessage = Schema.Struct({
   effort: Effort
 })
 
-const NewBrief = Schema.Struct({ text: Schema.String })
 
 const brief = Layer.mergeAll(
   HttpRouter.add("GET", "/api/projects/:id/brief", reply(Effect.gen(function*() {
@@ -111,8 +115,25 @@ const brief = Layer.mergeAll(
   HttpRouter.add("PUT", "/api/projects/:id/brief", reply(Effect.gen(function*() {
     const store = yield* Brief
     const id = yield* param("id")
-    yield* store.write(id, (yield* body(NewBrief)).text)
+    yield* store.write(id, yield* body(NewTask))
     return json(yield* store.view(id))
+  })))
+)
+
+const rules = Layer.mergeAll(
+  HttpRouter.add("GET", "/api/projects/:id/rules", reply(param("id").pipe(Effect.flatMap(rulesPage), Effect.map(json)))),
+  HttpRouter.add("PUT", "/api/projects/:id/rules/:rule/kept", reply(Effect.gen(function*() {
+    const id = yield* param("id")
+    const rule = Option.getOrUndefined(decodeRuleId(yield* param("rule")))
+    if (rule === undefined) return yield* notFound("Такого правила нет")
+    const { kept } = yield* body(KeptInput)
+    yield* keepRule(yield* (yield* Projects).folder(id), (yield* Settings).projectsDir, rule, kept).pipe(orRules)
+    return json(yield* rulesPage(id))
+  }))),
+  HttpRouter.add("POST", "/api/projects/:id/rules/undo", reply(Effect.gen(function*() {
+    const id = yield* param("id")
+    yield* undoChange(yield* (yield* Projects).folder(id), (yield* Settings).projectsDir).pipe(orRules)
+    return json(yield* rulesPage(id))
   })))
 )
 
@@ -375,4 +396,4 @@ const homeOnly = HttpRouter.middleware(
   { global: true }
 )
 
-export const apiRoutes = Layer.mergeAll(projects, brief, chat, uploads, videos, reel, retouch, homeOnly)
+export const apiRoutes = Layer.mergeAll(projects, brief, rules, chat, uploads, videos, reel, retouch, homeOnly)

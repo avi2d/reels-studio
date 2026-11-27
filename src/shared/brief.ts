@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 import { lengthOf, type Transcript } from "./plan.ts"
-import { assemble, keptOf, samePause, withChoice, withPauses, type Block, type Edits } from "./timeline.ts"
+import { arrange, assemble, chosenTake, keptOf, pausesOf, samePause, withChoice, withPauses, type Block, type Edits } from "./timeline.ts"
 
 export const MAX_BRIEF = 4000
 
@@ -21,7 +21,34 @@ export const PlanView = Schema.Union([
 ])
 export type PlanView = typeof PlanView.Type
 
-export const BriefView = Schema.Struct({ brief: Schema.String, plan: PlanView, working: Schema.Boolean })
+export const APPS = ["Instagram", "YouTube Shorts", "TikTok"] as const
+export const App = Schema.Literals(APPS)
+export type App = typeof App.Type
+
+export const TaskChoices = Schema.Struct({ apps: Schema.Array(App), files: Schema.Array(Schema.String) })
+export type TaskChoices = typeof TaskChoices.Type
+
+export const EVERY_APP: TaskChoices = { apps: APPS, files: [] }
+
+export const inAppOrder = (apps: Iterable<App>): ReadonlyArray<App> => {
+  const chosen = new Set(apps)
+  return APPS.filter((app) => chosen.has(app))
+}
+
+export const TaskFile = Schema.Union([
+  Schema.Struct({ name: Schema.String }),
+  Schema.Struct({ upload: Schema.String })
+])
+export type TaskFile = typeof TaskFile.Type
+
+export const NewTask = Schema.Struct({
+  text: Schema.String,
+  apps: Schema.optionalKey(Schema.Array(App)),
+  files: Schema.optionalKey(Schema.Array(TaskFile))
+})
+export type NewTask = typeof NewTask.Type
+
+export const BriefView = Schema.Struct({ brief: Schema.String, ...TaskChoices.fields, plan: PlanView, working: Schema.Boolean })
 export type BriefView = typeof BriefView.Type
 
 export const planView = (text: string | undefined, texts: string | undefined, approval: Approval | undefined): PlanView => {
@@ -34,30 +61,37 @@ const YES = new Set(["согласна", "согласен"])
 
 export const approves = (text: string): boolean => YES.has(text.trim().toLowerCase().replace(/[.!\s]+$/u, ""))
 
-const playedLength = (blocks: ReadonlyArray<Block>, edits: Edits, transcripts: ReadonlyMap<string, Transcript>): number =>
-  lengthOf(assemble(blocks, edits, transcripts).flatMap((one) => one.spans))
+const playedLength = (blocks: ReadonlyArray<Block>, edits: Edits, transcripts: ReadonlyMap<string, Transcript>, rest: number): number =>
+  lengthOf(assemble(blocks, edits, transcripts, rest).flatMap((one) => one.spans))
 
 export const shortenPlaced = (
   blocks: ReadonlyArray<Block>,
   edits: Edits,
   transcripts: ReadonlyMap<string, Transcript>
 ): Edits => {
-  const placed = assemble(blocks, edits, transcripts)
   const kept = keptOf(edits)
-  const pauses = placed.flatMap((one) => one.pauses.filter((pause) => !pause.removed && !kept.some((hold) => samePause(hold, { video: one.take.video, after: pause.after }))).map((pause) => ({ video: one.take.video, after: pause.after })))
+  const pauses = arrange(blocks, edits).placed.flatMap((block) => {
+    const take = chosenTake(block, edits)
+    const transcript = transcripts.get(take.video)
+    if (transcript === undefined) return []
+    return pausesOf(transcript, take, edits)
+      .filter((pause) => !pause.removed && !kept.some((hold) => samePause(hold, { video: take.video, after: pause.after })))
+      .map((pause) => ({ video: take.video, after: pause.after }))
+  })
   return withPauses(edits, pauses, true)
 }
 
 export const afterYes = (
   blocks: ReadonlyArray<Block>,
   edits: Edits,
-  transcripts: ReadonlyMap<string, Transcript>
+  transcripts: ReadonlyMap<string, Transcript>,
+  rest: number
 ): { readonly edits: Edits; readonly done: ReadonlyArray<Done> } => {
-  const placed = assemble(blocks, edits, transcripts)
+  const placed = assemble(blocks, edits, transcripts, rest)
   if (placed.length === 0) return { edits, done: [{ kind: "no-blocks" }] }
   const pinned = placed.reduce((next, one) => withChoice(next, one.block.id, one.take), edits)
   const next = shortenPlaced(blocks, pinned, transcripts)
-  const cut = assemble(blocks, next, transcripts)
+  const cut = assemble(blocks, next, transcripts, rest)
   const removed = cut.flatMap((one) => one.pauses.filter((pause) => pause.removed))
   const takes = cut.map((one): Done => ({
     kind: "take",
@@ -66,6 +100,6 @@ export const afterYes = (
     of: one.block.takes.length,
     reason: one.take.reason
   }))
-  const seconds = playedLength(blocks, { ...next, pauses: [] }, transcripts) - playedLength(blocks, next, transcripts)
+  const seconds = playedLength(blocks, { ...next, pauses: [] }, transcripts, rest) - playedLength(blocks, next, transcripts, rest)
   return { edits: next, done: [...takes, { kind: "pauses", count: removed.length, seconds }] }
 }

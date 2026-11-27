@@ -8,11 +8,48 @@
 }
 .studio-plan__card > button { justify-self: start; }
 .studio-plan__task { resize: vertical; min-height: 7rem; }
+.studio-plan__group { display: grid; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.studio-plan__group > button { justify-self: start; }
+.studio-plan__legend { padding: 0; margin-bottom: 8px; font-size: 14px; color: var(--muted); }
+.studio-plan .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.studio-plan .chip { display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); padding: 0 14px; border: 1px solid var(--edge); border-radius: 999px; background: var(--surface); font-weight: 500; font-size: 14px; white-space: nowrap; cursor: pointer; touch-action: manipulation; }
+.studio-plan .chip[aria-pressed="true"] { background: var(--blue-soft); border-color: var(--blue); color: var(--blue-press); font-weight: 600; }
+.studio-plan .chip .ic svg { width: 16px; height: 16px; }
+.studio-plan .chip[aria-pressed="false"] .ic { display: none; }
+.studio-plan .chip:disabled { opacity: 0.6; cursor: default; }
+.studio-plan__files { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.studio-plan__files > li + li { border-top: 1px solid var(--line); }
+.studio-plan__file { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 10px; min-width: 0; }
+.studio-plan__file .thumb { flex: none; width: 36px; height: 36px; border-radius: 8px; object-fit: cover; }
+.studio-plan__file span.thumb { display: grid; place-items: center; background: var(--line); color: var(--muted); }
+.studio-plan__file-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.studio-plan__file-text b { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.studio-plan__file-note { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (hover: hover) and (pointer: fine) {
+  .studio-plan .chip:hover:not(:disabled) { border-color: #9aa0b0; }
+}
 .studio-plan__text, .studio-chat__bubble > p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.studio-plan__text { display: grid; gap: 8px; }
+.studio-plan__text ul { list-style: disc; padding-inline-start: 1.25em; }
+.studio-plan__text li + li { margin-top: 0.35em; }
 .studio-plan__response, .studio-plan__work { display: grid; gap: 10px; }
 .studio-plan__work { border-top: 1px solid var(--line); padding-top: 12px; }
 .studio-plan__work ul { list-style: disc; padding-inline-start: 1.25em; }
 .studio-plan__work li + li { margin-top: 0.35em; }
+.studio-rules__list { display: grid; gap: 4px; }
+.studio-rules__list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; }
+.studio-rules__list li > span { min-width: 0; overflow-wrap: anywhere; }
+.studio-rules__pin { padding: 0 10px; font-size: 14px; font-weight: 500; }
+.studio-rules__pin .ic svg { width: 16px; height: 16px; }
+.studio-rules__pin--on { color: var(--blue); background: var(--blue-soft); }
+.studio-rules__pin--on .ic svg { fill: currentColor; }
+.studio-rules__change { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.studio-rules__change > p { overflow-wrap: anywhere; }
+.studio-rules__change > button { justify-self: start; }
+.studio-rules__pauses { list-style: decimal; padding-inline-start: 1.5em; font-variant-numeric: tabular-nums; }
+.studio-rules__pauses li + li { margin-top: 0.25em; }
+.studio-rules > .error:empty, .studio-rules > div:empty { display: none; }
+
 .studio-plan__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 .studio-plan__actions > p { flex: 1 1 14em; }
 .studio-plan__actions > p:empty { display: none; }
@@ -58,7 +95,7 @@
 .studio-chat .thumb { flex: none; width: 30px; height: 30px; border-radius: 4px; object-fit: cover; }
 .studio-chat span.thumb { display: grid; place-items: center; background: var(--line); color: var(--muted); }
 .studio-chat .tray.sending .remove { visibility: hidden; }
-.studio-chat .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.studio-plan .visually-hidden, .studio-chat .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 @media (hover: hover) and (pointer: fine) {
   .studio-chat .studio-chat__send:hover:not(:disabled) { color: var(--ink); }

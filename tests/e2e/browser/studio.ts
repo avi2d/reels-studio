@@ -7,7 +7,7 @@ import { Schema } from "effect"
 import type { Page, Request } from "playwright-core"
 import { UploadedVideo } from "../../../src/shared/library.ts"
 import { STEPS, STUDIO_PATH, stepPath } from "../../../src/shared/page.ts"
-import { CHAT_PICTURE, CHAT_REPLY, FIRST_WORDS, PLAN_TASK, PLAN_TEXT, SLOW_MESSAGE, SOURCE_VIDEO, setting, timeout } from "./scenario.ts"
+import { CHAT_PICTURE, CHAT_REPLY, FIRST_WORDS, PLAN_TASK, PLAN_TEXT, SLOW_MESSAGE, SOURCE_VIDEO, TASK_FILE, setting, timeout } from "./scenario.ts"
 
 const HEARING = 60_000
 
@@ -155,6 +155,26 @@ const seekByWord = async (page: Page): Promise<void> => {
   assert.equal(await page.getByText(/обрежу по лицу/u).count(), 0, "The horizontal crop status waits for its server step")
 }
 
+const chooseTaskApps = async (page: Page): Promise<void> => {
+  const make = page.getByRole("button", { name: "Составить план", exact: true })
+  const apps = ["Instagram", "YouTube Shorts", "TikTok"].map((name) => page.getByRole("button", { name, exact: true }))
+  for (const app of apps) await app.click()
+  assert(await make.isDisabled(), "A reel for no app must not start a plan")
+  await page.getByText("Выберите, куда пойдёт ролик.", { exact: true }).waitFor()
+  await apps[0]?.click()
+  await apps[2]?.click()
+  assert(await make.isEnabled(), "Two chosen apps start a plan")
+}
+
+const attachTaskFile = async (page: Page): Promise<void> => {
+  const [chooser] = await Promise.all([
+    page.waitForEvent("filechooser", { timeout }),
+    page.getByRole("button", { name: "Приложить", exact: true }).click()
+  ])
+  await chooser.setFiles({ name: TASK_FILE, mimeType: "image/png", buffer: Buffer.from(await Bun.file(join(setting("REELS_BROWSER_DIR"), CHAT_PICTURE)).bytes()) })
+  await page.getByRole("list", { name: "Файлы к заданию" }).getByText(TASK_FILE, { exact: true }).waitFor()
+}
+
 const approvePlan = async (page: Page, id: string): Promise<void> => {
   await page.getByRole("link", { name: "Дальше: план", exact: true }).click()
   const task = page.getByRole("textbox", { name: "Задание", exact: true })
@@ -164,10 +184,14 @@ const approvePlan = async (page: Page, id: string): Promise<void> => {
   await task.fill("   ")
   assert(await make.isDisabled(), "Spaces are not a task")
   await task.fill(PLAN_TASK)
+  await chooseTaskApps(page)
+  await attachTaskFile(page)
   await make.click()
   await page.getByRole("main").getByText(PLAN_TEXT, { exact: true }).waitFor()
   await page.reload()
   assert.equal(await task.inputValue(), PLAN_TASK, "The task must survive a reload")
+  assert.equal(await page.getByRole("button", { name: "YouTube Shorts", exact: true }).getAttribute("aria-pressed"), "false", "The unchosen app must stay off after a reload")
+  await page.getByRole("list", { name: "Файлы к заданию" }).getByText(TASK_FILE, { exact: true }).waitFor()
   await page.getByRole("button", { name: "Да, делайте", exact: true }).click()
   await page.waitForURL(address(stepPath(id, "montage")), { timeout })
   await page.getByRole("heading", { name: "Монтаж", exact: true, level: 1 }).waitFor()

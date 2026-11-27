@@ -8,6 +8,7 @@ import plus from "lucide-static/icons/plus.svg" with { type: "text" }
 import retry from "lucide-static/icons/rotate-ccw.svg" with { type: "text" }
 import trash from "lucide-static/icons/trash-2.svg" with { type: "text" }
 import pencil from "lucide-static/icons/pencil.svg" with { type: "text" }
+import pin from "lucide-static/icons/pin.svg" with { type: "text" }
 import upload from "lucide-static/icons/upload.svg" with { type: "text" }
 import close from "lucide-static/icons/x.svg" with { type: "text" }
 import chat from "lucide-static/icons/message-square.svg" with { type: "text" }
@@ -21,7 +22,7 @@ import redo from "lucide-static/icons/redo-2.svg" with { type: "text" }
 import up from "lucide-static/icons/arrow-up.svg" with { type: "text" }
 import lower from "lucide-static/icons/arrow-down.svg" with { type: "text" }
 
-const ICONS = { attach, chat, check, close, down, file, film, left, lower, more, pencil, play, plus, redo, retry, right, send, stop, trash, undo, up, upload }
+const ICONS = { attach, chat, check, close, down, file, film, left, lower, more, pencil, pin, play, plus, redo, retry, right, send, stop, trash, undo, up, upload }
 
 export type IconName = keyof typeof ICONS
 

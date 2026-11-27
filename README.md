@@ -39,9 +39,10 @@ The new screens open at `/new` beside the old page.
 Each reel card shows its status, and the reel's top bar menu lets you rename it.
 The reel list at `/new` shows reels and uploaded takes five to a page, uploads takes and resumes an interrupted upload.
 Step 1, «Записи», adds the uploaded takes you tick to the reel at once and plays a recording from a word you press.
-Step 2, «План», saves the task, shows the plan and takes the yes, and the chat on every step streams its reply and has «Остановить».
+Step 2, «План», saves the task with its apps and files, shows the plan and takes the yes, and the chat on every step streams its reply and has «Остановить».
 Step 3, «Монтаж», lists the parts of the reel with their takes, pauses, words, texts and inserts.
 Its «Вопросы» button walks through every join and insert still waiting for an answer, and «Отменить» undoes any change on the step.
+The rules, now the length of a pause, show as «Правила» on the step they belong to, change from a chat sentence and carry to the next reels with a pin, as [Takes and blocks](docs/timeline.md) says.
 
 The studio answers the home network and the owner's Mac through the `local-apps` gateway.
 The gateway must listen only on that Mac's loopback address.
@@ -94,22 +95,4 @@ The suite in [tests/e2e/browser/](tests/e2e/browser/) runs only in GitHub Action
 The project layout lives in [Project layout](docs/project-layout.md).
 The row of blocks and takes is described in [Takes and blocks](docs/timeline.md).
 The brief, the plan and the yes are described in [The brief and the one plan](docs/brief.md).
-
-## Troubleshooting
-
-### The page does not open from a phone
-
-Windows blocks inbound connections to WSL by default.
-The page opens on the computer itself and not from another device until the owner adds a Hyper-V firewall rule for the port.
-
-### A video shows «Студия не расслышала это видео»
-
-ffmpeg or the recognizer failed, and the studio log holds what it printed.
-Run `journalctl --user -u reels-studio.service` to read the log.
-Press «Попробовать ещё раз» under the video to have the studio listen to it again.
-A video with no sound fails again.
-
-### The chat answers «Ответ не дошёл»
-
-pi or the model provider refused the message, and the studio log holds what each printed.
-Run `pi --list-models` and check that the chosen model is in the list.
+What to do when the page does not open, a video is not heard or the chat does not answer is in [Troubleshooting](docs/troubleshooting.md).

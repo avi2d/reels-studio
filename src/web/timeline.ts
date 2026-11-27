@@ -29,12 +29,13 @@ const PAUSE_AROUND_SECONDS = 1.5
 
 const placedOf = (loaded: Loaded | undefined, edits: Edits): ReadonlyArray<Placed> => {
   const view = loaded?.view.timeline
-  return loaded === undefined || view?.state !== "ready" ? [] : assemble(view.blocks, edits, loaded.transcripts)
+  return loaded === undefined || view?.state !== "ready" ? [] : assemble(view.blocks, edits, loaded.transcripts, view.rest)
 }
 
 const takeClips = (loaded: Loaded | undefined, edits: Edits, block: string, take: Take): ReadonlyArray<Clip> => {
   const transcript = loaded?.transcripts.get(take.video)
-  return transcript === undefined ? [] : playedSpans(transcript, take, edits).map((span) => ({ ...span, video: take.video, block }))
+  const view = loaded?.view.timeline
+  return transcript === undefined || view?.state !== "ready" ? [] : playedSpans(transcript, take, edits, view.rest).map((span) => ({ ...span, video: take.video, block }))
 }
 
 const neighbourOf = (placed: ReadonlyArray<Placed>, block: string): string | undefined => {

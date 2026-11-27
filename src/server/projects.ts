@@ -3,6 +3,7 @@ import { Project, ProjectId, type Effort, type ProjectView } from "../shared/pro
 import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
 import { places } from "./media-jobs.ts"
 import { hasPublishedReel } from "./reel.ts"
+import { startRules } from "./rules.ts"
 import { Settings } from "./settings.ts"
 
 export type { Effort } from "../shared/project.ts"
@@ -101,6 +102,7 @@ export class Projects extends Context.Service<Projects, {
         const dir = path.join(settings.projectsDir, id)
         yield* fs.makeDirectory(path.join(dir, "source"), { recursive: true }).pipe(orBroken)
         yield* fs.makeDirectory(path.join(dir, "uploads"), { recursive: true }).pipe(orBroken)
+        yield* startRules(settings.projectsDir, dir).pipe(Effect.provideService(FileSystem.FileSystem, fs), orBroken)
         yield* write(dir, { id, title: trimmed, createdAt: DateTime.formatIso(now) })
         return yield* view(dir)
       })

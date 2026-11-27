@@ -28,6 +28,7 @@ export interface Cut {
   readonly gone: ReadonlyArray<Block>
   readonly reel: ReadonlyArray<Clip>
   readonly length: number
+  readonly rest: number
   readonly shown: ReadonlyArray<Shown>
   readonly questions: ReadonlyArray<Question>
   readonly outside: {
@@ -62,7 +63,7 @@ export const questionKey = (question: Question): string => question.kind === "jo
 export const isOpen = (question: Question): boolean => question.place.place.answer === undefined
 
 export const cutOfPage = (view: TimelinePage, timeline: Ready, transcripts: ReadonlyMap<string, Transcript>, edits: Edits): Cut => {
-  const placed = assemble(timeline.blocks, edits, transcripts)
+  const placed = assemble(timeline.blocks, edits, transcripts, timeline.rest)
   const faces = facesByVideo(view.faces)
   const reel = cutOf(clipsOf(placed), faces, transcripts, edits)
   const joins = numbered(placesOf(clipsOf(placed), faces, transcripts, edits))
@@ -97,6 +98,7 @@ export const cutOfPage = (view: TimelinePage, timeline: Ready, transcripts: Read
     gone: arrange(timeline.blocks, edits).deleted,
     reel,
     length: lengthOf(reel),
+    rest: timeline.rest,
     shown: shownInserts(inserts.map(({ place }) => place), reel, edits, view.pictures),
     questions,
     outside: {

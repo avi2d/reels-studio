@@ -9,7 +9,7 @@ import { GatherState } from "../../src/server/gather-state.ts"
 import { Media } from "../../src/server/media.ts"
 import { Projects } from "../../src/server/projects.ts"
 import type { VideoView } from "../../src/shared/plan.ts"
-import { NO_EDITS, type TimelineView } from "../../src/shared/timeline.ts"
+import { NO_EDITS, PAUSE_REST, type TimelineView } from "../../src/shared/timeline.ts"
 import { mediaWith, projectAt } from "./server-fixtures.ts"
 
 const unexpected = () => Effect.die("unexpected service call")
@@ -22,7 +22,7 @@ test("a yes waits for a listening video instead of omitting it from the approved
     const timeline: TimelineView = {
       looks: [{ video: "a", state: "measured" }], faces: [],
       pictures: [], inserts: { state: "none" }, texts: { state: "none" },
-      timeline: { state: "ready", dropped: 0, edits: NO_EDITS, blocks: [{ id: "one", title: "One", takes: [{ video: "a", from: 0, to: 0, reason: "Clear" }] }] }
+      timeline: { state: "ready", dropped: 0, edits: NO_EDITS, rest: PAUSE_REST, blocks: [{ id: "one", title: "One", takes: [{ video: "a", from: 0, to: 0, reason: "Clear" }] }] }
     }
     const media = mediaWith(() => videos, timeline)
     const dependencies = Layer.mergeAll(BunServices.layer, GatherState.layer, Layer.succeed(Media, media.service), Layer.succeed(Projects, projectAt(dir)))

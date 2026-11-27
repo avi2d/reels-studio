@@ -37,7 +37,8 @@ const neighbourOf = (state: State, block: string): string | undefined => {
 
 const takeClips = (state: State, block: string, take: Take): ReadonlyArray<Clip> => {
   const transcript = state.loaded?.transcripts.get(take.video)
-  return transcript === undefined ? [] : playedSpans(transcript, take, state.edits).map((span) => ({ ...span, video: take.video, block }))
+  const timeline = state.loaded?.view.timeline
+  return transcript === undefined || timeline?.state !== "ready" ? [] : playedSpans(transcript, take, state.edits, timeline.rest).map((span) => ({ ...span, video: take.video, block }))
 }
 
 export interface ActionsContext {
@@ -59,7 +60,7 @@ const joinActions = ({ state, history, hear }: ActionsContext): Pick<PartActions
     const timeline = loaded?.view.timeline
     if (loaded === undefined || timeline?.state !== "ready") return
     const leave = withAnswer(state.edits, join, "leave")
-    const reel = cutOf(clipsOf(assemble(timeline.blocks, leave, loaded.transcripts)), facesByVideo(loaded.view.faces), loaded.transcripts, leave)
+    const reel = cutOf(clipsOf(assemble(timeline.blocks, leave, loaded.transcripts, timeline.rest)), facesByVideo(loaded.view.faces), loaded.transcripts, leave)
     hear(aroundJoin(reel, join, AROUND_JOIN_SECONDS), [])
   },
   answer: (join, answer) => { history.change(withAnswer(state.edits, join, answer)) },

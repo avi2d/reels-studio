@@ -1,10 +1,11 @@
 import { Context, DateTime, Effect, FileSystem, Layer, Path, Ref, Schema } from "effect"
-import { afterYes, Approval, MAX_BRIEF, type BriefView, type PlanView } from "../shared/brief.ts"
+import { afterYes, Approval, MAX_BRIEF, type NewTask, type BriefView, type PlanView } from "../shared/brief.ts"
 import { gazePending, gatherStep } from "../shared/gather.ts"
 import { NO_EDITS } from "../shared/timeline.ts"
 import { GatherState } from "./gather-state.ts"
 import { readGathered, readyTranscripts } from "./timeline-files.ts"
 import { type ApiError, badRequest, orUnavailable } from "./api-error.ts"
+import { readChoices, writeChoices } from "./task-choices.ts"
 import { Media } from "./media.ts"
 import { Projects } from "./projects.ts"
 import { readApproval, readText } from "./approval.ts"
@@ -19,7 +20,7 @@ const orBroken = orUnavailable("the brief failed", UNAVAILABLE)
 
 export class Brief extends Context.Service<Brief, {
   readonly view: (id: string) => Effect.Effect<BriefView, ApiError>
-  readonly write: (id: string, text: string) => Effect.Effect<void, ApiError>
+  readonly write: (id: string, task: NewTask) => Effect.Effect<void, ApiError>
   readonly plan: (id: string) => Effect.Effect<PlanView, ApiError>
   readonly workAlone: (id: string, approved: ApprovedPlan, replied: Effect.Effect<void>) => Effect.Effect<void, ApiError>
   readonly working: (id: string) => Effect.Effect<boolean>
@@ -44,17 +45,22 @@ export class Brief extends Context.Service<Brief, {
         return (yield* readApproval(dir).pipe(Effect.provideService(FileSystem.FileSystem, fs))).plan
       }, orBroken)
 
+      const files = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>) =>
+        effect.pipe(Effect.provideService(FileSystem.FileSystem, fs), Effect.provideService(Path.Path, path), orBroken)
+
       const view = Effect.fn("Brief.view")(function*(id: string) {
         const dir = yield* projects.folder(id)
         const brief = (yield* readText(path.join(dir, "brief.md")).pipe(Effect.provideService(FileSystem.FileSystem, fs), orBroken)) ?? ""
+        const choices = yield* files(readChoices(dir))
         const working = yield* state.working(id)
-        return { brief, plan: yield* plan(id), working }
+        return { brief, ...choices, plan: yield* plan(id), working }
       })
 
-      const write = Effect.fn("Brief.write")(function*(id: string, text: string) {
-        const trimmed = text.trim()
+      const write = Effect.fn("Brief.write")(function*(id: string, task: NewTask) {
+        const trimmed = task.text.trim()
         if (trimmed.length > MAX_BRIEF) return yield* badRequest(`Сократите задание до ${MAX_BRIEF} знаков`)
         const dir = yield* projects.folder(id)
+        yield* files(writeChoices(dir, task))
         yield* replace(path.join(dir, "brief.md"), trimmed === "" ? "" : `${trimmed}\n`).pipe(orBroken)
       })
 
@@ -97,10 +103,10 @@ export class Brief extends Context.Service<Brief, {
           const transcripts = readyTranscripts(yield* media.videos(id))
           const done = timeline.state === "ready"
             ? yield* media.exchangeEdits(id, (current) => {
-              const outcome = afterYes(timeline.blocks, current, transcripts)
+              const outcome = afterYes(timeline.blocks, current, transcripts, timeline.rest)
               return { edits: outcome.edits, value: outcome.done }
             })
-            : afterYes([], NO_EDITS, transcripts).done
+            : afterYes([], NO_EDITS, transcripts, 0).done
           const latest = (yield* Ref.get(agreed)).get(id) ?? approved
           const at = DateTime.formatIso(yield* DateTime.now)
           const text = yield* encodeApproval({ ...latest, at, done }).pipe(orBroken)

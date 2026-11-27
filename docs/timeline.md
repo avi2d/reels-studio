@@ -34,7 +34,7 @@ As soon as the studio has heard every uploaded video, it asks the chat model by 
 The first gathering ranks the takes by speech alone.
 When the gaze of every heard video is settled, the studio gathers once more, so the takes stand by speech and gaze.
 The stages «Дубли и блоки» and «Паузы и склейки» say that the studio is gathering the blocks meanwhile.
-Once the blocks are written, the page shows the take ranked first in every block the person has not chosen, and the studio shortens every pause of the shown takes to 0.2 s, except the pauses the person returned.
+Once the blocks are written, the page shows the take ranked first in every block the person has not chosen, and the studio shortens every pause of the shown takes to the seconds of the pause rule, except the pauses the person returned.
 After any change to `blocks.json`, whoever wrote it, the studio shortens the pauses of the shown takes once more without a new model run.
 After the yes the pinned takes stay while they still exist.
 A new heard video gathers the blocks again, and a gaze that settles after the last gathering gathers them once more.
@@ -74,7 +74,7 @@ The player shows the corrected words over the picture as the reel plays.
 Each preview holds a key frame every half second.
 The studio re-encodes a preview made with the old key frame distance by itself in the background.
 The old preview stays playable until the new one is complete.
-A removed pause leaves 0.2 s of silence in its place.
+A removed pause leaves the seconds of the pause rule in its place, 0.2 s by default.
 The sound fades over 0.06 s on each side of a cut.
 «Послушать» next to a pause plays 1.5 s before it and 1.5 s after it.
 The undo button in the bar takes back the last change of the cut, and the redo button brings it back.
@@ -256,9 +256,9 @@ It shows the chosen picture from 1 s before the join to 1.5 s after it, and take
 
 ## Inserts
 
-An insert shows a file the person attached in the chat over the video while a phrase is said: a picture or a screenshot, a video clip, or one page of a PDF.
+An insert shows a file the person attached in the chat or to the task over the video while a phrase is said: a picture or a screenshot, a video clip, or one page of a PDF.
 The chat model chooses the phrase by its meaning and writes it to `inserts.json`, as the reels-inserts skill says.
-The studio leaves out an insert with a repeated id, a file that is not in `attached/` or is not of its kind, a quote that the text of its PDF page does not hold, or word numbers the transcript does not hold, and the page says how many it left out.
+The studio leaves out an insert with a repeated id, a file that is not in `attached/`, that the person removed from the task and no chat message names, or that is not of its kind, a quote that the text of its PDF page does not hold, or word numbers the transcript does not hold, and the page says how many it left out.
 The quote is matched without regard to case, ё, line breaks and hyphens.
 An insert covers the words of its phrase that the cut plays, and at least 2 s.
 Two inserts never stand at once: the later one starts where the earlier one ends, and one left shorter than 1 s is dropped.
@@ -295,6 +295,21 @@ A key thought the reel cannot show stays in the list, marked «не встане
 
 When `texts.json` does not read, the list says so.
 
+## Rules
+
+A rule is a setting the studio applies to the whole reel at once.
+Only the pause rule exists: the seconds of silence a shortened pause keeps, from 0 to 0.5 s, and 0.2 s when the reel has no value.
+The step «Монтаж» lists the rule under «Правила» as a short phrase, such as «пауза остаётся 0,2 с».
+A step with no rule of its own shows no list.
+The person changes a rule by writing in the chat, such as «оставляй паузы подлиннее», and the chat model writes `rules.json`.
+The step then shows the change, every pause it moved and a button that returns the old value.
+The button undoes the last chat change only.
+The pin next to a rule keeps its value for the next reels, and a new reel starts with the pinned values.
+A pinned rule follows a chat change and its undo.
+Unpinning keeps the value in the current reel and drops it from the next ones.
+The pin and the undo button are off while a chat reply streams.
+The studio adds a note with the current pause value to each message the person sends, since the person can return a rule on the page and the earlier replies do not show it.
+
 ## Files
 
 Each video folder holds these next to `plan.json`:
@@ -306,6 +321,8 @@ Each video folder holds these next to `plan.json`:
 | `blocks.json` | The blocks and their takes, written by the chat model |
 | `inserts.json` | The pictures, clips and PDF pages to show over phrases, written by the chat model |
 | `texts.json` | The titles and key thoughts to show over phrases, written by the chat model |
+| `rules.json` | The rules of the reel, now `pause`, the seconds a shortened pause keeps. A new reel starts with the pinned rules, and the chat model may write it |
+| `rules-change.json` | The last rule change made from the chat, with the value before it, so one press can undo it. Only the studio writes it |
 | `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses, the subtitle corrections and the answers to the places to check and to the inserts |
 | `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |

@@ -1,6 +1,6 @@
 ---
 name: reels-plan
-description: The order of work on one Reels video, plan first and video second, and the formats of plan.json and blocks.json. Use at the start of every conversation about a video, when the person asks to cut, shorten, caption or assemble a video or to gather its blocks and takes, and before writing or changing plan.md, plan.json or blocks.json.
+description: The order of work on one Reels video, plan first and video second, and the formats of plan.json, blocks.json and rules.json. Use at the start of every conversation about a video, when the person asks to cut, shorten, caption or assemble a video, to gather its blocks and takes or to change a rule such as the length of pauses, and before writing or changing plan.md, plan.json, blocks.json or rules.json.
 ---
 
 # Plan first, video second
@@ -14,11 +14,13 @@ The studio changes no video until the person agrees with the plan.
 The plan covers the whole reel, and the person agrees with it once.
 After the yes, ask again only about the words on the screen, outside material and the face of the speaker.
 The original in `source/` is never changed, renamed or deleted.
+A rule the person names in the chat, as «Rules» below says, changes at once and needs no new plan, since the page shows what it changed and undoes it in one press.
 
 ## Order of work
 
 1. Look at what the project holds: list `source/` and `transcripts/`, and read `brief.md`, `plan.md` and `plan.json` when they exist.
    `brief.md` holds the brief the person wrote for this reel on the page. Never write it.
+   The studio also tells you the apps the person chose for the reel and the files the person attached to the task.
 2. When `source/` is empty, ask the person to upload the video on the «Загруженные видео» page, which «Загрузить видео» on the main page opens, add it to this reel with «Выбрать видео», and stop.
 3. When a video has no transcript yet, say that the studio is still listening to it and ask the person to write again in a few minutes.
 When a video is listed as the studio could not hear it, say that the person can press «Попробовать ещё раз» under the video to have the studio listen to it again.
@@ -39,7 +41,7 @@ When a video is listed as the studio could not hear it, say that the person can 
 ## After the yes
 
 The page saves the yes when the person presses «Согласна» or writes it as the whole message.
-Once your answer ends, the studio itself chooses the take ranked first in every block the person has not chosen, and shortens every pause in the chosen takes to 0.2 s.
+Once your answer ends, the studio itself chooses the take ranked first in every block the person has not chosen, and shortens every pause in the chosen takes to the seconds of the pause rule, 0.2 s unless `rules.json` names another.
 It then lists on the page what it did, with the reason of every chosen take.
 
 1. When `blocks.json` is missing or no longer matches the heard videos, gather the blocks now, without another question.
@@ -122,6 +124,24 @@ The person chooses another take, moves and deletes blocks and removes pauses on 
 - List every video of the project, with an empty `remove` for a video that stays whole.
 - Write the whole file again on every change, as valid JSON and nothing else.
 
+## Rules
+
+`rules.json` holds the rules of this reel, and the studio applies them to the whole reel at once.
+The page lists each rule under «Правила» on the stage it belongs to: the pause rule on «Монтаж».
+
+```json
+{ "pause": 0.4 }
+```
+
+- `pause` is the seconds of silence each shortened pause keeps, from 0 to 0.5. Without it the studio keeps 0.2 s.
+- When the person asks to change a rule in plain words, such as «оставляй паузы подлиннее» or «паузы покороче», write `rules.json` at once and ask nothing.
+- Read `rules.json` again before every change, since the person can return a rule on the page and the chat does not show it.
+- For «подлиннее» or «покороче» without a number, move the pause by 0.1 s from the value `rules.json` holds now, never from a value in an earlier message, and stay within 0 to 0.5.
+- Answer with the new rule in one short phrase, such as «пауза остаётся 0,3 с», and say that the stage «Монтаж» lists every pause it changed and a button that returns the old rule.
+- A single pause is not a rule: the person removes or returns one pause on the page, and you never write that.
+- The person keeps a rule for the next reels with the pin next to it, and you never write that either.
+- Keep every other key, and write the whole file again on every change, as valid JSON and nothing else.
+
 ## What plan.md holds
 
 The plan answers the brief and covers every stage the studio can do, in this order:
@@ -133,11 +153,13 @@ The plan answers the brief and covers every stage the studio can do, in this ord
 - The take of every block the studio will choose after the yes, with its reason, and every block with one take.
 - The pauses longer than half a second that the studio will shorten.
 - What to remove and why.
-- The players the reel is for, Instagram Reels, YouTube Shorts and TikTok unless the brief names fewer, and what differs between their versions.
+- The apps the person chose for the reel, by their names, and what differs between their versions.
+  Name only the chosen apps.
   Until the studio builds a file per player, the only difference it can name is where text may stand in each player.
+- Each file the person attached to the task, by its name: what it holds and where in the reel it goes.
 - Open questions for the person, only about the words on the screen, outside material and the face of the speaker.
 
-Write the plan as plain text with lines that start with a dash, since the page shows it as written.
+Write the plan as plain text with lines that start with a dash, since step «План» turns dash lines into a bulleted list.
 
 Check every text on screen against the reels-safe-area skill before showing the plan.
 

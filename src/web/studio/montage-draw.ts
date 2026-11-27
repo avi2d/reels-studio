@@ -51,6 +51,7 @@ const detailOf = (cut: Cut, loaded: Loaded, state: State, actions: PartActions):
   const numbers = new Map([...cut.parts.flatMap((part) => part.texts), ...cut.outside.texts].map(({ place, number }) => [place.planned.id, number]))
   const data = (words: PartData["words"]): PartData => ({
     count: cut.parts.length,
+    rest: cut.rest,
     transcripts: loaded.transcripts,
     edits: state.edits,
     pictures: loaded.view.pictures,

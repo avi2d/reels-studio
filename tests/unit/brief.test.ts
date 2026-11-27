@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { Schema } from "effect"
 import { afterYes, Approval, approves, planView } from "../../src/shared/brief.ts"
 import type { Transcript } from "../../src/shared/plan.ts"
-import { NO_EDITS, withChoice, withManualPauses, withPauses, type Block } from "../../src/shared/timeline.ts"
+import { NO_EDITS, PAUSE_REST, withChoice, withManualPauses, withPauses, type Block } from "../../src/shared/timeline.ts"
 
 const word = (start: number, end: number, text: string) => ({ start, end, text })
 
@@ -47,7 +47,7 @@ test("an approval saved before text snapshots stays approved without texts.json 
 })
 
 test("after the yes the studio pins the shown take as the person chose", () => {
-  const { edits, done } = afterYes([advance, deposit], NO_EDITS, transcripts)
+  const { edits, done } = afterYes([advance, deposit], NO_EDITS, transcripts, PAUSE_REST)
   expect(edits.chosen).toEqual([{ block: "advance", video: "a", from: 2 }, { block: "deposit", video: "a", from: 4 }])
   expect(edits.pauses).toEqual([{ video: "a", after: 3 }, { video: "a", after: 5 }])
   expect(done).toEqual([
@@ -59,26 +59,26 @@ test("after the yes the studio pins the shown take as the person chose", () => {
 
 test("after the yes a take the person chose stays chosen rather than going back to the first ranked", () => {
   const picked = withChoice(NO_EDITS, "advance", take(0, 1, "Смотрит в сторону"))
-  const { edits, done } = afterYes([advance], picked, transcripts)
+  const { edits, done } = afterYes([advance], picked, transcripts, PAUSE_REST)
   expect(edits.chosen).toEqual(picked.chosen)
   expect(done[0]).toEqual({ kind: "take", block: "Аванс", take: 2, of: 2, reason: "Смотрит в сторону" })
 })
 
 test("after the yes a pause the person returned stays long instead of being shortened again", () => {
   const returned = withManualPauses(NO_EDITS, [{ video: "a", after: 3 }], false)
-  const { edits, done } = afterYes([advance], returned, transcripts)
+  const { edits, done } = afterYes([advance], returned, transcripts, PAUSE_REST)
   expect(edits.chosen).toEqual([{ block: "advance", video: "a", from: 2 }])
   expect(edits.pauses).toEqual([])
   expect(done[done.length - 1]).toEqual({ kind: "pauses", count: 0, seconds: expect.closeTo(0, 6) })
 })
 
 test("a yes with no blocks changes nothing and says so instead of listing an empty cut", () => {
-  expect(afterYes([], NO_EDITS, transcripts)).toEqual({ edits: NO_EDITS, done: [{ kind: "no-blocks" }] })
+  expect(afterYes([], NO_EDITS, transcripts, PAUSE_REST)).toEqual({ edits: NO_EDITS, done: [{ kind: "no-blocks" }] })
 })
 
 test("after the yes the list counts pauses the studio already shortened instead of reporting none", () => {
   const shortened = withPauses(NO_EDITS, [{ video: "a", after: 3 }, { video: "a", after: 5 }], true)
-  const { edits, done } = afterYes([advance, deposit], shortened, transcripts)
+  const { edits, done } = afterYes([advance, deposit], shortened, transcripts, PAUSE_REST)
   expect(edits.pauses).toEqual(shortened.pauses)
   expect(done[done.length - 1]).toEqual({ kind: "pauses", count: 2, seconds: expect.closeTo(5.6, 6) })
 })

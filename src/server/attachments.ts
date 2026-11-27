@@ -6,7 +6,7 @@ import { about, attachedLines, deliveryNote, fileProbeArgs, frameArgs, frameTime
 import { isHdr, recognizerArgs } from "./media-commands.ts"
 import { clipPreview, markedPage, sharedViewOf, viewOf } from "./insert-files.ts"
 import { decodeTranscript, tool } from "./media-jobs.ts"
-import { readAttached } from "./timeline-files.ts"
+import { readAttached, readReachable } from "./attached-files.ts"
 import { Projects } from "./projects.ts"
 import { Settings } from "./settings.ts"
 
@@ -184,6 +184,8 @@ const UNAVAILABLE = "Файл недоступен. Попробуйте отк�
 
 export class Attachments extends Context.Service<Attachments, {
   readonly show: (dir: string, names: ReadonlyArray<string>) => Effect.Effect<ReadonlyArray<Shown>>
+  readonly examine: (dir: string, names: ReadonlyArray<string>) => Effect.Effect<void>
+  readonly allSeen: (dir: string, names: ReadonlyArray<string>) => Effect.Effect<boolean>
   readonly listed: (dir: string, current: ReadonlyArray<Shown>) => Effect.Effect<string>
   readonly cover: (id: string, name: string) => Effect.Effect<string, ApiError>
   readonly clip: (id: string, name: string) => Effect.Effect<string, ApiError>
@@ -210,8 +212,17 @@ export class Attachments extends Context.Service<Attachments, {
         })
       }, Effect.provideContext(context))
 
+      const examine = Effect.fn("Attachments.examine")(function*(dir: string, names: ReadonlyArray<string>) {
+        yield* Effect.forEach(names, (name) => lookAt(dir, name), { discard: true })
+      }, Effect.provideContext(context))
+
+      const allSeen = Effect.fn("Attachments.allSeen")(function*(dir: string, names: ReadonlyArray<string>) {
+        const looks = yield* Effect.forEach(names, (name) => savedLook(placeOf(dir, name)))
+        return looks.every((look) => look !== undefined)
+      }, Effect.provideContext(context))
+
       const listed = Effect.fn("Attachments.listed")(function*(dir: string, current: ReadonlyArray<Shown>) {
-        const names = yield* readAttached(dir)
+        const names = yield* readReachable(dir)
         const sent = new Map(current.map((file) => [file.name, file.about]))
         const seen = yield* Effect.forEach(names, (name) => Effect.gen(function*() {
           const hit = sent.get(name)
@@ -251,7 +262,7 @@ export class Attachments extends Context.Service<Attachments, {
         )
       }, orUnavailable("the page view failed", UNAVAILABLE), Effect.provideContext(context))
 
-      return Attachments.of({ show, listed, cover, clip, page })
+      return Attachments.of({ show, examine, allSeen, listed, cover, clip, page })
     })
   )
 }

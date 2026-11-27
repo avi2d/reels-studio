@@ -7,8 +7,9 @@ import { studioChat, type StudioChat } from "./chat.ts"
 import { rail, stepBody, stepName, topBar } from "./frame.ts"
 import { listView } from "./list.ts"
 import { montageStep } from "./montage.ts"
-import { planStep } from "./plan.ts"
+import { planStep, type TaskDraft } from "./plan.ts"
 import { recordsStep } from "./records.ts"
+import { hasRules, rulesPanel } from "./rules.ts"
 import { uploaderSection } from "./uploader.ts"
 
 type Page = { readonly kind: "list" } | { readonly kind: "reel"; readonly id: string; readonly step: Step | undefined }
@@ -16,7 +17,7 @@ type Page = { readonly kind: "list" } | { readonly kind: "reel"; readonly id: st
 const TITLE = "Студия Reels"
 
 const app = document.querySelector("#app") ?? document.body
-const drafts = new Map<string, string>()
+const drafts = new Map<string, TaskDraft>()
 let room: { readonly id: string; readonly chat: StudioChat } | undefined
 let leaveStep: (() => void) | undefined
 
@@ -95,6 +96,15 @@ const reelPage = (id: string, step: Step): Effect.Effect<void, Api.Failed> =>
         steps = fresh
         stage = now.stage
       })
+    }
+    if (hasRules(step)) {
+      const rules = rulesPanel(id, step, chat)
+      body.append(rules.node)
+      const leave = leaveStep
+      leaveStep = () => {
+        leave?.()
+        rules.dispose()
+      }
     }
     const setPageTitle = (title: string): void => { document.title = `${stepName(step)} · ${title} · ${TITLE}` }
     setPageTitle(project.title)

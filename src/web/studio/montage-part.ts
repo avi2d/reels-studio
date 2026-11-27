@@ -24,6 +24,7 @@ export interface PartActions extends AskActions {
 
 export interface PartData {
   readonly count: number
+  readonly rest: number
   readonly transcripts: ReadonlyMap<string, Transcript>
   readonly edits: Edits
   readonly pictures: ReadonlyArray<string>
@@ -82,7 +83,7 @@ const takeItem = (one: Placed, take: Take, data: PartData, actions: PartActions)
   const rank = one.block.takes.indexOf(take) + 1
   const name = rank === 1 ? "Лучший дубль" : `Дубль ${rank}`
   const transcript = data.transcripts.get(take.video)
-  const length = transcript === undefined ? undefined : lengthOf(playedSpans(transcript, take, data.edits))
+  const length = transcript === undefined ? undefined : lengthOf(playedSpans(transcript, take, data.edits, data.rest))
   const facts = [...length === undefined ? [] : [formatLength(length)], ...take.camera === undefined ? [] : [`в камеру ${Math.round(take.camera * 100)}%`], take.video]
   const chosen = take === one.take
   const key = `${one.block.id}:${take.video}:${take.from}`
