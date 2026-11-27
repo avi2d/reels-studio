@@ -1,4 +1,5 @@
 import { Effect } from "effect"
+import { safeFileName } from "../../shared/file-name.ts"
 import type { UploadedVideo } from "../../shared/library.ts"
 import * as Api from "../api.ts"
 import { oneAfterAnother } from "../queue.ts"
@@ -18,6 +19,7 @@ export type TakesChange =
   | { readonly kind: "moved" }
   | { readonly kind: "listed"; readonly uploaded: ReadonlyArray<UploadedVideo> }
   | { readonly kind: "unlisted" }
+  | { readonly kind: "known"; readonly name: string }
 
 const QUEUED: SendTake = { kind: "queued" }
 
@@ -42,17 +44,19 @@ const setTake = (key: string, take: SendTake): void => {
   changed({ kind: "moved" })
 }
 
-// The finished row leaves together with the fresh list, so the recording never vanishes between the two.
-const finish = (key: string): Effect.Effect<void> => {
-  const lookup: Effect.Effect<ReadonlyArray<UploadedVideo>, Api.Failed> = Api.getUploadedForTransfer.pipe(
+const libraryNow = (key: string): Effect.Effect<ReadonlyArray<UploadedVideo>, Api.Failed> =>
+  Api.getUploadedForTransfer.pipe(
     Effect.map(({ videos }) => videos),
     Effect.catchTag("Offline", () => Effect.gen(function*() {
       setTake(key, { kind: "offline" })
       yield* Effect.sleep("3 seconds")
-      return yield* lookup
+      return yield* libraryNow(key)
     }))
   )
-  return Effect.match(lookup, {
+
+// The finished row leaves together with the fresh list, so the recording never vanishes between the two.
+const finish = (key: string): Effect.Effect<void> =>
+  Effect.match(libraryNow(key), {
     onFailure: () => {
       sending = without(key)
       changed({ kind: "unlisted" })
@@ -62,19 +66,36 @@ const finish = (key: string): Effect.Effect<void> => {
       changed({ kind: "listed", uploaded })
     }
   })
-}
 
-const sendOne = ({ key, file }: Sending): Effect.Effect<void> =>
+const listedName = ({ key, file }: Sending): Effect.Effect<string | undefined> =>
+  libraryNow(key).pipe(
+    Effect.map((videos) => videos.find((video) => video.state !== "failed" && video.name === safeFileName(file.name) && video.size === file.size)?.name),
+    Effect.orElseSucceed((): string | undefined => undefined)
+  )
+
+const sendBytes = ({ key, file }: Sending): Effect.Effect<void> =>
   upload(libraryShelf, file, (progress) => {
     setTake(key, progress.waiting ? { kind: "offline" } : { kind: "sending", sent: progress.sent, total: progress.total })
   }).pipe(
     Effect.matchEffect({
       onFailure: (error) => Effect.sync(() => { setTake(key, { kind: "unsent", message: error.message }) }),
       onSuccess: () => finish(key)
-    }),
+    })
+  )
+
+const sendOne = (entry: Sending): Effect.Effect<void> =>
+  Effect.gen(function*() {
+    const listed = yield* listedName(entry)
+    if (listed !== undefined) {
+      sending = without(entry.key)
+      changed({ kind: "known", name: listed })
+      return
+    }
+    yield* sendBytes(entry)
+  }).pipe(
     Effect.catchDefect((defect) => Effect.sync(() => {
       console.error(defect)
-      setTake(key, { kind: "unsent", message: BROKEN })
+      setTake(entry.key, { kind: "unsent", message: BROKEN })
     }))
   )
 

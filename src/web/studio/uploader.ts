@@ -25,13 +25,14 @@ const layout = (onMove: () => void) => {
   const choose = button("quiet", "Загрузить видео", { click: () => { input.click() } }, "upload")
   const list = rowList({ "aria-label": "Загруженные записи" })
   const pages = pager("Страницы записей", onMove)
+  const notice = h("p", { class: "hint", role: "status", hidden: true })
   const problem = h("p", { class: "error", role: "alert" })
   const loadProblem = h("p", { class: "error", role: "alert" })
   const section = h("section", { class: "uploads", "aria-labelledby": "uploads-title" },
     h("div", { class: "head" }, heading, choose),
     h("p", { class: "hint" }, "Загрузите дубли один раз и добавляйте их в любой ролик на шаге «Записи». Можно выбрать все дубли сразу."),
-    list.node, pages.node, problem, loadProblem, input)
-  return { input, heading, list, pages, problem, loadProblem, section }
+    list.node, pages.node, notice, problem, loadProblem, input)
+  return { input, heading, list, pages, notice, problem, loadProblem, section }
 }
 
 interface Live {
@@ -103,7 +104,8 @@ function refresh(live: Live): void {
 }
 
 const listen = (live: Live): void => {
-  const { input, pages, problem, section } = live.view
+  const { input, pages, notice, problem, section } = live.view
+  const known = new Set<string>()
   const stop = onTakesChanged((change) => {
     if (!section.isConnected) {
       stop()
@@ -115,11 +117,20 @@ const listen = (live: Live): void => {
         live.generation += 1
         return settle(live, change.uploaded)
       case "unlisted": return refresh(live)
+      case "known":
+        known.add(change.name)
+        notice.textContent = [...known].map((name) => `Запись «${name}» уже загружена.`).join(" ")
+          + (known.size === 1 ? " Добавьте её в ролик на шаге «Записи»." : " Добавьте их в ролик на шаге «Записи».")
+        notice.hidden = false
+        return render(live)
     }
   })
   input.addEventListener("change", () => {
     const videos = [...input.files ?? []]
     input.value = ""
+    known.clear()
+    notice.textContent = ""
+    notice.hidden = true
     problem.textContent = ""
     pages.reset()
     sendTakes(videos)

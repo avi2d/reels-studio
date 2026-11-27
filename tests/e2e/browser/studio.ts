@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { ProductCheck } from "@avi2dg/checks/browser-hooks.ts"
 import { Schema } from "effect"
-import type { Page } from "playwright-core"
+import type { Page, Request } from "playwright-core"
 import { UploadedVideo } from "../../../src/shared/library.ts"
 import { STEPS, STUDIO_PATH, stepPath } from "../../../src/shared/page.ts"
 import { CHAT_PICTURE, CHAT_REPLY, FIRST_WORDS, PLAN_TASK, PLAN_TEXT, SLOW_MESSAGE, SOURCE_VIDEO, setting, timeout } from "./scenario.ts"
@@ -284,6 +284,42 @@ const finishedUploadStays: ProductCheck = {
   }
 }
 
+const repickedUploads: ProductCheck = {
+  name: "re-picked recordings all stay named in a neutral notice instead of overwriting one another or uploading again",
+  run: async (page) => {
+    page.setDefaultTimeout(timeout)
+    const names = await uploadOnStudioPage(page)
+    const before = await uploadsNow()
+    const uploads: Array<string> = []
+    const track = (request: Request): void => {
+      if (["POST", "PATCH"].includes(request.method()) && new URL(request.url()).pathname.startsWith("/api/library/uploads")) uploads.push(request.url())
+    }
+    page.on("request", track)
+    try {
+      const picker = page.locator('input[type="file"][name="records"]')
+      await picker.setInputFiles([join(setting("REELS_BROWSER_DIR"), SOURCE_VIDEO), await secondTake()])
+      await page.getByText(/second-take\.mp4.*уже загруж/u).waitFor()
+      const notice = page.getByRole("status").filter({ hasText: "уже загружена" })
+      assert.equal(await notice.count(), 1, "Skipped recordings must use a neutral status notice, not an error alert")
+      const message = await notice.innerText()
+      for (const name of names) assert(message.includes(`Запись «${name}» уже загружена.`), `The notice must name the skipped recording ${name}`)
+      assert(message.includes("Добавьте их в ролик на шаге «Записи»."), "The notice must explain where to add the recordings")
+      assert.equal(await page.getByRole("alert").filter({ hasText: /\S/u }).count(), 0, "Skipping known recordings is not an error")
+      assert.deepEqual(await uploadsNow(), before, "Re-picking must not add a hidden library copy")
+      assert.deepEqual(uploads, [], "Re-picking must send no upload requests")
+
+      await picker.setInputFiles(join(setting("REELS_BROWSER_DIR"), SOURCE_VIDEO))
+      await page.getByText(`Запись «${SOURCE_VIDEO}» уже загружена. Добавьте её в ролик на шаге «Записи».`, { exact: true }).waitFor()
+      assert.equal(await notice.innerText(), `Запись «${SOURCE_VIDEO}» уже загружена. Добавьте её в ролик на шаге «Записи».`, "A new pick must clear the previous skipped names")
+      assert.deepEqual(uploads, [], "A later re-pick must still send no bytes")
+    } finally {
+      page.off("request", track)
+      await removeUploads(names)
+    }
+    return { targets: ["every skipped recording named in a neutral notice", "new pick clears the old notice", "no duplicate uploads or library copies"], found: [] }
+  }
+}
+
 const addedRowsStayBusy: ProductCheck = {
   name: "an added recording stays unavailable until refreshed shelves arrive instead of flashing back as a free checkbox",
   run: async (page) => {
@@ -453,4 +489,4 @@ const builtStatus: ProductCheck = {
   }
 }
 
-export const studioChecks = [createListDelete, recordsStep, finishedUploadStays, addedRowsStayBusy, streamingChat, pageWidths, renamePersists, builtStatus] satisfies readonly ProductCheck[]
+export const studioChecks = [createListDelete, recordsStep, finishedUploadStays, repickedUploads, addedRowsStayBusy, streamingChat, pageWidths, renamePersists, builtStatus] satisfies readonly ProductCheck[]
