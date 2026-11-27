@@ -9,7 +9,7 @@ import type { StudioChat } from "./chat.ts"
 import { partActions } from "./montage-actions.ts"
 import { drawMontage, type Drawing } from "./montage-draw.ts"
 import { onMontageKeys } from "./montage-keys.ts"
-import { nextAsking } from "./montage-model.ts"
+import { nextAsking, questionKey } from "./montage-model.ts"
 import { freshState, montageScreen, paintPlaying, type Screen, type State } from "./montage-screen.ts"
 
 const GATHER = "Собери блоки из всех видео и расставь дубли от лучшего к худшему."
@@ -50,10 +50,12 @@ const shower = (screen: Screen, state: State, busy: () => boolean, draw: () => v
 
 const walkQuestions = (screen: Screen, state: State, select: (block: string) => void): void => {
   const cut = state.cut
-  const next = cut === undefined ? undefined : nextAsking(cut.questions, cut.parts, state.selected)
+  const next = cut === undefined ? undefined : nextAsking(cut.questions, state.lastQuestion)
   if (next === undefined) return
-  select(next)
-  const ask = screen.detail.querySelector<HTMLElement>(".ask--open")
+  const key = questionKey(next)
+  state.lastQuestion = key
+  select(next.part)
+  const ask = [...screen.detail.querySelectorAll<HTMLElement>("[data-ask]")].find((node) => node.dataset.ask === key)
   ask?.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })
   ask?.focus({ preventScroll: true })
 }
@@ -65,7 +67,15 @@ export const montageStep = (projectId: string, chat: StudioChat): MontageStep =>
     (video) => state.loaded?.view.faces.find((faces) => faces.video === video))
   screen.frame.prepend(player.node)
   const { hear, watch } = playback(state, () => state.cut?.reel ?? [], player)
-  const draw = (): void => { drawMontage(drawing) }
+  let redrawPending = false
+  const draw = (): void => {
+    if (isEditingWord(screen)) {
+      redrawPending = true
+      return
+    }
+    redrawPending = false
+    drawMontage(drawing)
+  }
   const saving = saver(projectId, screen.problem, () => state.edits, () => state.acked, (sent, merged) => {
     state.acked = merged
     state.edits = mergeEdits(sent, state.edits, merged)
@@ -85,10 +95,7 @@ export const montageStep = (projectId: string, chat: StudioChat): MontageStep =>
     state.selected = block
     draw()
   }
-  const loads = shower(screen, state, saving.busy, () => {
-    draw()
-    loads.showPending()
-  })
+  const loads = shower(screen, state, saving.busy, draw)
   const refresh = loader(projectId, screen.body, loads.show, () => ({ changes: state.changes, busy: saving.busy() }))
   const gather = (): void => { if (!chat.ask({ text: GATHER, finish: refresh })) chat.open() }
   const actions = partActions({ projectId, state, history, toast: screen.toast, hear })
@@ -98,10 +105,17 @@ export const montageStep = (projectId: string, chat: StudioChat): MontageStep =>
     else if (state.selected !== undefined && state.cut?.parts.some((part) => part.one.block.id === state.selected) === true) watch(state.selected)
   }
   screen.go.addEventListener("click", toggle)
-  screen.asks.addEventListener("click", () => { walkQuestions(screen, state, select) })
+  screen.asks.addEventListener("click", () => {
+    globalThis.setTimeout(() => { walkQuestions(screen, state, select) }, 0)
+  })
   screen.undo.addEventListener("click", history.undo)
   screen.redo.addEventListener("click", history.redo)
-  screen.detail.addEventListener("focusout", () => { globalThis.setTimeout(loads.showPending, 0) })
+  screen.detail.addEventListener("focusout", () => {
+    globalThis.setTimeout(() => {
+      loads.showPending()
+      if (redrawPending) draw()
+    }, 0)
+  })
   const stopKeys = onMontageKeys({ toggle, undo: history.undo })
   // The loader stops once its anchor leaves the page, so the first load waits until the caller has put the body on the page.
   queueMicrotask(() => {

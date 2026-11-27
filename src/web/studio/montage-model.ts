@@ -1,6 +1,6 @@
 import { textPlaces, type TextPlace } from "../../shared/captions.ts"
 import { insertPlaces, shownInserts, type InsertPlace, type Shown } from "../../shared/inserts.ts"
-import { cutOf, facesByVideo, placesOf, type Place } from "../../shared/joins.ts"
+import { cutOf, facesByVideo, placesOf, type Join, type Place } from "../../shared/joins.ts"
 import { lengthOf, type Transcript } from "../../shared/plan.ts"
 import { arrange, assemble, clipsOf, type Block, type Clip, type Edits, type Placed, type TimelinePage } from "../../shared/timeline.ts"
 
@@ -53,6 +53,12 @@ const blockAt = (reel: ReadonlyArray<Clip>, time: number): string | undefined =>
 const saidIn = (placed: ReadonlyArray<Placed>, video: string, word: number): string | undefined =>
   placed.find((one) => one.take.video === video && word >= one.take.from && word <= one.take.to)?.block.id
 
+export const joinKey = (join: Join): string => `${join.end.video}:${join.end.end}:${join.start.video}:${join.start.start}`
+
+export const questionKey = (question: Question): string => question.kind === "join"
+  ? `join:${joinKey(question.place.place.join)}`
+  : `insert:${question.place.place.planned.id}`
+
 export const isOpen = (question: Question): boolean => question.place.place.answer === undefined
 
 export const cutOfPage = (view: TimelinePage, timeline: Ready, transcripts: ReadonlyMap<string, Transcript>, edits: Edits): Cut => {
@@ -100,9 +106,7 @@ export const cutOfPage = (view: TimelinePage, timeline: Ready, transcripts: Read
   }
 }
 
-export const nextAsking = (questions: ReadonlyArray<Question>, parts: ReadonlyArray<Part>, current: string | undefined): string | undefined => {
-  const asking = new Set(questions.filter(isOpen).map((question) => question.part))
-  const order = parts.map((part) => part.one.block.id).filter((id) => asking.has(id))
-  const here = parts.findIndex((part) => part.one.block.id === current)
-  return order.find((id) => parts.findIndex((part) => part.one.block.id === id) > here) ?? order[0]
+export const nextAsking = (questions: ReadonlyArray<Question>, current: string | undefined): Question | undefined => {
+  const here = questions.findIndex((question) => questionKey(question) === current)
+  return questions.slice(here + 1).find(isOpen) ?? questions.find(isOpen)
 }

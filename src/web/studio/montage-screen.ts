@@ -25,6 +25,7 @@ export interface State {
   acked: Edits
   changes: number
   selected: string | undefined
+  lastQuestion: string | undefined
   playing: Playing | undefined
   base: number | undefined
   shown: ReadonlyArray<Shown>
@@ -36,7 +37,7 @@ export interface State {
 
 export const freshState = (): State => ({
   loaded: undefined, cut: undefined, edits: NO_EDITS, acked: NO_EDITS, changes: 0, selected: undefined, playing: undefined,
-  base: undefined, shown: [], overlay: [], words: [], drawn: "", pending: undefined
+  base: undefined, shown: [], overlay: [], words: [], drawn: "", pending: undefined, lastQuestion: undefined
 })
 
 export interface Screen {

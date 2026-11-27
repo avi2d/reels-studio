@@ -43,28 +43,29 @@ const headOf = (number: number, data: PartData, title: string, ...acts: Readonly
 const isFixed = (edits: Edits, block: string, video: string, index: number): boolean =>
   (edits.subtitles ?? []).some((one) => one.block === block && one.video === video && one.index === index)
 
-// The word becomes a field in place, so the redraw that follows the fix puts the focus back on the same word.
 const wordButton = (one: Placed, word: EditableSubtitle, data: PartData, actions: PartActions): HTMLElement => {
   const { block, take } = one
   const key = `word:${block.id}:${take.video}:${word.index}`
   const fixed = isFixed(data.edits, block.id, take.video, word.index)
   const node = h("button", { class: fixed ? "word word--fixed" : "word", type: "button", "data-key": key, title: fixed ? "Исправлено. Нажмите, чтобы изменить." : "Исправить слово" }, word.text)
   node.addEventListener("click", () => {
-    const field = h("input", { class: "word-field", value: word.text, "aria-label": `Исправить слово «${word.text}»`, "data-key": `${key}:field`, size: String(Math.max(3, word.text.length + 1)) })
+    const field = h("input", { class: "word-field", value: word.text, "aria-label": `Исправить слово «${word.text}»`, "data-key": key, size: String(Math.max(3, word.text.length + 1)) })
     let done = false
     const finish = (save: boolean): void => {
       if (done) return
       done = true
+      const focused = document.activeElement === field
       const text = field.value.trim()
+      field.blur()
+      field.replaceWith(node)
+      if (focused) node.focus()
       if (save && text !== "" && text !== word.text) actions.fixWord(block.id, take.video, word.index, text)
-      else field.replaceWith(node)
-      node.focus()
     }
     field.addEventListener("keydown", (event) => {
       if (event.key === "Enter") finish(true)
       if (event.key === "Escape") finish(false)
     })
-    field.addEventListener("blur", () => { finish(true) })
+    field.addEventListener("blur", () => { globalThis.setTimeout(() => { finish(true) }, 0) })
     node.replaceWith(field)
     field.focus()
     field.select()
@@ -125,8 +126,8 @@ const thoughtItem = ({ place, number }: Numbered<TextPlace>, data: PartData): HT
       ? `на словах «${data.phraseOf(place.planned)}» · ${formatLength(place.shown.start)}`
       : whyDropped(place, data.textNumber)))
 
-const screenGroup = (part: Part, data: PartData, actions: PartActions): ReadonlyArray<HTMLElement> =>
-  part.texts.length === 0 && part.inserts.length === 0 ? [] : [group("На экране",
+export const screenGroup = (part: Pick<Part, "texts" | "inserts">, data: PartData, actions: PartActions, title = "На экране"): ReadonlyArray<HTMLElement> =>
+  part.texts.length === 0 && part.inserts.length === 0 ? [] : [group(title,
     ...part.texts.length === 0 ? [] : [h("ul", { class: "thoughts" }, ...part.texts.map((place) => thoughtItem(place, data)))],
     ...part.inserts.map((place) => insertAsk(place, data.phraseOf(place.place.planned), data.pictures, actions)))]
 

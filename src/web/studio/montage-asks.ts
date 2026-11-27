@@ -7,7 +7,7 @@ import { formatLength } from "../format.ts"
 import { canReplace, doneOf as insertDone, KEEP, KEEP_CLIP, pictureChooser, REMOVE, REPLACE, SOUND } from "../timeline-inserts.ts"
 import { alignNote, COVER, doneOf as joinDone, offered, trimNote } from "../timeline-places.ts"
 import { visualName } from "../timeline-row.ts"
-import type { Numbered } from "./montage-model.ts"
+import { joinKey, type Numbered } from "./montage-model.ts"
 import { button } from "./ui.ts"
 
 export interface AskActions {
@@ -27,10 +27,8 @@ const choice = (label: string, does: string, on: boolean, key: string, run: () =
 const card = (open: boolean, key: string, ...children: ReadonlyArray<Node>): HTMLElement =>
   h("section", { class: open ? "ask ask--open" : "ask", "data-ask": key, tabindex: "-1" }, ...children)
 
-const edgeKey = (join: Join): string => `${join.end.video}:${join.end.end}:${join.start.video}:${join.start.start}`
-
 export const joinAsk = ({ place, number }: Numbered<Place>, inside: boolean, pictures: ReadonlyArray<string>, actions: AskActions): HTMLElement => {
-  const key = edgeKey(place.join)
+  const key = joinKey(place.join)
   const where = inside ? "на месте убранной паузы" : "с прошлой частью"
   const done = joinDone(place)
   const cover = place.answered?.answer === "cover" ? place.answered.picture : undefined

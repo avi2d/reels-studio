@@ -9,7 +9,7 @@ import { editableSubtitles } from "../timeline-subtitles.ts"
 import { icon } from "./icons.ts"
 import { cutOfPage, isOpen, type Cut } from "./montage-model.ts"
 import { notesOf } from "./montage-notes.ts"
-import { goneDetail, partDetail, type PartActions, type PartData } from "./montage-part.ts"
+import { goneDetail, partDetail, screenGroup, type PartActions, type PartData } from "./montage-part.ts"
 import { showClock, type Screen, type State } from "./montage-screen.ts"
 import { button } from "./ui.ts"
 
@@ -59,10 +59,13 @@ const detailOf = (cut: Cut, loaded: Loaded, state: State, actions: PartActions):
     textNumber: (planned) => numbers.get(planned.id) ?? 0
   })
   const part = cut.parts.find((one) => one.one.block.id === state.selected)
-  if (part !== undefined) return partDetail(part, data(editableSubtitles(loaded, state.edits, part.one)), actions)
   const gone = cut.gone.find((block) => block.id === state.selected)
-  if (gone !== undefined) return goneDetail(gone, chosenTake(gone, state.edits), data([]), actions)
-  return h("p", { class: "hint" }, "Все части убраны из ролика. Выберите убранную часть в списке и верните её.")
+  const detail = part !== undefined
+    ? partDetail(part, data(editableSubtitles(loaded, state.edits, part.one)), actions)
+    : gone !== undefined
+      ? goneDetail(gone, chosenTake(gone, state.edits), data([]), actions)
+      : h("p", { class: "hint" }, "Все части убраны из ролика. Выберите убранную часть в списке и верните её.")
+  return h("div", { class: "detail" }, detail, ...screenGroup(cut.outside, data([]), actions, "Не в ролике"))
 }
 
 const nextOf = (projectId: string, cut: Cut | undefined): ReadonlyArray<HTMLElement> => {
