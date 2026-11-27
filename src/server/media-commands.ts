@@ -89,13 +89,18 @@ const REEL_HEIGHT = 1920
 export const even = (value: number): number => Math.max(2, Math.ceil(value / 2) * 2)
 
 // One scale to the enlarged size and one crop, since cropping the 1080 by 1920 picture and scaling it again resamples twice.
-const reelVideo = (frame: Frame | undefined): string => {
-  if (frame === undefined) return `scale=${REEL_WIDTH}:${REEL_HEIGHT}:force_original_aspect_ratio=increase,crop=${REEL_WIDTH}:${REEL_HEIGHT},setsar=1`
-  const width = REEL_WIDTH * frame.scale
-  const height = REEL_HEIGHT * frame.scale
+// With a face the source is wider than the window, so scaling to the crop height makes the picture exactly `height` high.
+const reelVideo = (frame: Frame | undefined, faceLeft: number | undefined): string => {
+  if (frame === undefined && faceLeft === undefined) return `scale=${REEL_WIDTH}:${REEL_HEIGHT}:force_original_aspect_ratio=increase,crop=${REEL_WIDTH}:${REEL_HEIGHT},setsar=1`
+  const scale = frame?.scale ?? 1
+  const width = REEL_WIDTH * scale
+  const height = REEL_HEIGHT * scale
+  const left = frame?.left ?? 0
+  const top = frame?.top ?? 0
+  const across = faceLeft === undefined ? `(iw-${width.toFixed(2)})/2+${(left * height).toFixed(2)}` : ((faceLeft + left) * height).toFixed(2)
   return [
     `scale=${even(width)}:${even(height)}:force_original_aspect_ratio=increase`,
-    `crop=${REEL_WIDTH}:${REEL_HEIGHT}:(iw-${width.toFixed(2)})/2+${(frame.left * height).toFixed(2)}:(ih-${height.toFixed(2)})/2+${(frame.top * height).toFixed(2)}`,
+    `crop=${REEL_WIDTH}:${REEL_HEIGHT}:${across}:(ih-${height.toFixed(2)})/2+${(top * height).toFixed(2)}`,
     "setsar=1"
   ].join(",")
 }
@@ -108,10 +113,11 @@ const gainFilter = (gain: Rgb): string =>
 export interface Look {
   readonly hdr: boolean
   readonly gain: Rgb | undefined
+  readonly faceLeft?: number | undefined
 }
 
 const lookFilter = (look: Look, frame: Frame | undefined): string =>
-  [look.hdr ? TO_SDR : "format=yuv420p", ...(look.gain === undefined ? [] : [gainFilter(look.gain)]), reelVideo(frame)].join(",")
+  [look.hdr ? TO_SDR : "format=yuv420p", ...(look.gain === undefined ? [] : [gainFilter(look.gain)]), reelVideo(frame, look.faceLeft)].join(",")
 
 export const fadesOf = (seconds: number): string => {
   const fade = Math.min(FADE, seconds / 2)

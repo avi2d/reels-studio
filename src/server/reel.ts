@@ -1,5 +1,6 @@
 import { DateTime, Effect, FileSystem, Option, Schema, type PlatformError } from "effect"
 import { Face } from "../shared/face.ts"
+import { faceLeft } from "../shared/framing.ts"
 import { visualKey, type Shown } from "../shared/inserts.ts"
 import { Frame } from "../shared/timeline.ts"
 import { Levelling, LOUDNESS_TARGET, SERIES_STEP, VideoColour, type ColourView, type PictureSide, type ReelView } from "../shared/reel.ts"
@@ -14,7 +15,7 @@ import { joinArgs, type Streams } from "./sound-commands.ts"
 import { hasCaptions, type Captions } from "../shared/captions.ts"
 import { placeCaptions } from "./captions.ts"
 import { finishArgs } from "./finish-commands.ts"
-import { isHdrVideo, measureLoudness, measurePart, places, shortTermLoudness, tool } from "./media-jobs.ts"
+import { isHdrVideo, measureLoudness, measurePart, places, readGaze, shortTermLoudness, tool } from "./media-jobs.ts"
 import { readFace, retouchVideo } from "./face.ts"
 import { Settings } from "./settings.ts"
 import { colourJoins, coloursOf, gainOf, measureSkin } from "./skin.ts"
@@ -131,7 +132,9 @@ const lookOf = Effect.fnUntraced(function*(dir: string, video: string, colours: 
   const source = places({ dir, name: video }).source
   const tone = hdr.get(video) ?? (yield* isHdrVideo(source))
   hdr.set(video, tone)
-  return { source, look: { hdr: tone, gain: gainOf(colours, video) } }
+  const gaze = Option.getOrUndefined(yield* Effect.option(readGaze({ dir, name: video })))
+  const left = gaze?.aspect === undefined ? undefined : faceLeft(gaze.heads, gaze.aspect)
+  return { source, look: { hdr: tone, gain: gainOf(colours, video), faceLeft: left } }
 })
 
 const makePictures = Effect.fnUntraced(function*(dir: string, parts: ReadonlyArray<Part>, colours: ReadonlyArray<VideoColour>, hdr: Map<string, boolean>) {

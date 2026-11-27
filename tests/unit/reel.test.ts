@@ -36,6 +36,16 @@ test("a part of an HDR original is tone-mapped to BT.709 and cropped to 1080 by 
   expect(filterOf(partArgs("a.mov", part, { hdr: false, gain: undefined }, "libx264", "p.mov"), "-vf")).not.toContain("tonemap")
 })
 
+test("a face off centre in a horizontal source is kept in the crop, not cut off by a crop in the middle", () => {
+  const args = partArgs("a.mov", { video: "a.mov", start: 2, frames: 60 }, { hdr: false, gain: undefined, faceLeft: 1.11875 }, "libx264", "p.mov")
+  expect(filterOf(args, "-vf")).toContain("crop=1080:1920:2148.00:")
+})
+
+test("a horizontal source with no face found is still cropped in the middle", () => {
+  const args = partArgs("a.mov", { video: "a.mov", start: 2, frames: 60 }, { hdr: false, gain: undefined, faceLeft: undefined }, "libx264", "p.mov")
+  expect(filterOf(args, "-vf")).toContain("crop=1080:1920,setsar=1")
+})
+
 test("the sound of a two-second part fades in and fades out 0.06 s before its end, not at the end", () => {
   const args = partArgs("a.mov", { video: "a.mov", start: 0, frames: 60 }, { hdr: false, gain: undefined }, "libx264", "p.mov")
   expect(filterOf(args, "-af")).toBe("afade=t=in:d=0.06,afade=t=out:st=1.9400:d=0.06")
