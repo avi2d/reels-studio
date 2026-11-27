@@ -16,7 +16,8 @@ The studio decides the shape, the fade, the movement and the crop, so never ask 
 
 ## Order of work
 
-1. List `attached/` and read `attached-views/<file name>/look.json` and the views of every picture, video and PDF.
+1. Take the files from the studio's note "The files attached to this reel, in the chat or to the task".
+   For those files, read `attached-views/<file name>/look.json` and the views of every picture, video and PDF.
    For a PDF, read `attached-views/<file name>/text.txt`, which holds the text of every page under `Page N:`.
    A sound file or a document that is not a PDF cannot be an insert.
 2. Read `blocks.json` and the transcript of every video the blocks name.

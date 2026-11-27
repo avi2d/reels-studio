@@ -5,32 +5,48 @@ import { join } from "node:path"
 import { BunServices } from "@effect/platform-bun"
 import { Effect } from "effect"
 import { readReachable } from "../../src/server/attached-files.ts"
+import { readTimeline } from "../../src/server/timeline-files.ts"
 
-const inReel = async (files: Record<string, string>): Promise<ReadonlyArray<string>> => {
+const inReel = async (files: Record<string, string>) => {
   const dir = await mkdtemp(join(tmpdir(), "attached-files-"))
   try {
     await mkdir(join(dir, "attached"))
+    await mkdir(join(dir, "transcripts"))
     for (const name of ["chat.png", "logo.png", "old.png"]) await writeFile(join(dir, "attached", name), "png")
     for (const [name, text] of Object.entries(files)) await writeFile(join(dir, name), text)
-    return await Effect.runPromise(readReachable(dir).pipe(Effect.provide(BunServices.layer)))
+    return await Effect.runPromise(Effect.gen(function*() {
+      const reachable = yield* readReachable(dir)
+      const timeline = yield* readTimeline(dir, ["video.mp4"], new Map())
+      return { reachable, timeline }
+    }).pipe(Effect.provide(BunServices.layer)))
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
 }
 
-test("a task file removed from the task does not reach the plan or the inserts", async () => {
-  const reachable = await inReel({ "task.json": JSON.stringify({ apps: ["Instagram"], files: ["logo.png"] }) })
+test("a removed task file is excluded from timeline pictures and planned inserts", async () => {
+  const kept = { id: "kept", picture: "logo.png", video: "video.mp4", from: 0, to: 0, reason: "Logo" }
+  const { reachable, timeline } = await inReel({
+    "task.json": JSON.stringify({ apps: ["Instagram"], files: ["logo.png"] }),
+    "transcripts/video.mp4.json": JSON.stringify({ duration: 3, words: [{ start: 0, end: 3, text: "Logo" }] }),
+    "inserts.json": JSON.stringify({ inserts: [kept, { ...kept, id: "removed", picture: "old.png" }] })
+  })
   expect(reachable).toEqual(["logo.png"])
+  expect(timeline.pictures).toEqual(["logo.png"])
+  expect(timeline.inserts).toEqual({ state: "ready", planned: [kept], dropped: 1 })
 })
 
 test("a file a chat message still carries stays reachable after it leaves the task", async () => {
-  const reachable = await inReel({
+  const { reachable, timeline } = await inReel({
     "task.json": JSON.stringify({ apps: ["Instagram"], files: [] }),
     "chat.jsonl": JSON.stringify({ role: "user", text: "see this", files: ["chat.png"] }) + "\n"
   })
   expect(reachable).toEqual(["chat.png"])
+  expect(timeline.pictures).toEqual(["chat.png"])
 })
 
 test("a file in attached that neither the task nor a chat message names is not reachable", async () => {
-  expect(await inReel({})).toEqual([])
+  const { reachable, timeline } = await inReel({})
+  expect(reachable).toEqual([])
+  expect(timeline.pictures).toEqual([])
 })
