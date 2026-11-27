@@ -142,7 +142,7 @@ const readCrops = Effect.fnUntraced(function*(dir: string, parts: ReadonlyArray<
 
 const sameCrops = (built: ReadonlyArray<CropWindow> | undefined, current: ReadonlyArray<CropWindow>): boolean =>
   built !== undefined && built.length === current.length && built.every((crop, index) =>
-    crop.video === current[index]?.video && crop.left === current[index]?.left)
+    crop.video === current[index].video && crop.left === current[index].left)
 
 const lookOf = Effect.fnUntraced(function*(dir: string, video: string, colours: ReadonlyArray<VideoColour>, hdr: Map<string, boolean>, crops: ReadonlyArray<CropWindow>) {
   const source = places({ dir, name: video }).source
