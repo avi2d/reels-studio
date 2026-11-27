@@ -67,10 +67,10 @@ const finish = (key: string): Effect.Effect<void> =>
     }
   })
 
-const listedAlready = ({ key, file }: Sending): Effect.Effect<boolean> =>
+const listedName = ({ key, file }: Sending): Effect.Effect<string | undefined> =>
   libraryNow(key).pipe(
-    Effect.map((videos) => videos.some((video) => video.state !== "failed" && video.name === safeFileName(file.name) && video.size === file.size)),
-    Effect.orElseSucceed(() => false)
+    Effect.map((videos) => videos.find((video) => video.state !== "failed" && video.name === safeFileName(file.name) && video.size === file.size)?.name),
+    Effect.orElseSucceed((): string | undefined => undefined)
   )
 
 const sendBytes = ({ key, file }: Sending): Effect.Effect<void> =>
@@ -85,9 +85,10 @@ const sendBytes = ({ key, file }: Sending): Effect.Effect<void> =>
 
 const sendOne = (entry: Sending): Effect.Effect<void> =>
   Effect.gen(function*() {
-    if (yield* listedAlready(entry)) {
+    const listed = yield* listedName(entry)
+    if (listed !== undefined) {
       sending = without(entry.key)
-      changed({ kind: "known", name: entry.file.name })
+      changed({ kind: "known", name: listed })
       return
     }
     yield* sendBytes(entry)
