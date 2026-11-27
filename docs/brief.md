@@ -14,7 +14,9 @@ A brief holds at most 4,000 characters.
 
 ## The plan and the yes
 
-The chat model writes the plan to `plan.md`, and the card «План ролика» shows it as written.
+The chat model writes the plan to `plan.md`.
+On step «План», the card «План ролика» hides a repeated first line of «План ролика», with or without a colon.
+It turns dash lines into a bulleted list and keeps indented items nested.
 The plan covers every stage the studio can do, the takes, the pauses, the chosen apps, the task files and the open questions.
 The person agrees by pressing «Согласна» under the plan, or by writing «Согласна» or «Согласен» as the whole message.
 After the chat model answers that message, or the request is cut, the studio works in the background without another question:

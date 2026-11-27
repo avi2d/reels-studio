@@ -159,7 +159,7 @@ The plan answers the brief and covers every stage the studio can do, in this ord
 - Each file the person attached to the task, by its name: what it holds and where in the reel it goes.
 - Open questions for the person, only about the words on the screen, outside material and the face of the speaker.
 
-Write the plan as plain text with lines that start with a dash, since the page shows it as written.
+Write the plan as plain text with lines that start with a dash, since step «План» turns dash lines into a bulleted list.
 
 Check every text on screen against the reels-safe-area skill before showing the plan.
 
