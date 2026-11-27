@@ -37,7 +37,11 @@ An approval saved without a text snapshot stays valid while the project has no `
 ## The new studio at `/new`
 
 On step «План», «Как в прошлый раз» fills an empty task with the last task from another reel.
-«Составить план» saves the task and asks for a plan.
+Under the task, «Куда» holds a button for each app: Instagram, YouTube Shorts and TikTok.
+A new reel goes to every app, and a plan needs at least one.
+«Файлы» lists the files for the task, and «Приложить» adds up to 10.
+«Составить план» uploads the new files, saves the task, the apps and the files, and asks for a plan.
+The chat model gets the chosen apps and the task files with every message, and the plan names them.
 After you press «Да, делайте», the studio finishes the work and opens «Монтаж».
 To see what the studio did, return to «План».
 
@@ -52,5 +56,6 @@ Files for the chat go through «Приложить файлы».
 | Path | What it holds |
 | --- | --- |
 | `brief.md` | The brief the person wrote |
+| `task.json` | The apps the person chose and the names of the task files in `attached/` |
 | `plan.md` | The plan of the whole reel, written by the chat model |
 | `approval.json` | The approved plan, the `texts.json` snapshot or null when absent, the time of the yes, and what the studio did |

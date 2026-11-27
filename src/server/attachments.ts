@@ -184,6 +184,7 @@ const UNAVAILABLE = "Файл недоступен. Попробуйте отк�
 
 export class Attachments extends Context.Service<Attachments, {
   readonly show: (dir: string, names: ReadonlyArray<string>) => Effect.Effect<ReadonlyArray<Shown>>
+  readonly examine: (dir: string, names: ReadonlyArray<string>) => Effect.Effect<void>
   readonly listed: (dir: string, current: ReadonlyArray<Shown>) => Effect.Effect<string>
   readonly cover: (id: string, name: string) => Effect.Effect<string, ApiError>
   readonly clip: (id: string, name: string) => Effect.Effect<string, ApiError>
@@ -208,6 +209,10 @@ export class Attachments extends Context.Service<Attachments, {
           const note = deliveryNote(look.kind, shared, look.shown, delivered.length, read.unreadable)
           return { name, about: note === "" ? look.summary : `${look.summary} ${note}`, images: delivered.map((pair) => pair.image) }
         })
+      }, Effect.provideContext(context))
+
+      const examine = Effect.fn("Attachments.examine")(function*(dir: string, names: ReadonlyArray<string>) {
+        yield* Effect.forEach(names, (name) => lookAt(dir, name), { discard: true })
       }, Effect.provideContext(context))
 
       const listed = Effect.fn("Attachments.listed")(function*(dir: string, current: ReadonlyArray<Shown>) {
@@ -251,7 +256,7 @@ export class Attachments extends Context.Service<Attachments, {
         )
       }, orUnavailable("the page view failed", UNAVAILABLE), Effect.provideContext(context))
 
-      return Attachments.of({ show, listed, cover, clip, page })
+      return Attachments.of({ show, examine, listed, cover, clip, page })
     })
   )
 }

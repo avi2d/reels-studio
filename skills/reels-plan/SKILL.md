@@ -19,6 +19,7 @@ The original in `source/` is never changed, renamed or deleted.
 
 1. Look at what the project holds: list `source/` and `transcripts/`, and read `brief.md`, `plan.md` and `plan.json` when they exist.
    `brief.md` holds the brief the person wrote for this reel on the page. Never write it.
+   The studio also tells you the apps the person chose for the reel and the files the person attached to the task.
 2. When `source/` is empty, ask the person to upload the video on the «Загруженные видео» page, which «Загрузить видео» on the main page opens, add it to this reel with «Выбрать видео», and stop.
 3. When a video has no transcript yet, say that the studio is still listening to it and ask the person to write again in a few minutes.
 When a video is listed as the studio could not hear it, say that the person can press «Попробовать ещё раз» under the video to have the studio listen to it again.
@@ -133,8 +134,10 @@ The plan answers the brief and covers every stage the studio can do, in this ord
 - The take of every block the studio will choose after the yes, with its reason, and every block with one take.
 - The pauses longer than half a second that the studio will shorten.
 - What to remove and why.
-- The players the reel is for, Instagram Reels, YouTube Shorts and TikTok unless the brief names fewer, and what differs between their versions.
+- The apps the person chose for the reel, by their names, and what differs between their versions.
+  Name only the chosen apps.
   Until the studio builds a file per player, the only difference it can name is where text may stand in each player.
+- Each file the person attached to the task, by its name: what it holds and where in the reel it goes.
 - Open questions for the person, only about the words on the screen, outside material and the face of the speaker.
 
 Write the plan as plain text with lines that start with a dash, since the page shows it as written.
