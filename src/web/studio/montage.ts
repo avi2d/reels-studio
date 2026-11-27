@@ -52,6 +52,24 @@ const walkQuestions = (screen: Screen, state: State, select: (block: string) => 
   ask?.focus({ preventScroll: true })
 }
 
+const onPointerEnd = (release: () => void): (() => void) => {
+  document.addEventListener("pointerup", release, true)
+  document.addEventListener("pointercancel", release, true)
+  return () => {
+    document.removeEventListener("pointerup", release, true)
+    document.removeEventListener("pointercancel", release, true)
+  }
+}
+
+const refreshAfterChat = (chat: StudioChat, refresh: () => void): (() => void) => {
+  let last = chat.status()
+  return chat.watch(() => {
+    const before = last
+    last = chat.status()
+    if (before === "busy" && last !== "busy") refresh()
+  })
+}
+
 export const montageStep = (projectId: string, chat: StudioChat): MontageStep => {
   const state = freshState()
   const screen = montageScreen(projectId)
@@ -118,15 +136,9 @@ export const montageStep = (projectId: string, chat: StudioChat): MontageStep =>
       drawDeferred()
     }, 0)
   }
-  document.addEventListener("pointerup", release, true)
-  document.addEventListener("pointercancel", release, true)
+  const stopPointer = onPointerEnd(release)
   const stopKeys = onMontageKeys({ toggle, undo: history.undo })
-  let lastChat = chat.status()
-  const stopWatching = chat.watch(() => {
-    const before = lastChat
-    lastChat = chat.status()
-    if (before === "busy" && lastChat !== "busy") refresh()
-  })
+  const stopWatching = refreshAfterChat(chat, refresh)
   // The loader stops once its anchor leaves the page, so the first load waits until the caller has put the body on the page.
   queueMicrotask(() => {
     refresh()
@@ -138,8 +150,7 @@ export const montageStep = (projectId: string, chat: StudioChat): MontageStep =>
     dispose: () => {
       stopWatching()
       stopKeys()
-      document.removeEventListener("pointerup", release, true)
-      document.removeEventListener("pointercancel", release, true)
+      stopPointer()
       player.stop()
       void saving.flush()
     }
