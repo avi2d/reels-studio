@@ -1,2 +1,2 @@
 commands:
-  lint: "bun install --frozen-lockfile && bun run lint"
+  lint: "bun install --frozen-lockfile && bun run lint && bun run typecheck"
