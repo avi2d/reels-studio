@@ -16,6 +16,7 @@ export interface TaskDraft {
 const ASK = "Составь один план всего ролика по заданию."
 const YES = "Согласна"
 const POLL_MS = 1000
+const NO_RECORDING = "Сначала добавьте запись на шаге «Записи»."
 
 const priorBrief = Effect.fnUntraced(function*(id: string) {
   const { projects } = yield* Api.listProjects
@@ -26,6 +27,10 @@ const priorBrief = Effect.fnUntraced(function*(id: string) {
   }
   return ""
 })
+
+const hasRecording = (id: string): Effect.Effect<void, Api.Failed> =>
+  Effect.flatMap(Api.getVideos(id), ({ videos }) =>
+    videos.length === 0 ? Effect.fail(new Api.Failed({ message: NO_RECORDING })) : Effect.void)
 
 interface StepOptions {
   readonly chat: Pick<StudioChat, "status" | "watch" | "ask" | "open">
@@ -195,7 +200,8 @@ class PlanFlow {
       this.action = "making"
       if (!chat.ask({
         text: ASK,
-        prepare: this.files.send.pipe(
+        prepare: hasRecording(this.id).pipe(
+          Effect.andThen(this.files.send),
           Effect.flatMap((files) => Api.saveBrief(this.id, { text, apps, files })),
           Effect.map((fresh) => {
             this.current = fresh
