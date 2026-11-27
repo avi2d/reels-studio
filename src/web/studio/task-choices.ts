@@ -68,6 +68,42 @@ interface FileRow {
   readonly reloadCovers: () => void
 }
 
+const savedNames = new WeakMap<File, string>()
+
+const known = (entry: TaskEntry): TaskEntry => {
+  const name = entry.kind === "picked" ? savedNames.get(entry.file) : undefined
+  return name === undefined ? entry : { kind: "saved", name }
+}
+
+const figureOf = (projectId: string, entry: TaskEntry): HTMLElement => {
+  const kind = kindOfName(entryName(entry))
+  const cover = entry.kind === "saved" && HAS_COVER.has(kind) ? Api.coverUrl(projectId, entry.name) : undefined
+  return thumb(kind, cover, () => icon("file"))
+}
+
+const sendRow = (projectId: string, uploaded: WeakMap<File, string>, row: Row): Effect.Effect<TaskFile, Api.Failed> => {
+  if (row.entry.kind === "saved") return Effect.succeed({ name: row.entry.name })
+  const { file } = row.entry
+  const done = uploaded.get(file)
+  if (done !== undefined) return Effect.succeed({ upload: done })
+  return upload(attachmentShelf(projectId), file, (progress) => {
+    row.status.textContent = progress.waiting ? "ждёт связи" : `${Math.floor((progress.sent / progress.total) * 100)}%`
+  }).pipe(Effect.map((url) => {
+    const id = url.split("/").at(-1) ?? ""
+    uploaded.set(file, id)
+    row.status.textContent = formatSize(file.size)
+    return { upload: id }
+  }), Effect.tapError(() => Effect.sync(() => { row.status.textContent = formatSize(file.size) })))
+}
+
+const rememberNames = (entries: ReadonlyArray<TaskEntry>, names: ReadonlyArray<string>): void => {
+  if (entries.length !== names.length) return
+  entries.forEach((entry, index) => {
+    const name = names[index]
+    if (entry.kind === "picked" && name !== undefined) savedNames.set(entry.file, name)
+  })
+}
+
 export const fileRow = (projectId: string, initial: ReadonlyArray<TaskEntry>, changed: () => void, onProblem: (message: string) => void): FileRow => {
   const list = h("ul", { class: "studio-plan__files", "aria-label": "Файлы к заданию" })
   const input = h("input", { class: "visually-hidden", type: "file", accept: ACCEPTED_FILES, multiple: true, tabindex: "-1", "aria-hidden": "true" })
@@ -82,14 +118,14 @@ export const fileRow = (projectId: string, initial: ReadonlyArray<TaskEntry>, ch
     for (const row of rows) row.remove.disabled = locked
   }
 
-  const rowOf = (entry: TaskEntry): Row => {
+  const rowOf = (given: TaskEntry): Row => {
+    const entry = known(given)
     const name = entryName(entry)
     const kind = kindOfName(name)
-    const cover = entry.kind === "saved" && HAS_COVER.has(kind) ? Api.coverUrl(projectId, name) : undefined
     const status = h("span", { class: "studio-plan__file-note" }, entry.kind === "saved" ? KIND_NAMES[kind] : formatSize(entry.file.size))
     const remove = button("plain", "", { class: "btn btn--plain btn--icon", title: `Убрать ${name}`, "aria-label": `Убрать ${name}` }, "close")
     const node = h("li", { class: "studio-plan__file" },
-      thumb(kind, cover, () => icon("file")),
+      figureOf(projectId, entry),
       h("span", { class: "studio-plan__file-text" }, h("b", {}, name), status),
       remove)
     const row: Row = { entry, node, status, remove }
@@ -127,21 +163,6 @@ export const fileRow = (projectId: string, initial: ReadonlyArray<TaskEntry>, ch
     input.value = ""
   })
 
-  const sendRow = (row: Row): Effect.Effect<TaskFile, Api.Failed> => {
-    if (row.entry.kind === "saved") return Effect.succeed({ name: row.entry.name })
-    const { file } = row.entry
-    const done = uploaded.get(file)
-    if (done !== undefined) return Effect.succeed({ upload: done })
-    return upload(attachmentShelf(projectId), file, (progress) => {
-      row.status.textContent = progress.waiting ? "ждёт связи" : `${Math.floor((progress.sent / progress.total) * 100)}%`
-    }).pipe(Effect.map((url) => {
-      const id = url.split("/").at(-1) ?? ""
-      uploaded.set(file, id)
-      row.status.textContent = formatSize(file.size)
-      return { upload: id }
-    }), Effect.tapError(() => Effect.sync(() => { row.status.textContent = formatSize(file.size) })))
-  }
-
   const showEntries = (entries: ReadonlyArray<TaskEntry>): void => {
     const fresh = entries.map(rowOf)
     rows.splice(0, rows.length, ...fresh)
@@ -157,8 +178,23 @@ export const fileRow = (projectId: string, initial: ReadonlyArray<TaskEntry>, ch
       locked = on
       refresh()
     },
-    send: Effect.suspend(() => Effect.forEach([...rows], sendRow)),
-    settle: (names) => { if (!sameEntries(rows.map((row) => row.entry), names)) showEntries(savedEntries(names)) },
-    reloadCovers: () => { if (rows.every((row) => row.entry.kind === "saved")) showEntries(rows.map((row) => row.entry)) }
+    send: Effect.suspend(() => Effect.forEach([...rows], (row) => sendRow(projectId, uploaded, row))),
+    settle: (names) => {
+      rememberNames(rows.map((row) => row.entry), names)
+      if (!sameEntries(rows.map((row) => row.entry), names)) showEntries(savedEntries(names))
+    },
+    reloadCovers: () => {
+      rows.forEach((row, index) => {
+        const figure = row.node.firstElementChild
+        if (known(row.entry) !== row.entry) {
+          const fresh = rowOf(row.entry)
+          row.node.replaceWith(fresh.node)
+          rows[index] = fresh
+        } else if (row.entry.kind === "saved" && figure?.matches("span.thumb") === true) {
+          figure.replaceWith(figureOf(projectId, row.entry))
+        }
+      })
+      refresh()
+    }
   }
 }

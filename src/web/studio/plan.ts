@@ -163,8 +163,6 @@ class PlanFlow {
 
   private madePlan(reply: Reply): void {
     if (this.left) return
-    // A task file gets its cover only while the chat turn examines it, after the rows were built.
-    this.files.reloadCovers()
     if (reply.kind !== "answered") {
       this.canApprove = false
       this.action = undefined
@@ -222,7 +220,11 @@ class PlanFlow {
     const stopWatching = chat.watch(() => {
       const before = lastChat
       lastChat = chat.status()
-      if (before === "busy" && lastChat === "ready" && this.action === undefined) this.refresh()
+      if (before === "busy" && lastChat === "ready") {
+        // A task file gets its cover only while the chat turn examines it, after the rows were built.
+        this.files.reloadCovers()
+        if (this.action === undefined) this.refresh()
+      }
       this.render()
     })
     let cancelReuse: (() => void) | undefined
