@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test"
-import type { Clip } from "../../src/shared/timeline.ts"
+import type { Clip, VideoFaces } from "../../src/shared/timeline.ts"
 
 const montageModulePath = "../../src/web/montage.ts?audio-tests"
 const { montage }: typeof import("../../src/web/montage.ts") = await import(montageModulePath)
@@ -61,7 +61,7 @@ class FakeVideo {
   paused = true
   isConnected = true
   readyState = 0
-  style = { transform: "" }
+  style = { transform: "", objectPosition: "" }
   srcSets = 0
   readonly classList = { toggle: (): void => {} }
   private innerSrc = ""
@@ -100,7 +100,7 @@ class FakeVideo {
   }
 }
 
-const setup = (): { player: ReturnType<typeof montage>; srcSets: () => number; failShown: () => void; videos: () => ReadonlyArray<FakeVideo>; tick: () => void } => {
+const setup = (facesFor: (video: string) => VideoFaces | undefined = () => undefined): { player: ReturnType<typeof montage>; srcSets: () => number; failShown: () => void; videos: () => ReadonlyArray<FakeVideo>; tick: () => void } => {
   const videos: Array<FakeVideo> = []
   const createElement = (tag: string): FakeVideo => {
     const made = new FakeVideo()
@@ -110,7 +110,7 @@ const setup = (): { player: ReturnType<typeof montage>; srcSets: () => number; f
   Object.assign(globalThis, { document: { createElement } })
   const frames: Array<() => void> = []
   Object.assign(globalThis, { requestAnimationFrame: (next: () => void) => frames.push(next) })
-  const player = montage("project", () => {}, () => 0)
+  const player = montage("project", () => {}, () => 0, facesFor)
   return {
     player,
     srcSets: () => videos.reduce((sum, video) => sum + video.srcSets, 0),
@@ -197,6 +197,68 @@ test("a preview that fails mid-montage unplugs its source instead of leaving it 
   expect(source.next).toBeDefined()
   failShown()
   expect(source.next).toBeUndefined()
+})
+
+const horizontalFaces = (x: number, aspect = 16 / 9): VideoFaces => ({
+  video: "a", step: 0.2, gaze: ["camera"], heads: [{ x, y: 0.4, size: 0.2 }], aspect
+})
+
+test("show and play centre the off-axis face rather than the horizontal source", () => {
+  const { player, videos } = setup(() => horizontalFaces(1.4))
+  player.show(clip("a", 0))
+  const video = videos()[0]
+  if (video === undefined) throw new Error("No preview was created")
+  video.readyState = 2
+  video.fire("loadedmetadata")
+  const percentage = Number.parseFloat(video.style.objectPosition)
+  const left = (16 / 9 - 9 / 16) * percentage / 100
+  expect(left).toBeCloseTo(1.11875, 9)
+  expect((1.4 - left) / (9 / 16)).toBeCloseTo(0.5, 9)
+  player.play([clip("a", 0)])
+  expect(Number.parseFloat(video.style.objectPosition)).toBeCloseTo(percentage, 9)
+})
+
+test("zoom and unaligned previews share the face window instead of zooming the source centre", () => {
+  const { player, videos } = setup(() => horizontalFaces(1.4))
+  const frame = { scale: 1.1, left: 0.02, top: 0.03 }
+  player.show({ ...clip("a", 0), frame })
+  const video = videos()[0]
+  if (video === undefined) throw new Error("No preview was created")
+  video.readyState = 2
+  video.fire("loadedmetadata")
+  const position = video.style.objectPosition
+  expect((16 / 9 - 9 / 16) * Number.parseFloat(position) / 100).toBeCloseTo(1.11875, 9)
+  expect(video.style.transform).toBe(`scale(1.1) translate(${-0.02 / (9 / 16) * 100}%, -3%)`)
+  player.show(clip("a", 0))
+  expect(video.style.objectPosition).toBe(position)
+  expect(video.style.transform).toBe("")
+})
+
+test("cached and preloaded videos update their crop instead of retaining an earlier measurement", () => {
+  let faces = horizontalFaces(1.4)
+  const { player, videos } = setup(() => faces)
+  player.play([clip("a", 0), clip("b", 0)])
+  for (const video of videos()) {
+    video.readyState = 2
+    video.fire("loadedmetadata")
+    expect((16 / 9 - 9 / 16) * Number.parseFloat(video.style.objectPosition) / 100).toBeCloseTo(1.11875, 9)
+  }
+  player.stop()
+  faces = horizontalFaces(0.1)
+  player.show(clip("a", 0))
+  expect(videos()[0]?.style.objectPosition).toBe("0% 50%")
+  faces = horizontalFaces(1.77)
+  player.show(clip("a", 0))
+  expect(videos()[0]?.style.objectPosition).toBe("100% 50%")
+  faces = { ...faces, heads: [] }
+  player.show(clip("a", 0))
+  expect(videos()[0]?.style.objectPosition).toBe("50% 50%")
+  faces = horizontalFaces(0.3, 9 / 16)
+  player.show(clip("a", 0))
+  expect(videos()[0]?.style.objectPosition).toBe("50% 50%")
+  faces = { video: "a", step: 0.2, gaze: ["camera"], heads: [{ x: 1.4, y: 0.4, size: 0.2 }] }
+  player.show(clip("a", 0))
+  expect(videos()[0]?.style.objectPosition).toBe("50% 50%")
 })
 
 test("a preview that fails while shown loads again on the next show", () => {

@@ -1,6 +1,6 @@
 import { Data, Effect } from "effect"
-import { VIEW_WIDTH } from "../shared/framing.ts"
-import { fadeGain, type Clip, type Frame } from "../shared/timeline.ts"
+import { faceLeft, VIEW_WIDTH } from "../shared/framing.ts"
+import { fadeGain, type Clip, type Frame, type VideoFaces } from "../shared/timeline.ts"
 import * as Api from "./api.ts"
 import { h } from "./dom.ts"
 
@@ -122,12 +122,18 @@ interface ScreenEvents {
 }
 
 // One element per source video: swapping the src of a single element blanks it to black until the new file loads.
-const screenOf = (projectId: string, events: ScreenEvents): Screen => {
+const screenOf = (projectId: string, events: ScreenEvents, facesFor: (video: string) => VideoFaces | undefined): Screen => {
   const node = h("div", { class: "screen" })
   const nodes = new Map<string, HTMLVideoElement>()
   const wanted = new WeakMap<HTMLVideoElement, number>()
   const framing = new WeakMap<HTMLVideoElement, Frame | undefined>()
-  const applyFrame = (video: HTMLVideoElement): void => { video.style.transform = transformOf(framing.get(video)) }
+  const applyFrame = (video: HTMLVideoElement): void => {
+    const faces = facesFor(video.dataset.video ?? "")
+    const left = faces?.aspect === undefined ? undefined : faceLeft(faces.heads, faces.aspect)
+    const across = left === undefined || faces?.aspect === undefined ? 50 : left / (faces.aspect - VIEW_WIDTH) * 100
+    video.style.objectPosition = `${across}% 50%`
+    video.style.transform = transformOf(framing.get(video))
+  }
   // The new frame waits for the seek, or the last picture of the old place shows enlarged for a moment.
   const seek = (video: HTMLVideoElement, at: number, frame: Frame | undefined): void => {
     wanted.set(video, at)
@@ -174,7 +180,7 @@ const screenOf = (projectId: string, events: ScreenEvents): Screen => {
   return screen
 }
 
-export const montage = (projectId: string, onChange: (playing: Playing | undefined) => void, levelAt: LevelAt): Montage => {
+export const montage = (projectId: string, onChange: (playing: Playing | undefined) => void, levelAt: LevelAt, facesFor: (video: string) => VideoFaces | undefined): Montage => {
   const levelling = levellingOf(levelAt)
   const state: { clips: ReadonlyArray<Clip>; index: number; before: number; awaited: HTMLVideoElement | undefined; watching: boolean } =
     { clips: [], index: 0, before: 0, awaited: undefined, watching: false }
@@ -198,7 +204,7 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
       levelling.rest(node)
       if (state.clips.some((clip) => clip.video === node.dataset.video)) stop()
     }
-  })
+  }, facesFor)
   const { nodeOf, seek } = screen
   const start = (node: HTMLVideoElement): void => { startOn(node, levelling, stop) }
   const cue = (index: number): void => {

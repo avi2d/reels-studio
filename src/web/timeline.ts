@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { aroundInsert, insertPlaces, lookAt, reelWithin, shiftedBy, shownInserts, withInsert, type InsertLook, type Shown } from "../shared/inserts.ts"
 import { AROUND_JOIN_SECONDS, aroundJoin, cutOf, facesByVideo, withAnswer, withCover } from "../shared/joins.ts"
 import { lengthOf } from "../shared/plan.ts"
+import { faceLeft } from "../shared/framing.ts"
 import type { ShownWord } from "../shared/subtitles.ts"
 import {
   assemble, clipsOf, mergeEdits, NO_EDITS, playedSpans, withChoice, withDeleted, withManualPauses, within,
@@ -51,7 +52,14 @@ const shownOf = (loaded: Loaded, edits: Edits): ReadonlyArray<Shown> => {
   return shownInserts(insertPlaces(planned, reel, loaded.transcripts, edits, loaded.view.pictures), reel, edits, loaded.view.pictures)
 }
 
-export const playedKey = (loaded: Loaded, edits: Edits): string => JSON.stringify([reelOf(loaded, edits), shownOf(loaded, edits)])
+export const playedKey = (loaded: Loaded, edits: Edits): string => {
+  const reel = reelOf(loaded, edits)
+  const crops = [...new Set(reel.map((clip) => clip.video))].map((video) => {
+    const faces = loaded.view.faces.find((one) => one.video === video)
+    return faces?.aspect === undefined ? undefined : faceLeft(faces.heads, faces.aspect)
+  })
+  return JSON.stringify([reel, shownOf(loaded, edits), crops])
+}
 
 interface State {
   loaded: Loaded | undefined
@@ -297,7 +305,7 @@ export const timelineCard = (projectId: string, hooks: Hooks, levelAt: LevelAt):
   const overlay = insertView(Api.insertUrls(projectId))
   const subtitle = h("div", { class: "subtitle-preview", "aria-hidden": "true" })
   const view = display(parts, state, overlay.paint, subtitle)
-  const player = montage(projectId, view.markPlaying, levelAt)
+  const player = montage(projectId, view.markPlaying, levelAt, (video) => state.loaded?.view.faces.find((faces) => faces.video === video))
   ui.frame.prepend(player.node, overlay.node, subtitle)
   const saving = saver(projectId, ui.problem, () => state.edits, () => state.acked, (sent, merged) => {
     state.acked = merged

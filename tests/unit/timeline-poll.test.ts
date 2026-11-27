@@ -84,6 +84,12 @@ test("a measured gaze does not change the played clips", () => {
   expect(playedKey(loaded(after, ["a"], "measured"), NO_EDITS)).toBe(playedKey(loaded(before, ["a"], "waiting"), NO_EDITS))
 })
 
+test("new head measurements change playback content instead of leaving the centred preview playing", () => {
+  const base = loaded([first], ["a"], "measured")
+  const measured: Loaded = { ...base, view: { ...base.view, faces: [{ video: "a", step: 0.2, gaze: ["camera"], heads: [{ x: 1.4, y: 0.4, size: 0.2 }], aspect: 16 / 9 }] } }
+  expect(playedKey(measured, NO_EDITS)).not.toBe(playedKey(base, NO_EDITS))
+})
+
 test("the played content moves when a pause is removed, a take is chosen, or a video is heard", () => {
   const base = loaded([first], ["a", "b"], "measured")
   const key = playedKey(base, NO_EDITS)

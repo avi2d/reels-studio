@@ -30,10 +30,14 @@ type ShownInsert = typeof ShownInsert.Type
 
 export const PartRecord = Schema.Struct({ video: Schema.String, start: Schema.Finite, frames: Schema.Int, frame: Schema.optionalKey(Frame) })
 
+const CropWindow = Schema.Struct({ video: Schema.String, left: Schema.NullOr(Schema.Finite) })
+type CropWindow = typeof CropWindow.Type
+
 const Record = Schema.Struct({
   made: Schema.String,
   video: Schema.String,
   parts: Schema.Array(PartRecord),
+  crops: Schema.optionalKey(Schema.Array(CropWindow)),
   colour: Schema.optionalKey(Colour),
   inserts: Schema.Array(ShownInsert).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   captions: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed(""))),
@@ -128,22 +132,32 @@ const measureColours = Effect.fnUntraced(function*(dir: string, parts: ReadonlyA
   return coloursOf(yield* Effect.forEach(videos, (video) => Effect.map(measureSkin({ dir, name: video }, work), (skin) => ({ video, skin }))))
 })
 
-const lookOf = Effect.fnUntraced(function*(dir: string, video: string, colours: ReadonlyArray<VideoColour>, hdr: Map<string, boolean>) {
+const readCrops = Effect.fnUntraced(function*(dir: string, parts: ReadonlyArray<Part>) {
+  return yield* Effect.forEach([...new Set(parts.map((part) => part.video))], (video) => Effect.gen(function*() {
+    const gaze = Option.getOrUndefined(yield* Effect.option(readGaze({ dir, name: video })))
+    const left = gaze?.aspect === undefined ? undefined : faceLeft(gaze.heads, gaze.aspect)
+    return { video, left: left ?? null } satisfies CropWindow
+  }))
+})
+
+const sameCrops = (built: ReadonlyArray<CropWindow> | undefined, current: ReadonlyArray<CropWindow>): boolean =>
+  built !== undefined && built.length === current.length && built.every((crop, index) =>
+    crop.video === current[index]?.video && crop.left === current[index]?.left)
+
+const lookOf = Effect.fnUntraced(function*(dir: string, video: string, colours: ReadonlyArray<VideoColour>, hdr: Map<string, boolean>, crops: ReadonlyArray<CropWindow>) {
   const source = places({ dir, name: video }).source
   const tone = hdr.get(video) ?? (yield* isHdrVideo(source))
   hdr.set(video, tone)
-  const gaze = Option.getOrUndefined(yield* Effect.option(readGaze({ dir, name: video })))
-  const left = gaze?.aspect === undefined ? undefined : faceLeft(gaze.heads, gaze.aspect)
-  return { source, look: { hdr: tone, gain: gainOf(colours, video), faceLeft: left } }
+  return { source, look: { hdr: tone, gain: gainOf(colours, video), faceLeft: crops.find((crop) => crop.video === video)?.left ?? undefined } }
 })
 
-const makePictures = Effect.fnUntraced(function*(dir: string, parts: ReadonlyArray<Part>, colours: ReadonlyArray<VideoColour>, hdr: Map<string, boolean>) {
+const makePictures = Effect.fnUntraced(function*(dir: string, parts: ReadonlyArray<Part>, colours: ReadonlyArray<VideoColour>, hdr: Map<string, boolean>, crops: ReadonlyArray<CropWindow>) {
   const settings = yield* Settings
   const work = reelPlaces(dir).work
   const joins = colours.some((colour) => colour.state === "matched") ? colourJoins(parts) : []
   for (const [index, join] of joins.entries()) {
-    const end = yield* lookOf(dir, join.end.video, colours, hdr)
-    const start = yield* lookOf(dir, join.start.video, colours, hdr)
+    const end = yield* lookOf(dir, join.end.video, colours, hdr, crops)
+    const start = yield* lookOf(dir, join.start.video, colours, hdr, crops)
     const sides = [
       ["before", { ...end.look, gain: undefined }, { ...start.look, gain: undefined }],
       ["after", end.look, start.look]
@@ -167,10 +181,11 @@ const publishPictures = Effect.fnUntraced(function*(dir: string, made: string, j
 export const renderParts = Effect.fnUntraced(function*(dir: string, parts: ReadonlyArray<Part>, colours: ReadonlyArray<VideoColour>, work: string, output: string, onDone: (share: number) => Effect.Effect<void>) {
   const settings = yield* Settings
   const total = secondsOf(parts)
+  const crops = yield* readCrops(dir, parts)
   const hdr = new Map<string, boolean>()
   const names: Array<string> = []
   for (const part of parts) {
-    const { source, look } = yield* lookOf(dir, part.video, colours, hdr)
+    const { source, look } = yield* lookOf(dir, part.video, colours, hdr, crops)
     const before = secondsOf(parts.slice(0, names.length))
     const name = partFileOf(names.length, "mov")
     yield* tool("ffmpeg", partArgs(source, part, look, settings.encoder, `${work}/${name}`), settings.heavy, (line) => {
@@ -180,6 +195,7 @@ export const renderParts = Effect.fnUntraced(function*(dir: string, parts: Reado
     names.push(name)
   }
   yield* concatParts(work, names, output, "picture-and-sound")
+  return crops
 })
 
 const measurePassages = Effect.fnUntraced(function*(work: string, levelled: string, spans: ReadonlyArray<Span>) {
@@ -310,8 +326,8 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
   yield* sweepReel(dir)
   const captions = yield* placeCaptions(place.work, cut.captions, total)
   const colours = yield* measureColours(dir, parts, place.work)
-  const joins = yield* makePictures(dir, parts, colours, new Map())
-  yield* renderParts(dir, parts, colours, place.work, `${place.work}/joined.mp4`, (share) => onDone(share * partsShare))
+  const crops = yield* renderParts(dir, parts, colours, place.work, `${place.work}/joined.mp4`, (share) => onDone(share * partsShare))
+  const joins = yield* makePictures(dir, parts, colours, new Map(), crops)
   const rendered: Array<Rendered> = []
   for (const [index, part] of parts.entries()) {
     rendered.push(yield* renderedOf(place.work, parts, index, part, partFileOf(index, "mov")))
@@ -330,6 +346,7 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
     made,
     video: videoOf(made),
     parts,
+    crops,
     inserts: recorded(cut.inserts),
     captions: captionsKey(cut.captions),
     face,
@@ -368,11 +385,12 @@ export const readReel = Effect.fnUntraced(function*(dir: string, cut: Cut, job: 
   if (published === undefined) return { job, cut: seconds, face } satisfies ReelView
   const size = Number((yield* fs.stat(published.target)).size)
   const { record } = published
+  const crops = yield* readCrops(dir, parts)
   const file = {
     made: record.made,
     seconds: secondsOf(record.parts),
     size,
-    fresh: sameParts(record.parts, parts) && sameInserts(record.inserts, recorded(cut.inserts)) && record.captions === captionsKey(cut.captions) && record.face === face,
+    fresh: sameParts(record.parts, parts) && sameCrops(record.crops, crops) && sameInserts(record.inserts, recorded(cut.inserts)) && record.captions === captionsKey(cut.captions) && record.face === face,
     face: record.face,
     ...(record.colour === undefined ? {} : { colour: colourView(record.colour) }),
     ...(record.levelling === undefined ? {} : { levelling: record.levelling })
