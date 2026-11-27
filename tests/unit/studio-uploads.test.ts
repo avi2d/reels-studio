@@ -23,7 +23,7 @@ const fakeStudio = (connection: Connection, listed: ReadonlyArray<UploadedVideo>
   const lookup = () => {
     server.lookups += 1
     if (connection === "rejected") return Response.json({ error: "Library unavailable" }, { status: 503 })
-    if (connection === "dropped" && !server.disconnected) {
+    if (connection === "dropped" && server.completed && !server.disconnected) {
       server.disconnected = true
       throw new TypeError("Network disconnected")
     }
@@ -130,7 +130,7 @@ test.each([
         sendTakes([new File(["take"], picked, { lastModified: 1 })])
         await finished.promise
         expect(sendingNow()).toEqual([])
-        expect(ends).toEqual([{ kind: "known", name: picked }])
+        expect(ends).toEqual([{ kind: "known", name: stored }])
         expect(server.starts).toBe(0)
         expect(server.patches).toBe(0)
       } finally {
