@@ -68,6 +68,12 @@ interface FileRow {
   readonly reloadCovers: () => void
 }
 
+const figureOf = (projectId: string, entry: TaskEntry): HTMLElement => {
+  const kind = kindOfName(entryName(entry))
+  const cover = entry.kind === "saved" && HAS_COVER.has(kind) ? Api.coverUrl(projectId, entry.name) : undefined
+  return thumb(kind, cover, () => icon("file"))
+}
+
 export const fileRow = (projectId: string, initial: ReadonlyArray<TaskEntry>, changed: () => void, onProblem: (message: string) => void): FileRow => {
   const list = h("ul", { class: "studio-plan__files", "aria-label": "Файлы к заданию" })
   const input = h("input", { class: "visually-hidden", type: "file", accept: ACCEPTED_FILES, multiple: true, tabindex: "-1", "aria-hidden": "true" })
@@ -85,11 +91,10 @@ export const fileRow = (projectId: string, initial: ReadonlyArray<TaskEntry>, ch
   const rowOf = (entry: TaskEntry): Row => {
     const name = entryName(entry)
     const kind = kindOfName(name)
-    const cover = entry.kind === "saved" && HAS_COVER.has(kind) ? Api.coverUrl(projectId, name) : undefined
     const status = h("span", { class: "studio-plan__file-note" }, entry.kind === "saved" ? KIND_NAMES[kind] : formatSize(entry.file.size))
     const remove = button("plain", "", { class: "btn btn--plain btn--icon", title: `Убрать ${name}`, "aria-label": `Убрать ${name}` }, "close")
     const node = h("li", { class: "studio-plan__file" },
-      thumb(kind, cover, () => icon("file")),
+      figureOf(projectId, entry),
       h("span", { class: "studio-plan__file-text" }, h("b", {}, name), status),
       remove)
     const row: Row = { entry, node, status, remove }
@@ -159,6 +164,10 @@ export const fileRow = (projectId: string, initial: ReadonlyArray<TaskEntry>, ch
     },
     send: Effect.suspend(() => Effect.forEach([...rows], sendRow)),
     settle: (names) => { if (!sameEntries(rows.map((row) => row.entry), names)) showEntries(savedEntries(names)) },
-    reloadCovers: () => { if (rows.every((row) => row.entry.kind === "saved")) showEntries(rows.map((row) => row.entry)) }
+    reloadCovers: () => {
+      for (const row of rows) {
+        if (row.entry.kind === "saved") row.node.firstElementChild?.replaceWith(figureOf(projectId, row.entry))
+      }
+    }
   }
 }
