@@ -26,7 +26,7 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/server/approval.ts` | Reads the saved yes and checks it against the plan and the on-screen texts |
 | `src/shared/reel.ts` | The state of a reel build and of the built file, used by the server and the page |
 | `src/shared/gather.ts` | When the studio asks the chat model to gather the blocks by itself |
-| `src/shared/brief.ts` | The format of the brief, the plan and the saved yes, and the work the studio does after the yes |
+| `src/shared/brief.ts` | The format of the brief, the apps and files chosen for the task, the plan and the saved yes, and the work the studio does after the yes |
 | `src/shared/chat.ts` | The format of a chat message, of the events a streamed reply sends and of the header that names its turn, and the kinds of file a person can attach to it |
 | `src/shared/library.ts` | The formats of an uploaded video, of a video offered to a reel from the shared list or another folder, and of a pick, used by the server and the page |
 | `src/shared/file-name.ts` | The cleaned name the library stores for an uploaded file, used by the server and the page to tell whether a picked file is already listed |
