@@ -3,7 +3,8 @@ kind: how-to
 ---
 # Troubleshooting
 
-Three faults stop the studio: a page that does not open from a phone, a video that is not heard and a chat that does not answer.
+Three faults stop the studio.
+The page may not open from a phone, a video may not be heard and the chat may not answer.
 
 ## The page does not open from a phone
 
