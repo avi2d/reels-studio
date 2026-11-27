@@ -1,5 +1,5 @@
 import { Data, Effect, Option, Schema } from "effect"
-import { BriefView } from "../shared/brief.ts"
+import { BriefView, type NewTask } from "../shared/brief.ts"
 import type { Visual } from "../shared/inserts.ts"
 import { Message } from "../shared/chat.ts"
 import { Offer, type Pick, UploadedVideo } from "../shared/library.ts"
@@ -159,8 +159,8 @@ export const stopChat = (id: string, token: string): Effect.Effect<void, Failed>
 export const getBrief = (id: string): Effect.Effect<BriefView, Failed> =>
   call(BriefView, `/api/projects/${id}/brief`)
 
-export const saveBrief = (id: string, text: string): Effect.Effect<BriefView, Failed> =>
-  call(BriefView, `/api/projects/${id}/brief`, { ...post({ text }), method: "PUT" })
+export const saveBrief = (id: string, task: NewTask): Effect.Effect<BriefView, Failed> =>
+  call(BriefView, `/api/projects/${id}/brief`, { ...post(task), method: "PUT" })
 
 export const getRules = (id: string): Effect.Effect<RulesView, Failed> =>
   call(RulesView, `/api/projects/${id}/rules`)

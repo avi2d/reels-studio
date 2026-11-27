@@ -63,7 +63,7 @@ export const briefCards = (projectId: string, ask: (text: string) => void, onWor
       }
       make.disabled = true
       problem.textContent = ""
-      run(Effect.map(Api.saveBrief(projectId, text), (view) => {
+      run(Effect.map(Api.saveBrief(projectId, { text }), (view) => {
         make.disabled = false
         show(view)
         ask(ASK_PLAN)

@@ -15,7 +15,7 @@ const KIND_ICONS: Readonly<Record<FileKind, IconName>> = {
   other: "file"
 }
 
-const KIND_NAMES: Readonly<Record<FileKind, string>> = {
+export const KIND_NAMES: Readonly<Record<FileKind, string>> = {
   picture: "Картинка",
   document: "Документ",
   video: "Видео",
@@ -23,7 +23,7 @@ const KIND_NAMES: Readonly<Record<FileKind, string>> = {
   other: "Файл"
 }
 
-const HAS_COVER: ReadonlySet<FileKind> = new Set(["picture", "document", "video"])
+export const HAS_COVER: ReadonlySet<FileKind> = new Set(["picture", "document", "video"])
 
 interface AttachmentControls {
   readonly icon: (name: FileKind) => HTMLElement
@@ -38,7 +38,7 @@ const standardControls: AttachmentControls = {
   remove: (label) => iconButton("plain", "close", label, { class: "remove" })
 }
 
-const thumb = (kind: FileKind, source: string | undefined, draw: AttachmentControls["icon"]): HTMLElement => {
+export const thumb = (kind: FileKind, source: string | undefined, draw: AttachmentControls["icon"]): HTMLElement => {
   const fallback = h("span", { class: "thumb" }, draw(kind))
   if (source === undefined) return fallback
   const picture = h("img", { class: "thumb", src: source, alt: "", loading: "lazy", decoding: "async" })

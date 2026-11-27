@@ -21,7 +21,34 @@ export const PlanView = Schema.Union([
 ])
 export type PlanView = typeof PlanView.Type
 
-export const BriefView = Schema.Struct({ brief: Schema.String, plan: PlanView, working: Schema.Boolean })
+export const APPS = ["Instagram", "YouTube Shorts", "TikTok"] as const
+export const App = Schema.Literals(APPS)
+export type App = typeof App.Type
+
+export const TaskChoices = Schema.Struct({ apps: Schema.Array(App), files: Schema.Array(Schema.String) })
+export type TaskChoices = typeof TaskChoices.Type
+
+export const EVERY_APP: TaskChoices = { apps: APPS, files: [] }
+
+export const inAppOrder = (apps: Iterable<App>): ReadonlyArray<App> => {
+  const chosen = new Set(apps)
+  return APPS.filter((app) => chosen.has(app))
+}
+
+export const TaskFile = Schema.Union([
+  Schema.Struct({ name: Schema.String }),
+  Schema.Struct({ upload: Schema.String })
+])
+export type TaskFile = typeof TaskFile.Type
+
+export const NewTask = Schema.Struct({
+  text: Schema.String,
+  apps: Schema.optionalKey(Schema.Array(App)),
+  files: Schema.optionalKey(Schema.Array(TaskFile))
+})
+export type NewTask = typeof NewTask.Type
+
+export const BriefView = Schema.Struct({ brief: Schema.String, ...TaskChoices.fields, plan: PlanView, working: Schema.Boolean })
 export type BriefView = typeof BriefView.Type
 
 export const planView = (text: string | undefined, texts: string | undefined, approval: Approval | undefined): PlanView => {
