@@ -12,6 +12,7 @@ import type { TimelineView } from "../shared/timeline.ts"
 import { toChatEvents } from "./pi-events.ts"
 import { Projects, type Effort } from "./projects.ts"
 import { Settings } from "./settings.ts"
+import { taskNote } from "./task-note.ts"
 import { completedName } from "./tus.ts"
 
 const MessageLine = Schema.fromJsonString(Message)
@@ -34,10 +35,6 @@ const LOOKING: ChatEvent = { type: "step", text: "Смотрю приложен�
 const INTERRUPTED = "студия остановилась раньше, чем ответила. Отправьте сообщение ещё раз."
 const GATHER_PROMPT = "The studio has heard every uploaded video and asks you to gather the blocks now. Write blocks.json as «Blocks and takes» in the reels-plan skill says, from every heard video. Write no plan and ask nothing. The person does not see this message or your answer."
 const YES_NOTE = "\nWith this message the person agrees with the whole plan in plan.md. Follow «After the yes» in the reels-plan skill now, and leave plan.md and texts.json as they are.\n"
-
-const briefNote = (brief: string): string => brief === ""
-  ? "\nThe person has not written a brief yet. The page holds it in the field «Задание» of the stage «Видео и задание».\n"
-  : `\nThe brief the person wrote in the field «Задание», also kept in brief.md:\n${brief}`
 
 const videoLine = (video: VideoView): string =>
   video.state === "ready" && video.plan === "unreadable"
@@ -326,7 +323,7 @@ export class Chat extends Context.Service<Chat, {
       const heardVideos = Effect.fn("Chat.heardVideos")(function*(id: string) {
         return videoLines(yield* media.videos(id), yield* media.timeline(id))
       }, orBroken)
-      const attachedNote = (listed: string): string => listed === "" ? "" : `\nThe files the person attached in the chat:\n${listed}\n`
+      const attachedNote = (listed: string): string => listed === "" ? "" : `\nThe files attached to this reel, in the chat or to the task:\n${listed}\n`
       const run: Run = (id, dir, text, names, model, effort, approving, asker) =>
         Stream.unwrap(Effect.gen(function*() {
           const state = yield* Ref.make<RunState>({ text: "", base: "", pending: undefined, failed: undefined, settled: false })
@@ -337,9 +334,12 @@ export class Chat extends Context.Service<Chat, {
                 Effect.catchTag("ApiError", (error) => Effect.logError("the reply was not saved", error.message))
               ))
           }
+          const saved = yield* brief.view(id)
+          const looking = names.length > 0 || !(yield* attachments.allSeen(dir, saved.files))
           const reply = Stream.unwrap(Effect.gen(function*() {
             const files = yield* attachments.show(dir, names)
-            const task = briefNote((yield* brief.view(id)).brief) + (approving ? YES_NOTE : "")
+            yield* attachments.examine(dir, saved.files)
+            const task = taskNote(saved) + (approving ? YES_NOTE : "")
             const known = `${yield* heardVideos(id)}\n${task}${attachedNote(yield* attachments.listed(dir, files))}`
             const launched = yield* piCommand(settings.pi, settings.root, (...parts: Array<string>) => path.join(...parts), systemPrompt, dir, text, files, model, effort, known, asker.kind).pipe(
               Effect.tapError((error) => Effect.logError("pi did not start", error)),
@@ -352,7 +352,7 @@ export class Chat extends Context.Service<Chat, {
             return piStream(handle.stdout, makeExpand(state), stoppedStream(state, exited, complaints))
           }))
           if (asker.kind === "studio") return reply
-          const starting: ChatEvent = names.length === 0 ? { type: "step", text: "Готовлю ответ" } : LOOKING
+          const starting: ChatEvent = looking ? LOOKING : { type: "step", text: "Готовлю ответ" }
           return Stream.concat(Stream.make(starting), reply)
         })).pipe(brokenStream, Stream.provideContext(context))
       const send = Effect.fn("Chat.send")(function*(id: string, text: string, uploads: ReadonlyArray<string>, model: string, effort: Effort) {

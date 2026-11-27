@@ -5,7 +5,7 @@ import { createInterface } from "node:readline"
 import { Schema } from "effect"
 import type { Transcript } from "../../../src/shared/plan.ts"
 import type { Blocks, Gaze } from "../../../src/shared/timeline.ts"
-import { CHAT_PICTURE, CHAT_REPLY, FIRST_WORDS, PLAN_TASK, PLAN_TEXT, SLOW_MESSAGE, SOURCE_VIDEO } from "./scenario.ts"
+import { CHAT_PICTURE, CHAT_REPLY, FIRST_WORDS, PLAN_TASK, PLAN_TEXT, SLOW_MESSAGE, SOURCE_VIDEO, TASK_APPS, TASK_FILE } from "./scenario.ts"
 
 const transcript = {
   duration: 7,
@@ -77,6 +77,8 @@ const runPi = async (): Promise<void> => {
     reply = "Блоки готовы."
   } else if (message.startsWith("Составь один план")) {
     assert(process.argv.some((arg) => arg.includes(PLAN_TASK)), "The prompt must include the saved task")
+    assert(process.argv.some((arg) => arg.includes(`chose for this reel: ${TASK_APPS}.`)), "The prompt must name only the chosen apps")
+    assert(process.argv.some((arg) => arg.includes(`- attached/${TASK_FILE}`)), "The prompt must name the file attached to the task")
     const [video] = await readdir("source")
     assert(video !== undefined, "The plan needs the recording from step 1")
     await Bun.write("blocks.json", JSON.stringify({ blocks: blocks.blocks.map((block) => ({

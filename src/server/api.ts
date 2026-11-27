@@ -1,4 +1,5 @@
 import { Effect, FileSystem, Layer, Option, Schema, Stream } from "effect"
+import { NewTask } from "../shared/brief.ts"
 import { CHAT_TURN_HEADER } from "../shared/chat.ts"
 import { Pick } from "../shared/library.ts"
 import { Face } from "../shared/face.ts"
@@ -101,7 +102,6 @@ const NewMessage = Schema.Struct({
   effort: Effort
 })
 
-const NewBrief = Schema.Struct({ text: Schema.String })
 
 const brief = Layer.mergeAll(
   HttpRouter.add("GET", "/api/projects/:id/brief", reply(Effect.gen(function*() {
@@ -111,7 +111,7 @@ const brief = Layer.mergeAll(
   HttpRouter.add("PUT", "/api/projects/:id/brief", reply(Effect.gen(function*() {
     const store = yield* Brief
     const id = yield* param("id")
-    yield* store.write(id, (yield* body(NewBrief)).text)
+    yield* store.write(id, yield* body(NewTask))
     return json(yield* store.view(id))
   })))
 )

@@ -39,7 +39,7 @@ The new screens open at `/new` beside the old page.
 Each reel card shows its status, and the reel's top bar menu lets you rename it.
 The reel list at `/new` shows reels and uploaded takes five to a page, uploads takes and resumes an interrupted upload.
 Step 1, «Записи», adds the uploaded takes you tick to the reel at once and plays a recording from a word you press.
-Step 2, «План», saves the task, shows the plan and takes the yes, and the chat on every step streams its reply and has «Остановить».
+Step 2, «План», saves the task with its apps and files, shows the plan and takes the yes, and the chat on every step streams its reply and has «Остановить».
 
 The studio answers the home network and the owner's Mac through the `local-apps` gateway.
 The gateway must listen only on that Mac's loopback address.

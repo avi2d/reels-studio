@@ -6,7 +6,7 @@ import { run } from "../run.ts"
 import { studioChat, type StudioChat } from "./chat.ts"
 import { rail, stepBody, stepName, topBar } from "./frame.ts"
 import { listView } from "./list.ts"
-import { planStep } from "./plan.ts"
+import { planStep, type TaskDraft } from "./plan.ts"
 import { recordsStep } from "./records.ts"
 import { uploaderSection } from "./uploader.ts"
 
@@ -15,7 +15,7 @@ type Page = { readonly kind: "list" } | { readonly kind: "reel"; readonly id: st
 const TITLE = "Студия Reels"
 
 const app = document.querySelector("#app") ?? document.body
-const drafts = new Map<string, string>()
+const drafts = new Map<string, TaskDraft>()
 let room: { readonly id: string; readonly chat: StudioChat } | undefined
 let leaveStep: (() => void) | undefined
 
