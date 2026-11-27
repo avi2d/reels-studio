@@ -157,6 +157,8 @@ class PlanFlow {
 
   private madePlan(reply: Reply): void {
     if (this.left) return
+    // A task file gets its cover only while the chat turn examines it, after the rows were built.
+    this.files.reloadCovers()
     if (reply.kind !== "answered") {
       this.canApprove = false
       this.action = undefined

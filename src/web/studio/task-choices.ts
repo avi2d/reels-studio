@@ -65,6 +65,7 @@ interface FileRow {
   readonly lock: (locked: boolean) => void
   readonly send: Effect.Effect<ReadonlyArray<TaskFile>, Api.Failed>
   readonly settle: (names: ReadonlyArray<string>) => void
+  readonly reloadCovers: () => void
 }
 
 export const fileRow = (projectId: string, initial: ReadonlyArray<TaskEntry>, changed: () => void, onProblem: (message: string) => void): FileRow => {
@@ -157,6 +158,7 @@ export const fileRow = (projectId: string, initial: ReadonlyArray<TaskEntry>, ch
       refresh()
     },
     send: Effect.suspend(() => Effect.forEach([...rows], sendRow)),
-    settle: (names) => { if (!sameEntries(rows.map((row) => row.entry), names)) showEntries(savedEntries(names)) }
+    settle: (names) => { if (!sameEntries(rows.map((row) => row.entry), names)) showEntries(savedEntries(names)) },
+    reloadCovers: () => { if (rows.every((row) => row.entry.kind === "saved")) showEntries(rows.map((row) => row.entry)) }
   }
 }
