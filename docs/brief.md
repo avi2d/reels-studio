@@ -23,7 +23,8 @@ After the chat model answers that message, or the request is cut, the studio wor
 - It pins the shown take of every block in `timeline.json`, while that take still exists, so later gatherings keep it.
 The take is the take ranked first unless the person chose another, as [docs/timeline.md](timeline.md) says.
 Before the yes the studio pins nothing.
-- It shortens the pauses of half a second or more left in the shown takes to 0.2 s, except the pauses the person returned.
+- It shortens the pauses of half a second or more left in the shown takes to the seconds of the pause rule, except the pauses the person returned.
+The pause rule is 0.2 s unless the reel's rules say another, as [docs/timeline.md](timeline.md) says.
 - It saves the yes with the plan text, the `texts.json` contents captured at the yes, and a list of what it did to `approval.json`.
 Removing a reel stops this work the same way it stops a gathering.
 
