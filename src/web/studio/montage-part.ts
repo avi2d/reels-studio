@@ -63,8 +63,9 @@ const wordButton = (one: Placed, word: EditableSubtitle, data: PartData, actions
       if (save && text !== "" && text !== word.text) actions.fixWord(block.id, take.video, word.index, text)
     }
     field.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") finish(true)
-      if (event.key === "Escape") finish(false)
+      if (event.key !== "Enter" && event.key !== "Escape") return
+      event.preventDefault()
+      finish(event.key === "Enter")
     })
     field.addEventListener("blur", () => { globalThis.setTimeout(() => { finish(true) }, 0) })
     node.replaceWith(field)
