@@ -1,5 +1,6 @@
 import { MAX_BRIEF, type Done, type PlanView } from "../../shared/brief.ts"
 import { stepPath } from "../../shared/page.ts"
+import { planBlocks, type PlanItem } from "../../shared/plan-text.ts"
 import { h } from "../dom.ts"
 import { formatPause } from "../format.ts"
 import { icon } from "./icons.ts"
@@ -16,9 +17,18 @@ const workLine = (item: Done): string => {
   return `«${item.block}»: ${take}.${reason === "" ? "" : ` ${reason}${end}`}`
 }
 
+const planList = (items: ReadonlyArray<PlanItem>): HTMLUListElement => h("ul", {},
+  ...items.map((item) => h("li", {}, item.text,
+    ...(item.children.length === 0 ? [] : [planList(item.children)]))))
+
+const planText = (text: string): HTMLElement => h("div", { class: "studio-plan__text" },
+  ...planBlocks(text).map((block) => block.kind === "list"
+    ? planList(block.items)
+    : h("p", {}, block.text)))
+
 export const planContent = (plan: PlanView): ReadonlyArray<HTMLElement> => {
   if (plan.state === "none") return []
-  const text = h("p", { class: "studio-plan__text" }, plan.text.trim())
+  const text = planText(plan.text)
   return plan.state === "approved" ? [
     text,
     h("section", { class: "studio-plan__work", "aria-labelledby": "studio-plan-work" },
