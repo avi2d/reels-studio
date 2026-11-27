@@ -1,3 +1,6 @@
+---
+kind: how-to
+---
 # Troubleshooting
 
 ## The page does not open from a phone
