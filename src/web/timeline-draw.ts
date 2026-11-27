@@ -274,6 +274,7 @@ const drawPanels = (
   index: number,
   loaded: Loaded,
   edits: Edits,
+  rest: number,
   deleted: ReturnType<typeof arrange>["deleted"],
   faces: ReturnType<typeof facesByVideo>,
   inserts: ReturnType<typeof insertPlaces>,
@@ -281,7 +282,7 @@ const drawPanels = (
   actions: Actions
 ): { readonly places: ReturnType<typeof placesOf>; readonly coverage: PlaceCoverage } => {
   replaceLists(parts.detailHolder,
-    ...(open === undefined ? [] : [blockDetail(open.block, index + 1, chosenTake(open.block, edits), loaded.transcripts, edits, actions)]),
+    ...(open === undefined ? [] : [blockDetail(open.block, index + 1, chosenTake(open.block, edits), loaded.transcripts, edits, rest, actions)]),
     ...(deleted.length === 0 ? [] : [deletedList(deleted, actions)]))
   const places = placesOf(clipsOf(placed), faces, loaded.transcripts, edits)
   const coverage = placeCoverage(loaded.view, placed)
@@ -290,7 +291,7 @@ const drawPanels = (
     placeList(places, displayed, coverage, pictures, actions),
     ...insertList({ planned: loaded.view.inserts, places: inserts, pictures, phraseOf: (one) => phraseOf(loaded.transcripts, one) }, actions),
     ...textList({ planned: loaded.view.texts, places: texts, phraseOf: (one) => phraseOf(loaded.transcripts, one) }))
-  replaceLists(parts.pauseHolder, pauseList(displayed, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
+  replaceLists(parts.pauseHolder, pauseList(displayed, rest, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
   return { places, coverage }
 }
 
@@ -307,7 +308,7 @@ export interface DrawnReady {
 
 export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): DrawnReady => {
   const { edits, loaded, selected, timeline } = drawn
-  const placed = assemble(timeline.blocks, edits, loaded.transcripts)
+  const placed = assemble(timeline.blocks, edits, loaded.transcripts, timeline.rest)
   const faces = facesByVideo(loaded.view.faces)
   const reel = cutOf(clipsOf(placed), faces, loaded.transcripts, edits)
   const displayed = placed.map((one) => ({
@@ -325,7 +326,7 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): DrawnRe
   drawRows(parts, displayed, open, shown, actions)
   const { texts } = loaded.view
   const thoughts = textPlaces(texts.state === "ready" ? texts.planned : [], reel, loaded.transcripts)
-  const { places, coverage } = drawPanels(parts, displayed, placed, open, index, loaded, edits, deleted, faces, inserts, thoughts, actions)
+  const { places, coverage } = drawPanels(parts, displayed, placed, open, index, loaded, edits, timeline.rest, deleted, faces, inserts, thoughts, actions)
   return {
     open,
     shown,

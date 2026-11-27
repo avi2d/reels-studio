@@ -1,7 +1,7 @@
 import type { Transcript } from "../shared/plan.ts"
 import { lengthOf } from "../shared/plan.ts"
 import { playedPause } from "../shared/timeline.ts"
-import { MIN_PAUSE, PAUSE_REST, pausesOf, playedSpans, type Block, type Edits, type Pause, type Placed, type Take } from "../shared/timeline.ts"
+import { MIN_PAUSE, pausesOf, playedSpans, type Block, type Edits, type Pause, type Placed, type Take } from "../shared/timeline.ts"
 import { button, spoken } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatLength, formatPause } from "./format.ts"
@@ -24,11 +24,11 @@ const takeText = (transcript: Transcript, take: Take, edits: Edits): ReadonlyArr
   })
 }
 
-const takeItem = (block: Block, take: Take, chosen: Take, transcript: Transcript, edits: Edits, actions: DetailActions): HTMLElement => {
+const takeItem = (block: Block, take: Take, chosen: Take, transcript: Transcript, edits: Edits, rest: number, actions: DetailActions): HTMLElement => {
   const rank = block.takes.indexOf(take) + 1
   const facts = [
     ...(take.camera === undefined ? [] : [`в камеру ${Math.round(take.camera * 100)}%`]),
-    formatLength(lengthOf(playedSpans(transcript, take, edits))),
+    formatLength(lengthOf(playedSpans(transcript, take, edits, rest))),
     take.video
   ]
   const radio = h("input", {
@@ -57,6 +57,7 @@ export const blockDetail = (
   chosen: Take,
   transcripts: ReadonlyMap<string, Transcript>,
   edits: Edits,
+  rest: number,
   actions: DetailActions
 ): HTMLElement =>
   h("div", { class: "detail" },
@@ -66,7 +67,7 @@ export const blockDetail = (
     h("p", { class: "muted" }, block.takes.length === 1 ? "У этого блока один дубль." : "Дубли идут от лучшего к худшему. Отметьте тот, что пойдёт в монтаж."),
     h("ol", { class: "takes", "data-scroll-key": `takes:${block.id}` }, ...block.takes.flatMap((take) => {
       const transcript = transcripts.get(take.video)
-      return transcript === undefined ? [] : [takeItem(block, take, chosen, transcript, edits, actions)]
+      return transcript === undefined ? [] : [takeItem(block, take, chosen, transcript, edits, rest, actions)]
     })))
 
 export const deletedList = (deleted: ReadonlyArray<Block>, actions: DetailActions): HTMLElement =>
@@ -79,7 +80,7 @@ export const deletedList = (deleted: ReadonlyArray<Block>, actions: DetailAction
           click: () => { actions.setDeleted(block.id, false) }
         }, ...spoken("Вернуть", `Вернуть блок «${block.title}»`))))))
 
-const RULES = [`Пауза: молчание от ${formatPause(MIN_PAUSE)}`, `На месте паузы остаётся ${formatPause(PAUSE_REST)}`, "Звук на стыке: плавно"]
+const rulesOf = (rest: number): ReadonlyArray<string> => [`Пауза: молчание от ${formatPause(MIN_PAUSE)}`, `На месте паузы остаётся ${formatPause(rest)}`, "Звук на стыке: плавно"]
 
 const pauseItem = (one: Placed, number: number, pause: Pause, wordAt: (video: string, index: number) => string, actions: DetailActions): HTMLElement => {
   const size = formatPause(pause.end - pause.start)
@@ -100,7 +101,7 @@ const pauseItem = (one: Placed, number: number, pause: Pause, wordAt: (video: st
       }, ...spoken(pause.removed ? "Вернуть" : "Убрать", pause.removed ? `Вернуть паузу ${size} в блоке ${number}` : `Убрать паузу ${size} в блоке ${number}`))))
 }
 
-export const pauseList = (placed: ReadonlyArray<Placed>, wordAt: (video: string, index: number) => string, actions: DetailActions): HTMLElement => {
+export const pauseList = (placed: ReadonlyArray<Placed>, rest: number, wordAt: (video: string, index: number) => string, actions: DetailActions): HTMLElement => {
   const all = placed.flatMap((one, index) => one.pauses.map((pause) => ({ one, number: index + 1, pause })))
   const kept = all.filter(({ pause }) => !pause.removed).map(({ pause }) => pause)
   const shown = placed.flatMap((one) => one.pauses.filter((pause) => !pause.removed).flatMap((pause) => playedPause(one, pause)))
@@ -109,7 +110,7 @@ export const pauseList = (placed: ReadonlyArray<Placed>, wordAt: (video: string,
     : `Убрано ${all.length - kept.length} из ${all.length}. Осталось пауз на ${formatLength(lengthOf(shown))}.`
   return h("div", { class: "detail" },
     h("p", { class: "did" }, "Студия нашла паузы в выбранных дублях. Уберите лишние по одной или все сразу кнопкой выше."),
-    h("div", { class: "rules" }, ...RULES.map((rule) => h("span", {}, rule))),
+    h("div", { class: "rules" }, ...rulesOf(rest).map((rule) => h("span", {}, rule))),
     h("p", { class: "muted", role: "status" }, count),
     h("ol", { class: "pause-list" }, ...all.map(({ number, one, pause }) => pauseItem(one, number, pause, wordAt, actions))))
 }

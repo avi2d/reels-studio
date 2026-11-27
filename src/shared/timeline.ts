@@ -5,6 +5,9 @@ import { PlannedTexts } from "./texts.ts"
 export const MIN_PAUSE = 0.5
 export const PAUSE_REST = 0.2
 
+// A rest longer than the shortest pause would make that pause longer than its own silence.
+export const PauseRest = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(MIN_PAUSE))
+
 export const Head = Schema.Struct({
   x: Schema.Finite,
   y: Schema.Finite,
@@ -126,7 +129,7 @@ export const TimelineView = Schema.Struct({
   texts: PlannedTexts,
   timeline: Schema.Union([
     Schema.Struct({ state: Schema.Literals(["none", "unreadable"]) }),
-    Schema.Struct({ state: Schema.Literal("ready"), blocks: Schema.Array(Block), dropped: Schema.Int, edits: Edits })
+    Schema.Struct({ state: Schema.Literal("ready"), blocks: Schema.Array(Block), dropped: Schema.Int, edits: Edits, rest: PauseRest })
   ])
 })
 export type TimelineView = typeof TimelineView.Type
@@ -210,13 +213,13 @@ export const pausesOf = (transcript: Transcript, take: Take, edits: Edits): Read
     return [{ after, start: word.end, end, removed: edits.pauses.some((pause) => samePause(pause, { video: take.video, after })) }]
   })
 
-export const playedSpans = (transcript: Transcript, take: Take, edits: Edits): ReadonlyArray<Span> => {
+export const playedSpans = (transcript: Transcript, take: Take, edits: Edits, rest: number): ReadonlyArray<Span> => {
   const speech = speechOf(transcript, take) ?? { start: 0, end: 0 }
   const end = transcript.words[take.to + 1]?.start ?? transcript.duration
   const cuts = pausesOf(transcript, take, edits).filter((pause) => pause.removed).map((pause) =>
     pause.after === take.to
-      ? { start: pause.start + PAUSE_REST, end: pause.end }
-      : { start: pause.start + PAUSE_REST / 2, end: pause.end - PAUSE_REST / 2 })
+      ? { start: pause.start + rest, end: pause.end }
+      : { start: pause.start + rest / 2, end: pause.end - rest / 2 })
   const starts = [speech.start, ...cuts.map((cut) => cut.end)]
   const ends = [...cuts.map((cut) => cut.start), Math.max(end, speech.end)]
   return starts.flatMap((start, index) => {
@@ -235,12 +238,12 @@ export interface Placed {
 export const playedPause = (one: Placed, pause: Pause): ReadonlyArray<Pause> =>
   one.spans.flatMap((span) => within([pause], span))
 
-export const assemble = (blocks: ReadonlyArray<Block>, edits: Edits, transcripts: Transcripts): ReadonlyArray<Placed> =>
+export const assemble = (blocks: ReadonlyArray<Block>, edits: Edits, transcripts: Transcripts, rest: number): ReadonlyArray<Placed> =>
   arrange(blocks, edits).placed.flatMap((block): ReadonlyArray<Placed> => {
     const take = chosenTake(block, edits)
     const transcript = transcripts.get(take.video)
     if (transcript === undefined) return []
-    return [{ block, take, pauses: pausesOf(transcript, take, edits), spans: playedSpans(transcript, take, edits) }]
+    return [{ block, take, pauses: pausesOf(transcript, take, edits), spans: playedSpans(transcript, take, edits, rest) }]
   })
 
 export const FADE = 0.06
