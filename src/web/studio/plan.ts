@@ -117,7 +117,8 @@ class PlanFlow {
     view.submit.disabled = this.task() === "" || noApps || busy || this.options.chat.status() !== "ready"
     view.submitLabel.textContent = label
     view.next.hidden = !done || busy
-    view.status.textContent = noApps && !busy ? "Выберите, куда пойдёт ролик." : this.statusMessage()
+    const status = this.statusMessage()
+    view.status.textContent = status === "" && noApps ? "Выберите, куда пойдёт ролик." : status
     view.adjust.hidden = !confirm || busy
     const planKey = JSON.stringify(current.plan)
     if (planKey === this.knownPlan) return

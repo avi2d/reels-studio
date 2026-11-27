@@ -25,7 +25,6 @@
 .studio-plan__file-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .studio-plan__file-text b { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
 .studio-plan__file-note { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.studio-plan .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (hover: hover) and (pointer: fine) {
   .studio-plan .chip:hover:not(:disabled) { border-color: #9aa0b0; }
 }
@@ -79,7 +78,7 @@
 .studio-chat .thumb { flex: none; width: 30px; height: 30px; border-radius: 4px; object-fit: cover; }
 .studio-chat span.thumb { display: grid; place-items: center; background: var(--line); color: var(--muted); }
 .studio-chat .tray.sending .remove { visibility: hidden; }
-.studio-chat .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.studio-plan .visually-hidden, .studio-chat .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 @media (hover: hover) and (pointer: fine) {
   .studio-chat .studio-chat__send:hover:not(:disabled) { color: var(--ink); }
