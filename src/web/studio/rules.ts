@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import type { Step } from "../../shared/page.ts"
-import type { RuleId, RulesView } from "../../shared/rules.ts"
+import { formatSeconds, type RuleId, type RulesView } from "../../shared/rules.ts"
 import * as Api from "../api.ts"
 import { h } from "../dom.ts"
 import { formatPause } from "../format.ts"
@@ -9,7 +9,7 @@ import type { StudioChat } from "./chat.ts"
 import { icon } from "./icons.ts"
 import { button } from "./ui.ts"
 
-const seconds = (value: number): string => `${String(Number(value.toFixed(2))).replace(".", ",")} с`
+const seconds = (value: number): string => `${formatSeconds(value).replace(".", ",")} с`
 
 const PHRASES = { pause: (value: number) => `пауза остаётся ${seconds(value)}` } satisfies Record<RuleId, (value: number) => string>
 
@@ -50,9 +50,14 @@ export const rulesPanel = (id: string, step: Step, chat: Pick<StudioChat, "statu
   let cancel: (() => void) | undefined
   let busy = false
 
+  const lock = (): void => {
+    for (const control of node.querySelectorAll("button")) control.disabled = busy || chat.status() === "busy"
+  }
+
   const load = (work: Effect.Effect<RulesView, Api.Failed>): void => {
     cancel?.()
     busy = true
+    lock()
     cancel = run(Effect.map(work, (view) => {
       busy = false
       problem.textContent = ""
@@ -60,6 +65,7 @@ export const rulesPanel = (id: string, step: Step, chat: Pick<StudioChat, "statu
     }), (message) => {
       busy = false
       problem.textContent = message
+      lock()
       node.hidden = false
     })
   }
@@ -71,7 +77,7 @@ export const rulesPanel = (id: string, step: Step, chat: Pick<StudioChat, "statu
       "data-key": `pin:${rule.id}`,
       "aria-pressed": rule.kept ? "true" : "false",
       title: rule.kept ? "Следующие ролики начнут с этого правила. Нажмите, чтобы не переносить" : "Начинать с этого правила следующие ролики",
-      click: () => { if (!busy) load(Api.keepRule(id, rule.id, !rule.kept)) }
+      click: () => { if (!busy && chat.status() !== "busy") load(Api.keepRule(id, rule.id, !rule.kept)) }
     }, icon("pin"), "Для следующих роликов")
     return h("li", {}, h("span", {}, PHRASES[rule.id](rule.value)), pin)
   }
@@ -80,7 +86,8 @@ export const rulesPanel = (id: string, step: Step, chat: Pick<StudioChat, "statu
     const active = document.activeElement
     const focused = active instanceof HTMLElement && node.contains(active) ? active.dataset["key"] : undefined
     list.replaceChildren(...view.rules.filter((rule) => RULE_STEP[rule.id] === step).map(ruleItem))
-    change.replaceChildren(...view.change === undefined || RULE_STEP[view.change.id] !== step ? [] : [changeCard(view.change, () => { if (!busy) load(Api.undoRule(id)) })])
+    change.replaceChildren(...view.change === undefined || RULE_STEP[view.change.id] !== step ? [] : [changeCard(view.change, () => { if (!busy && chat.status() !== "busy") load(Api.undoRule(id)) })])
+    lock()
     node.hidden = false
     if (focused !== undefined) (node.querySelector<HTMLElement>(`[data-key="${focused}"]`) ?? list.querySelector("button"))?.focus()
   }
@@ -89,6 +96,7 @@ export const rulesPanel = (id: string, step: Step, chat: Pick<StudioChat, "statu
   const stop = chat.watch(() => {
     const before = last
     last = chat.status()
+    lock()
     if (before === "busy" && last !== "busy") load(Api.getRules(id))
   })
   load(Api.getRules(id))
