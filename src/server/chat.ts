@@ -11,6 +11,7 @@ import type { VideoView } from "../shared/plan.ts"
 import type { TimelineView } from "../shared/timeline.ts"
 import { toChatEvents } from "./pi-events.ts"
 import { Projects, type Effort } from "./projects.ts"
+import { readOwnRules, rulesLine, watchRules } from "./rules.ts"
 import { Settings } from "./settings.ts"
 import { taskNote } from "./task-note.ts"
 import { completedName } from "./tus.ts"
@@ -327,6 +328,7 @@ export class Chat extends Context.Service<Chat, {
       const run: Run = (id, dir, text, names, model, effort, approving, asker) =>
         Stream.unwrap(Effect.gen(function*() {
           const state = yield* Ref.make<RunState>({ text: "", base: "", pending: undefined, failed: undefined, settled: false })
+          const rules = yield* (asker.kind === "person" ? watchRules(dir, settings.projectsDir) : readOwnRules(dir)).pipe(Effect.provideService(FileSystem.FileSystem, fs), orBroken)
           if (asker.kind === "person") {
             yield* Effect.addFinalizer(() =>
               Effect.all({ last: Ref.get(state), stopped: Deferred.isDone(asker.turn.stop) }).pipe(
@@ -341,7 +343,7 @@ export class Chat extends Context.Service<Chat, {
             yield* attachments.examine(dir, saved.files)
             const task = taskNote(saved) + (approving ? YES_NOTE : "")
             const known = `${yield* heardVideos(id)}\n${task}${attachedNote(yield* attachments.listed(dir, files))}`
-            const launched = yield* piCommand(settings.pi, settings.root, (...parts: Array<string>) => path.join(...parts), systemPrompt, dir, text, files, model, effort, known, asker.kind).pipe(
+            const launched = yield* piCommand(settings.pi, settings.root, (...parts: Array<string>) => path.join(...parts), systemPrompt, dir, text, files, model, effort, known, asker.kind, asker.kind === "person" ? rulesLine(rules) : "").pipe(
               Effect.tapError((error) => Effect.logError("pi did not start", error)),
               Effect.option
             )

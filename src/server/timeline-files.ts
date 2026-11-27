@@ -13,6 +13,7 @@ import { NO_CAPTIONS, type Captions } from "../shared/captions.ts"
 import { readCaptions, readTexts } from "./captions.ts"
 import { quoteOnPage } from "./insert-files.ts"
 import { places, readGaze, readTranscript } from "./media-jobs.ts"
+import { reelRules } from "./rules.ts"
 
 const decodeBlocks = Schema.decodeUnknownOption(Schema.fromJsonString(Blocks))
 const decodeGathered = Schema.decodeUnknownOption(Schema.fromJsonString(Gathered))
@@ -138,7 +139,7 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
   const texts = yield* readTexts(dir)
   const written = yield* readBlocks(dir)
   if (written === "none" || written === "unreadable") return { looks, faces, pictures, inserts, texts, timeline: { state: written } } satisfies TimelineView
-  return { looks, faces, pictures, inserts, texts, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir) } } satisfies TimelineView
+  return { looks, faces, pictures, inserts, texts, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir), rest: (yield* reelRules(dir)).pause } } satisfies TimelineView
 })
 
 export interface Cut {
@@ -154,7 +155,7 @@ export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyA
   const { blocks } = soundBlocks(written, transcripts, new Map())
   const edits = yield* readEdits(dir)
   const pictures = yield* readPictures(dir)
-  const base = cutOf(clipsOf(assemble(blocks, edits, transcripts)), facesByVideo(faces), transcripts, edits)
+  const base = cutOf(clipsOf(assemble(blocks, edits, transcripts, (yield* reelRules(dir)).pause)), facesByVideo(faces), transcripts, edits)
   const resolved = coversOf(base, edits, pictures)
   const clips = onFrames(base)
   const planned = yield* readInserts(dir, transcripts)

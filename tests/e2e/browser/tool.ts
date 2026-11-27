@@ -67,8 +67,9 @@ const runPi = async (): Promise<void> => {
   input.close()
   process.stdin.pause()
   const { message, images } = readPrompt(value)
+  const [said = ""] = message.split("\n\nStudio note:")
   let reply = CHAT_REPLY
-  if (message === SLOW_MESSAGE) {
+  if (said === SLOW_MESSAGE) {
     console.log(JSON.stringify(delta(FIRST_WORDS)))
     await Bun.sleep(60_000)
     reply = "Вот конец ответа."
@@ -86,7 +87,7 @@ const runPi = async (): Promise<void> => {
     })) }))
     await Bun.write("plan.md", PLAN_TEXT)
     reply = PLAN_TEXT
-  } else if (message === "Согласна") {
+  } else if (said === "Согласна") {
     reply = "Приступаю."
   } else if (message.includes("gather the blocks now")) {
     reply = "Собрала блоки."

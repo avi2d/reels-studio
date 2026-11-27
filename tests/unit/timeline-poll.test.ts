@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { NO_EDITS, soundBlocks, withChoice, withManualPauses, withPauses, type Block, type Blocks, type Edits } from "../../src/shared/timeline.ts"
+import { NO_EDITS, PAUSE_REST, soundBlocks, withChoice, withManualPauses, withPauses, type Block, type Blocks, type Edits } from "../../src/shared/timeline.ts"
 import type { Transcript } from "../../src/shared/plan.ts"
 import { playedKey, takeServer, type Ticket } from "../../src/web/timeline.ts"
 import type { Loaded } from "../../src/web/timeline-draw.ts"
@@ -31,7 +31,7 @@ const loaded = (blocks: ReadonlyArray<Block>, names: ReadonlyArray<string>, look
       pictures: [],
       inserts: { state: "none" },
       texts: { state: "none" },
-      timeline: { state: "ready", blocks: [...blocks], dropped: 0, edits: NO_EDITS },
+      timeline: { state: "ready", blocks: [...blocks], dropped: 0, edits: NO_EDITS, rest: PAUSE_REST },
       gathering: false,
       gatherFailed: false
     }

@@ -103,10 +103,10 @@ export class Brief extends Context.Service<Brief, {
           const transcripts = readyTranscripts(yield* media.videos(id))
           const done = timeline.state === "ready"
             ? yield* media.exchangeEdits(id, (current) => {
-              const outcome = afterYes(timeline.blocks, current, transcripts)
+              const outcome = afterYes(timeline.blocks, current, transcripts, timeline.rest)
               return { edits: outcome.edits, value: outcome.done }
             })
-            : afterYes([], NO_EDITS, transcripts).done
+            : afterYes([], NO_EDITS, transcripts, 0).done
           const latest = (yield* Ref.get(agreed)).get(id) ?? approved
           const at = DateTime.formatIso(yield* DateTime.now)
           const text = yield* encodeApproval({ ...latest, at, done }).pipe(orBroken)

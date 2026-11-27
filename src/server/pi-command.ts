@@ -19,10 +19,13 @@ export const piCommand = (
   model: string,
   effort: Effort,
   known: string,
-  asker: Session
+  asker: Session,
+  turnNote: string
 ): ReturnType<typeof ChildProcess.make> => {
   const images = files.flatMap((file) => file.images)
-  const prompt = JSON.stringify({ id: "prompt", type: "prompt", message: promptText(text, files), ...(images.length === 0 ? {} : { images }) })
+  // In the message rather than the system prompt, so the note stands after the earlier replies it overrides.
+  const message = turnNote === "" ? promptText(text, files) : `${promptText(text, files)}\n\n${turnNote}`
+  const prompt = JSON.stringify({ id: "prompt", type: "prompt", message, ...(images.length === 0 ? {} : { images }) })
   return ChildProcess.make(pi, [
     "--mode", "rpc",
     "--model", model,
