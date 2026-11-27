@@ -44,6 +44,7 @@ Under the task, «Куда» holds a button for each app: Instagram, YouTube Sho
 A new reel goes to every app, and a plan needs at least one.
 «Файлы» lists the files for the task, and «Приложить» adds up to 10.
 «Составить план» uploads the new files, saves the task, the apps and the files, and asks for a plan.
+A reel with no recording gets no plan: the page says to add a recording on the step «Записи» first, and saves nothing.
 The chat model gets the chosen apps and the task files with every message, and the plan names them.
 After you press «Да, делайте», the studio finishes the work and opens «Монтаж».
 To see what the studio did, return to «План».
