@@ -1,5 +1,6 @@
 import { Crypto, Effect, FileSystem, Path, Schema, Stream } from "effect"
 import { HttpServerResponse, type HttpServerRequest } from "effect/http"
+import { safeFileName } from "../shared/file-name.ts"
 import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
 
 const TUS_VERSION = "1.0.0"
@@ -28,15 +29,6 @@ const orBroken = orUnavailable("the upload failed", UNAVAILABLE)
 export const parseMetadata = (header: string | undefined): ReadonlyMap<string, string> => {
   const pairs = (header ?? "").split(",").map((pair) => pair.trim().split(" ")).filter((pair) => pair[0] !== "")
   return new Map(pairs.map(([key, value]) => [key ?? "", Buffer.from(value ?? "", "base64").toString("utf8")]))
-}
-
-const FORBIDDEN = new Set(["<", ">", ":", "\"", "|", "?", "*"])
-const isPrintable = (char: string): boolean => (char.codePointAt(0) ?? 0) > 31 && !FORBIDDEN.has(char)
-
-export const safeFileName = (name: string | undefined): string => {
-  const base = (name ?? "").split(/[\\/]/).at(-1) ?? ""
-  const clean = Array.from(base).filter(isPrintable).join("").replace(/^\.+/, "").trim().slice(0, 200)
-  return clean === "" ? "video" : clean
 }
 
 export const numbered = (name: string, attempt: number): string => {

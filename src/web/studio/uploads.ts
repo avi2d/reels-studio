@@ -1,4 +1,5 @@
 import { Effect } from "effect"
+import { safeFileName } from "../../shared/file-name.ts"
 import type { UploadedVideo } from "../../shared/library.ts"
 import * as Api from "../api.ts"
 import { oneAfterAnother } from "../queue.ts"
@@ -68,7 +69,7 @@ const finish = (key: string): Effect.Effect<void> =>
 
 const listedAlready = ({ key, file }: Sending): Effect.Effect<boolean> =>
   libraryNow(key).pipe(
-    Effect.map((videos) => videos.some((video) => video.name === file.name && video.size === file.size)),
+    Effect.map((videos) => videos.some((video) => video.state !== "failed" && video.name === safeFileName(file.name) && video.size === file.size)),
     Effect.orElseSucceed(() => false)
   )
 

@@ -60,11 +60,16 @@ const withLocalStorage = async (body: () => Promise<void>): Promise<void> => {
   }
 }
 
-test.each(["connected", "dropped", "rejected"] as const)(
-  "a finished upload whose library lookup is %s leaves the queue once and is never offered for a second upload",
-  async (connection) => {
+test.each([
+  ["connected", []],
+  ["dropped", []],
+  ["rejected", []],
+  ["connected", [{ name: "take.mp4", size: 4, state: "failed" }]]
+] satisfies ReadonlyArray<[Connection, ReadonlyArray<UploadedVideo>]>)(
+  "a pick with lookup %s and library %j uploads rather than blocking a failed take, then leaves the queue once",
+  async (connection, listed) => {
     await withLocalStorage(async () => {
-      const server = fakeStudio(connection)
+      const server = fakeStudio(connection, listed)
       const states: Array<string> = []
       const ends: Array<TakesChange> = []
       const finished = Promise.withResolvers<void>()
@@ -85,7 +90,7 @@ test.each(["connected", "dropped", "rejected"] as const)(
         expect(server.patches).toBe(1)
         expect(states).not.toContain("unsent")
         if (connection === "rejected") expect(ends).toEqual([{ kind: "unlisted" }])
-        else expect(ends).toEqual([{ kind: "listed", uploaded: [{ name: "take.mp4", size: 4, state: "waiting" }] }])
+        else expect(ends).toEqual([{ kind: "listed", uploaded: [...listed, { name: "take.mp4", size: 4, state: "waiting" }] }])
         if (connection === "dropped") expect(states).toContain("offline")
       } finally {
         clearTimeout(timer)
@@ -97,11 +102,19 @@ test.each(["connected", "dropped", "rejected"] as const)(
   10_000
 )
 
-test(
-  "a take the library already lists by name and size is not uploaded again, so no take (2).mp4 is stored",
-  async () => {
+test.each([
+  ["take.mp4", "take.mp4"],
+  ["take:one.mp4", "takeone.mp4"],
+  ["take.mp4 ", "take.mp4"],
+  [".take.mp4", "take.mp4"],
+  ["a<>:\"|?*\u0001b.mp4", "ab.mp4"],
+  ["x".repeat(201) + ".mp4", "x".repeat(200)],
+  ["...", "video"]
+])(
+  "a picked %s listed as %s is not uploaded again under a numbered name",
+  async (picked, stored) => {
     await withLocalStorage(async () => {
-      const server = fakeStudio("connected", [{ name: "take.mp4", size: 4, state: "ready", duration: 12 }])
+      const server = fakeStudio("connected", [{ name: stored, size: 4, state: "ready", duration: 12 }])
       const ends: Array<TakesChange> = []
       const finished = Promise.withResolvers<void>()
       const timer = setTimeout(() => { finished.reject(new Error("The pick did not settle")) }, 8000)
@@ -114,10 +127,10 @@ test(
         Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => server.handle(input, init), { preconnect: () => {} })
       )
       try {
-        sendTakes([new File(["take"], "take.mp4", { lastModified: 1 })])
+        sendTakes([new File(["take"], picked, { lastModified: 1 })])
         await finished.promise
         expect(sendingNow()).toEqual([])
-        expect(ends).toEqual([{ kind: "known", name: "take.mp4" }])
+        expect(ends).toEqual([{ kind: "known", name: picked }])
         expect(server.starts).toBe(0)
         expect(server.patches).toBe(0)
       } finally {

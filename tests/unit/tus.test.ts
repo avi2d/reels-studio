@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import { numbered, parseMetadata, safeFileName } from "../../src/server/tus.ts"
+import { numbered, parseMetadata } from "../../src/server/tus.ts"
+import { safeFileName } from "../../src/shared/file-name.ts"
 
 test("Upload-Metadata values are base64-decoded, not kept encoded", () => {
   const parsed = parseMetadata("filename d29ybGRfZG9taW5hdGlvbl9wbGFuLnBkZg==,is_confidential")
