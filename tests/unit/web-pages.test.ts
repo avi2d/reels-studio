@@ -111,6 +111,12 @@ test("a list after the article word stops at a number that counts something else
   expect(articleMentions(["статьи", "620", "и", "621", "ГК"])).toEqual(["620", "621"])
 })
 
+test("a number before a plural article form is a count, not an article number", () => {
+  expect(articleMentions(["в", "3", "статьях", "закона"])).toEqual([])
+  expect(articleMentions(["по", "2", "статьям", "УК"])).toEqual([])
+  expect(articleMentions(["между", "5", "статьями"])).toEqual([])
+})
+
 test("a number with no article word next to it is not a mention", () => {
   expect(articleMentions(["Это", "стоит", "620", "рублей"])).toEqual([])
 })

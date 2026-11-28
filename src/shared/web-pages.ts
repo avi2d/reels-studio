@@ -25,6 +25,7 @@ const HEADING = /(?:^|\n)[ \t]*Статья[ \t\u00a0]+(\d+(?:\.\d+)*)/gu
 export const articlesOf = (text: string): ReadonlyArray<string> => [...new Set([...text.matchAll(HEADING)].map((match) => match[1] ?? ""))]
 
 const ARTICLE_WORD = /^(?:стать(?:я|и|е|ю|ей|ёй|ям|ях|ями)|ст)$/u
+const PLURAL_ARTICLE_WORD = /^стать(?:ям|ях|ями)$/u
 const COUNT_UNIT = /^(?:лет|год(?:а|у|ом|е|ы|ов|ам|ами|ах)?|рубл(?:ь|я|ю|ём|ем|е|и|ей|ям|ями|ях)|раз(?:а|у|ом|е)?|д(?:ень|ня|ню|нём|нем|не|ни|ней|ням|нями|нях)|месяц(?:а|у|ем|е|ы|ев|ам|ами|ах)?|процент(?:а|у|ом|е|ы|ов|ам|ами|ах)?|час(?:а|у|ом|е|ы|ов|ам|ами|ах)?|тысяч(?:а|и|у|ей|е|ам|ами|ах)?|миллион(?:а|у|ом|е|ы|ов|ам|ами|ах)?|человек(?:а|у|ом|е)?|штук(?:а|и|у|ой|е|ам|ами|ах)?)$/u
 const PART_WORD = /^(?:част[а-яё]*|ч|пункт[а-яё]*|подпункт[а-яё]*|п|пп)$/u
 const NUMBER = /^(\d+(?:\.\d+)*)(?:-?[а-яё]{1,3})?$/u
@@ -57,7 +58,8 @@ const isBeforeArticleWord = (tokens: ReadonlyArray<string>, at: number): boolean
   if (!BARE_NUMBER.test(token)) return true
   const lastTwo = Number(token.slice(-2))
   const last = lastTwo % 10
-  const counts = (next === "статья" && last === 1 && lastTwo !== 11)
+  const counts = PLURAL_ARTICLE_WORD.test(next)
+    || (next === "статья" && last === 1 && lastTwo !== 11)
     || (next === "статьи" && last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14))
   return !counts
 }
