@@ -27,7 +27,7 @@ test("a heard clip changes the measured soundtrack instead of checking the voice
     ])
     const settings = {
       host: "127.0.0.1", port: 8765, projectsDir: dir, pi: "pi", models: [],
-      root: process.cwd(), heavy: [], encoder: "libx264"
+      root: process.cwd(), heavy: [], encoder: "libx264", chrome: "google-chrome"
     }
     const hear = async (sound: boolean) => {
       const cut = {

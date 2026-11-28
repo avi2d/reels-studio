@@ -1,4 +1,4 @@
-import { faceLeft, framedHead, frameToward, inView } from "./framing.ts"
+import { faceLeft, framedHead, frameToward, inView, zoomLimit } from "./framing.ts"
 import type { Transcript } from "./plan.ts"
 import { FADE, type AnsweredJoin, type Clip, type Edits, type Frame, type Head, type JoinAnswer, type JoinState, type VideoFaces } from "./timeline.ts"
 
@@ -81,12 +81,16 @@ export interface Place {
 
 
 
-interface Seen { readonly head: Head; readonly measured: boolean }
+interface Seen { readonly head: Head; readonly measured: boolean; readonly limit: number }
 
-const seenAt = (faces: VideoFaces | undefined, time: number, side: "before" | "after"): Seen | undefined => {
+// The head is placed in the 9 by 16 window the reel shows, before any frame enlarges it.
+export const seenAt = (faces: VideoFaces | undefined, time: number, side: "before" | "after"): Seen | undefined => {
   const head = faces === undefined ? undefined : headAt(faces, time, side)
-  if (head === undefined) return undefined
-  return faces?.aspect === undefined ? { head, measured: false } : { head: inView(head, faces.aspect, faceLeft(faces.heads, faces.aspect)), measured: true }
+  if (faces === undefined || head === undefined) return undefined
+  const limit = zoomLimit(faces.aspect, faces.height)
+  return faces.aspect === undefined
+    ? { head, measured: false, limit }
+    : { head: inView(head, faces.aspect, faceLeft(faces.heads, faces.aspect)), measured: true, limit }
 }
 
 const answerOf = (given: JoinState | undefined, align: Align): JoinState | undefined => {
@@ -96,7 +100,7 @@ const answerOf = (given: JoinState | undefined, align: Align): JoinState | undef
 
 const alignOf = (before: Head, after: Seen, measured: boolean): Align => {
   if (!measured) return { kind: "unmeasured" }
-  const frame = frameToward(before, after.head)
+  const frame = frameToward(before, after.head, after.limit)
   if (frame === undefined) return { kind: "far" }
   if (frame.scale < 1.005) return { kind: "level" }
   return { kind: "zoom", frame }

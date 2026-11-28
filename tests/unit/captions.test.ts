@@ -3,13 +3,13 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { BunFileSystem } from "@effect/platform-bun"
 import { Effect } from "effect"
 import { filterPath, inkOf, readCaptions, readTexts } from "../../src/server/captions.ts"
-import { fitWord, NO_CAPTIONS, shownTexts, textPlaces } from "../../src/shared/captions.ts"
+import { assOf, fitWord, NO_CAPTIONS, plateOf, shownTexts, textPlaces, wordLookOf } from "../../src/shared/captions.ts"
 import { readApproval } from "../../src/server/approval.ts"
 import { NO_EDITS, type Block } from "../../src/shared/timeline.ts"
 
 test("a long subtitle word shrinks instead of reaching under the Instagram button column", () => {
   const word = { text: "высокопрофессиональный", start: 0, end: 1 }
-  const fitted = fitWord(word, { left: 148, right: 932, top: 1412, bottom: 1486 })
+  const fitted = fitWord(word, { left: 148, right: 932, top: 1412, bottom: 1486 }, 78, "Instagram")
   const size = fitted.size ?? 78
   expect(size).toBeGreaterThan(0)
   expect(size).toBeLessThan(78)
@@ -19,9 +19,49 @@ test("a long subtitle word shrinks instead of reaching under the Instagram butto
   expect([fitted.start, fitted.end]).toEqual([0, 1])
 })
 
+test("the name plate stands for four seconds from the start of the second part instead of over the opening title", () => {
+  const clips = [
+    { video: "a.mov", block: "opening", start: 0, end: 2 },
+    { video: "a.mov", block: "opening", start: 5, end: 8 },
+    { video: "b.mov", block: "second", start: 1, end: 10 }
+  ]
+  expect(plateOf({ shown: true, text: " Мария Белова, юрист " }, clips)).toEqual({ text: "Мария Белова, юрист", start: 5, end: 9 })
+})
+
+test("a name plate switched off or left empty is not drawn instead of showing a blank plate", () => {
+  const clips = [{ video: "a.mov", block: "opening", start: 0, end: 5 }, { video: "a.mov", block: "second", start: 5, end: 9 }]
+  expect(plateOf({ shown: false, text: "Мария" }, clips)).toBeUndefined()
+  expect(plateOf({ shown: true, text: "  " }, clips)).toBeUndefined()
+})
+
+test("the example look without an example falls back to the brand look instead of an empty style", () => {
+  expect(wordLookOf({ style: "example", size: "large" }, undefined)).toEqual(wordLookOf({ style: "brand", size: "large" }, undefined))
+})
+
 test("a subtitle word whose ink fits comes back unchanged instead of shrinking", () => {
   const word = { text: "слово", start: 0, end: 1 }
-  expect(fitWord(word, { left: 400, right: 680, top: 1412, bottom: 1486 })).toBe(word)
+  expect(fitWord(word, { left: 400, right: 680, top: 1412, bottom: 1486 }, 78, "Instagram")).toBe(word)
+})
+
+test("a word that clears the Instagram buttons shrinks in the TikTok file, whose button column starts higher", () => {
+  const word = { text: "слово", start: 0, end: 1 }
+  const ink = { left: 200, right: 900, top: 900, bottom: 960 }
+  expect(fitWord(word, ink, 78, "Instagram")).toBe(word)
+  expect(fitWord(word, ink, 78, "TikTok").size ?? 78).toBeLessThan(78)
+})
+
+const positionsOf = (ass: string): ReadonlyArray<{ readonly x: number; readonly y: number }> =>
+  [...ass.matchAll(/\\pos\((\d+),(\d+)\)/gu)].map((match) => ({ x: Number(match[1]), y: Number(match[2]) }))
+
+test("each app's file puts its subtitle and key thought by that app's bands, not all by Instagram's", () => {
+  const captions = { ...NO_CAPTIONS, words: [{ text: "аванс", start: 0, end: 1 }], texts: [{ id: "a", start: 0, end: 1, lines: [{ text: "Аванс", accent: false }] }] }
+  const [instagramText, instagramWord] = positionsOf(assOf(captions, "Instagram"))
+  const [youtubeText, youtubeWord] = positionsOf(assOf(captions, "YouTube Shorts"))
+  const [tiktokText, tiktokWord] = positionsOf(assOf(captions, "TikTok"))
+  expect((youtubeWord?.y ?? 0) - (instagramWord?.y ?? 0)).toBe(410 - 200)
+  expect((tiktokWord?.y ?? 0) - (instagramWord?.y ?? 0)).toBe(410 - 260)
+  expect((instagramText?.x ?? 0) - (tiktokText?.x ?? 0)).toBe(100 - 45)
+  expect((instagramText?.y ?? 0) - (youtubeText?.y ?? 0)).toBe(200 - 185)
 })
 
 test("changed or newly added text cannot reach captions under an older approval", async () => {
@@ -98,7 +138,7 @@ const heard = new Map([["a.mov", said]])
 const withoutPercent = [{ block: "a", video: "a.mov", start: 0, end: 2 }, { block: "a", video: "a.mov", start: 3, end: 4 }]
 const thought = (id: string, video: string, from: number, to: number) => ({ id, video, from, to, lines: [{ text: id, accent: false }] })
 const reasons = (planned: ReadonlyArray<ReturnType<typeof thought>>) =>
-  textPlaces(planned, withoutPercent, heard).map((place) => place.state === "shown" ? place.state : place.reason)
+  textPlaces(planned, withoutPercent, heard, []).map((place) => place.state === "shown" ? place.state : place.reason)
 
 test("a broken texts.json reads as unreadable rather than as a project without key thoughts", async () => {
   await mkdir("node_modules/.cache", { recursive: true })
@@ -136,11 +176,11 @@ test("a key thought with only blank lines, or wholly under the one before it, is
 
 test("a covered key thought names the thought that holds the screen, not the one listed before it", () => {
   const planned = [thought("late", "a.mov", 3, 3), thought("middle", "a.mov", 1, 1), thought("early", "a.mov", 0, 0)]
-  const covered = textPlaces(planned, withoutPercent, heard).flatMap((place) => place.state === "dropped" && place.reason === "covered" ? [[place.planned.id, place.by.id]] : [])
+  const covered = textPlaces(planned, withoutPercent, heard, []).flatMap((place) => place.state === "dropped" && place.reason === "covered" ? [[place.planned.id, place.by.id]] : [])
   expect(covered).toEqual([["late", "middle"]])
 })
 
 test("a key thought kept beside dropped ones stands from its first word for 2.5 s, not shifted by the dropped ones", () => {
   const planned = [thought("gone", "b.mov", 0, 0), thought("kept", "a.mov", 0, 0), thought("cut", "a.mov", 2, 2)]
-  expect(shownTexts(planned, withoutPercent, heard)).toEqual([{ id: "kept", lines: [{ text: "kept", accent: false }], start: 0, end: 2.5 }])
+  expect(shownTexts(planned, withoutPercent, heard, [])).toEqual([{ id: "kept", lines: [{ text: "kept", accent: false }], start: 0, end: 2.5 }])
 })

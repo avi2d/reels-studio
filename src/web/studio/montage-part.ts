@@ -1,18 +1,20 @@
-import type { TextPlace } from "../../shared/captions.ts"
 import { lengthOf, type Transcript } from "../../shared/plan.ts"
 import { bareWord } from "../../shared/subtitles.ts"
-import type { PlannedText } from "../../shared/texts.ts"
 import { playedSpans, type Block, type Edits, type Pause, type Placed, type Take } from "../../shared/timeline.ts"
+import type { PageSource } from "../../shared/web-pages.ts"
 import { h } from "../dom.ts"
 import { formatLength, formatPause } from "../format.ts"
-import { whyDropped } from "../text-drops.ts"
+import { isAsked } from "../text-names.ts"
 import type { EditableSubtitle } from "../timeline-row.ts"
 import { icon } from "./icons.ts"
 import { insertAsk, joinAsk, wordAsk, type AskActions } from "./montage-asks.ts"
-import type { Numbered, Part } from "./montage-model.ts"
+import type { Part } from "./montage-model.ts"
+import { droppedText, textAsk, type TextActions } from "./montage-texts.ts"
+import { zoomGroup, type ZoomActions } from "./montage-zooms.ts"
+import { articleWarnings } from "./page-source.ts"
 import { button, menuButton } from "./ui.ts"
 
-export interface PartActions extends AskActions {
+export interface PartActions extends AskActions, TextActions, ZoomActions {
   readonly choose: (block: string, take: Take) => void
   readonly hearTake: (block: string, take: Take) => void
   readonly hearPause: (one: Placed, pause: Pause) => void
@@ -28,9 +30,10 @@ export interface PartData {
   readonly transcripts: ReadonlyMap<string, Transcript>
   readonly edits: Edits
   readonly pictures: ReadonlyArray<string>
+  readonly sources: ReadonlyArray<PageSource>
   readonly words: ReadonlyArray<EditableSubtitle>
   readonly phraseOf: (phrase: { readonly video: string; readonly from: number; readonly to: number }) => string
-  readonly textNumber: (planned: PlannedText) => number
+  readonly textName: (id: string) => string
 }
 
 const group = (title: string, ...children: ReadonlyArray<Node>): HTMLElement =>
@@ -38,7 +41,7 @@ const group = (title: string, ...children: ReadonlyArray<Node>): HTMLElement =>
 
 const headOf = (number: number, data: PartData, title: string, ...acts: ReadonlyArray<Node>): HTMLElement =>
   h("div", { class: "detail__head" },
-    h("div", {}, h("p", { class: "eyebrow" }, `Часть ${number} из ${data.count}`), h("h2", { id: "part-title", tabindex: "-1" }, title)),
+    h("div", {}, h("p", { class: "eyebrow" }, `Часть ${number} из ${data.count}`), h("h2", { id: "part-title", tabindex: "-1" }, title), ...articleWarnings(data.sources, title)),
     ...acts)
 
 const wordButton = (one: Placed, word: EditableSubtitle, data: PartData, doubtful: boolean, actions: PartActions): HTMLElement => {
@@ -89,7 +92,8 @@ const wordsGroup = (part: Part, data: PartData, actions: PartActions): HTMLEleme
   return group("Слова",
     ...part.words.map((place) => wordAsk(id, place, shownOf(place.place.index), actions)),
     h("p", { class: "hint" }, "Так слова встанут в субтитры. Нажмите на слово, которое студия услышала неверно, и исправьте его."),
-    h("p", { class: "transcript" }, ...data.words.flatMap((word) => [wordButton(part.one, word, data, doubtful.has(word.index), actions), " "])))
+    h("p", { class: "transcript" }, ...data.words.flatMap((word) => [wordButton(part.one, word, data, doubtful.has(word.index), actions), " "])),
+    ...articleWarnings(data.sources, data.words.map((word) => word.text).join(" ")))
 }
 
 const takeItem = (one: Placed, take: Take, data: PartData, actions: PartActions): HTMLElement => {
@@ -131,19 +135,14 @@ const joinGroup = (part: Part, data: PartData, actions: PartActions): ReadonlyAr
       h("ul", { class: "pauses" }, ...one.pauses.map((pause) => pauseItem(one, pause, data, actions)))])]
 }
 
-const thoughtItem = ({ place, number }: Numbered<TextPlace>, data: PartData): HTMLElement =>
-  h("li", { class: place.state === "shown" ? "thought" : "thought thought--off" },
-    h("b", {}, `Мысль ${number}`),
-    h("span", { class: "thought__lines" }, ...place.planned.lines.flatMap((line, index) =>
-      [...index === 0 ? [] : [h("br")], line.accent ? h("mark", {}, line.text) : line.text])),
-    h("span", { class: "hint" }, place.state === "shown"
-      ? `на словах «${data.phraseOf(place.planned)}» · ${formatLength(place.shown.start)}`
-      : whyDropped(place, data.textNumber)))
-
-export const screenGroup = (part: Pick<Part, "texts" | "inserts">, data: PartData, actions: PartActions, title = "На экране"): ReadonlyArray<HTMLElement> =>
-  part.texts.length === 0 && part.inserts.length === 0 ? [] : [group(title,
-    ...part.texts.length === 0 ? [] : [h("ul", { class: "thoughts" }, ...part.texts.map((place) => thoughtItem(place, data)))],
-    ...part.inserts.map((place) => insertAsk(place, data.phraseOf(place.place.planned), data.pictures, actions)))]
+export const screenGroup = (part: Pick<Part, "texts" | "inserts">, data: PartData, actions: PartActions, title = "На экране"): ReadonlyArray<HTMLElement> => {
+  if (part.texts.length === 0 && part.inserts.length === 0) return []
+  const dropped = part.texts.flatMap(({ place, name }) => place.state === "dropped" && !isAsked(place) ? [droppedText(name, place, data.textName, data.sources)] : [])
+  return [group(title,
+    ...part.texts.flatMap((text) => isAsked(text.place) ? [textAsk(text, data.phraseOf(text.place.planned), data.sources, actions)] : []),
+    ...dropped.length === 0 ? [] : [h("ul", { class: "thoughts" }, ...dropped)],
+    ...part.inserts.map((place) => insertAsk(place, data.phraseOf(place.place.planned), data, actions)))]
+}
 
 export const partDetail = (part: Part, data: PartData, actions: PartActions): HTMLElement => {
   const id = part.one.block.id
@@ -157,6 +156,7 @@ export const partDetail = (part: Part, data: PartData, actions: PartActions): HT
     wordsGroup(part, data, actions),
     ...part.one.block.takes.length < 2 ? [] : [group("Дубль", h("ul", { class: "takes" }, ...part.one.block.takes.map((take) => takeItem(part.one, take, data, actions))))],
     ...joinGroup(part, data, actions),
+    ...zoomGroup(part.zooms, data.phraseOf, actions),
     ...screenGroup(part, data, actions))
 }
 
@@ -164,7 +164,7 @@ export const goneDetail = (block: Block, take: Take, data: PartData, actions: Pa
   const words = data.transcripts.get(take.video)?.words.slice(take.from, take.to + 1).map((word) => word.text).join(" ") ?? ""
   return h("div", { class: "detail detail--gone" },
     h("div", { class: "detail__head" },
-      h("div", {}, h("p", { class: "eyebrow" }, "Убрана из ролика"), h("h2", { id: "part-title", tabindex: "-1" }, block.title)),
+      h("div", {}, h("p", { class: "eyebrow" }, "Убрана из ролика"), h("h2", { id: "part-title", tabindex: "-1" }, block.title), ...articleWarnings(data.sources, block.title)),
       button("quiet", "Вернуть", { "data-key": `restore:${block.id}`, click: () => { actions.restore(block.id) } }, "retry")),
-    h("p", { class: "quote" }, words))
+    h("p", { class: "quote" }, words), ...articleWarnings(data.sources, words))
 }

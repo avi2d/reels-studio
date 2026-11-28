@@ -1,16 +1,16 @@
 import { Effect, Layer, Option, Schema, Stream } from "effect"
-import { NewTask } from "../shared/brief.ts"
+import { type App, NewTask } from "../shared/brief.ts"
 import { CHAT_TURN_HEADER } from "../shared/chat.ts"
 import { Pick } from "../shared/library.ts"
+import { Post } from "../shared/posts.ts"
 import { Face } from "../shared/face.ts"
 import { RetouchPicture } from "../shared/retouch.ts"
 import { Cleaned, Noise } from "../shared/noise.ts"
 import { Effort, ProjectTitleInput } from "../shared/project.ts"
-import { PictureSide } from "../shared/reel.ts"
+import { APP_FILE_NAME } from "../shared/reel.ts"
 import { Edits, type TimelinePage } from "../shared/timeline.ts"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
-import { ApiError, badRequest, notFound } from "./api-error.ts"
-import { attachment, sendFile } from "./api-files.ts"
+import { ApiError, notFound, orUnavailable } from "./api-error.ts"
 import { Attachments } from "./attachments.ts"
 import { Brief } from "./brief.ts"
 import { Chat } from "./chat.ts"
@@ -18,56 +18,23 @@ import { Gather } from "./gather.ts"
 import { openLibrary } from "./library.ts"
 import { allowedHosts, isAllowedHost, isHomeAddress, isSameOrigin } from "./home-network.ts"
 import { Media } from "./media.ts"
-import type { ReelVersion } from "./reel.ts"
 import { Projects } from "./projects.ts"
+import { readPosts, writePost } from "./posts.ts"
 import { keepRule, undoChange } from "./rules.ts"
 import { orRules, rulesPage } from "./rules-page.ts"
 import { KeptInput, RuleId } from "../shared/rules.ts"
 import { Settings } from "./settings.ts"
+import { sendFile } from "./send-file.ts"
 import * as Tus from "./tus.ts"
+import { appOf, madeOf, pageOf, pictureOf, versionOf } from "./api-request.ts"
+import { WebPages } from "./web-pages.ts"
+import { body, json, param, reply } from "./api-reply.ts"
+import { looksRoutes } from "./looks-api.ts"
 
-const reply = <R>(
-  effect: Effect.Effect<HttpServerResponse.HttpServerResponse, ApiError, R>
-): Effect.Effect<HttpServerResponse.HttpServerResponse, never, R> =>
-  effect.pipe(
-    Effect.catchTag("ApiError", (error) =>
-      Effect.succeed(HttpServerResponse.jsonUnsafe({ error: error.message }, { status: error.status })))
-  )
-
-const json = (body: unknown, status = 200) => HttpServerResponse.jsonUnsafe(body, { status })
-
-const param = (name: string) =>
-  Effect.map(HttpRouter.params, (params) => params[name] ?? "")
-
-const queryOf = (request: HttpServerRequest.HttpServerRequest, name: string): string =>
-  new URL(request.url, "http://localhost").searchParams.get(name) ?? ""
-
-const madeOf = (request: HttpServerRequest.HttpServerRequest): string => queryOf(request, "made")
-
-const decodeSide = Schema.decodeUnknownOption(PictureSide)
 const decodeRuleId = Schema.decodeUnknownOption(RuleId)
 
-const pictureOf = (request: HttpServerRequest.HttpServerRequest) => {
-  const join = Number(queryOf(request, "join"))
-  const side = Option.getOrUndefined(decodeSide(queryOf(request, "side")))
-  return Number.isInteger(join) && join >= 1 && side !== undefined
-    ? Effect.succeed({ made: madeOf(request), join, side })
-    : badRequest("Такой картинки нет")
-}
-
-const pageOf = (request: HttpServerRequest.HttpServerRequest) => {
-  const page = Number(queryOf(request, "page"))
-  const quote = queryOf(request, "quote")
-  return Number.isInteger(page) && page >= 1 && quote.trim() !== "" ? Effect.succeed({ page, quote }) : badRequest("Такой страницы нет")
-}
-
-const versionOf = (request: HttpServerRequest.HttpServerRequest): ReelVersion =>
-  new URL(request.url, "http://localhost").searchParams.get("version") === "before" ? "before" : "after"
-
-const body = <A>(schema: Schema.ConstraintDecoder<A>) =>
-  HttpServerRequest.schemaBodyJson(schema).pipe(Effect.mapError(() => badRequest("Запрос не разобран")))
-
 const SaveEdits = Schema.Struct({ base: Edits, edits: Edits })
+const WebPageInput = Schema.Struct({ address: Schema.String })
 
 const projects = Layer.mergeAll(
   HttpRouter.add("GET", "/api/projects", reply(Effect.gen(function*() {
@@ -241,8 +208,18 @@ const uploads = Layer.mergeAll(
     const attachments = yield* Attachments
     const { page, quote } = yield* pageOf(request)
     return yield* sendFile(yield* attachments.page(yield* param("id"), yield* param("name"), page, quote), "image/jpeg", request.headers["range"])
+  }))),
+  HttpRouter.add("POST", "/api/projects/:id/web-pages", reply(Effect.gen(function*() {
+    return json(yield* (yield* WebPages).save(yield* param("id"), (yield* body(WebPageInput)).address))
   })))
 )
+
+// The ASCII name serves a browser that ignores filename*, which alone carries the Russian title.
+export const attachment = (title: string, app?: App): string => {
+  const stem = title.trim() || "reel"
+  const [name, fallback] = app === undefined ? [stem, "reel"] : [`${stem} ${app}`, `reel-${APP_FILE_NAME[app]}`]
+  return `attachment; filename="${fallback}.mp4"; filename*=UTF-8''${encodeURIComponent(`${name}.mp4`)}`
+}
 
 const reel = Layer.mergeAll(
   HttpRouter.add("GET", "/api/projects/:id/reel", reply(Effect.gen(function*() {
@@ -263,7 +240,7 @@ const reel = Layer.mergeAll(
   }))),
   HttpRouter.add("GET", "/api/projects/:id/reel/file", (request) => reply(Effect.gen(function*() {
     const media = yield* Media
-    const target = yield* media.reelFile(yield* param("id"), madeOf(request), versionOf(request))
+    const target = yield* media.reelFile(yield* param("id"), madeOf(request), versionOf(request), yield* appOf(request))
     return yield* sendFile(target, "video/mp4", request.headers["range"])
   }))),
   HttpRouter.add("GET", "/api/projects/:id/reel/picture", (request) => reply(Effect.gen(function*() {
@@ -275,13 +252,31 @@ const reel = Layer.mergeAll(
     const media = yield* Media
     const store = yield* Projects
     const id = yield* param("id")
-    const target = yield* media.reelFile(id, madeOf(request), "after")
+    const app = yield* appOf(request)
+    const target = yield* media.reelFile(id, madeOf(request), "after", app)
     const { title } = yield* store.get(id)
-    return yield* sendFile(target, "video/mp4", request.headers["range"], { "content-disposition": attachment(title) })
+    return yield* sendFile(target, "video/mp4", request.headers["range"], { "content-disposition": attachment(title, app) })
+  })))
+)
+
+const orPosts = orUnavailable("the posts failed", "Подписи недоступны. Попробуйте ещё раз.")
+
+const posts = Layer.mergeAll(
+  HttpRouter.add("GET", "/api/projects/:id/posts", reply(Effect.gen(function*() {
+    const store = yield* Projects
+    const dir = yield* store.folder(yield* param("id"))
+    return json(yield* readPosts(dir).pipe(orPosts))
+  }))),
+  HttpRouter.add("PUT", "/api/projects/:id/posts", reply(Effect.gen(function*() {
+    const store = yield* Projects
+    const dir = yield* store.folder(yield* param("id"))
+    const post = yield* body(Post)
+    return json(yield* writePost(dir, post).pipe(orPosts))
   })))
 )
 
 const NewFace = Schema.Struct({ face: Face })
+
 
 const retouch = Layer.mergeAll(
   HttpRouter.add("GET", "/api/projects/:id/retouch", reply(Effect.gen(function*() {
@@ -395,4 +390,4 @@ const homeOnly = HttpRouter.middleware(
   { global: true }
 )
 
-export const apiRoutes = Layer.mergeAll(projects, brief, rules, chat, uploads, videos, reel, retouch, noise, homeOnly)
+export const apiRoutes = Layer.mergeAll(projects, brief, rules, chat, uploads, videos, reel, posts, retouch, looksRoutes, noise, homeOnly)

@@ -105,12 +105,15 @@ A part shorter than 1.2 s is measured played over until it fills 1.2 s, because 
 The gain moves from one part's value to the next only inside the two 0.06 s fades at their join.
 The sound there is near silence.
 One more constant gain over the whole reel hits -14 LUFS, and a limiter keeps the true peak under -1.5 dBTP.
-When the cut shows inserts or approved on-screen text, one more pass lays them over the levelled file.
+The build makes one file for each app chosen in the brief.
+When the cut shows inserts or approved on-screen text, one more pass per app lays them over the levelled file.
 That pass copies the sound as it is.
 The studio draws each spoken word as a single word subtitle and the titles and key thoughts of texts.json in that pass.
-The subtitles carry the person's corrections.
-The studio draws a long subtitle word smaller to fit the Instagram box.
+The subtitles carry the person's corrections, and they take the look the person picked, as «The subtitle look» below says.
+Each pass places the texts in the box of its app, so a text never sits under that app's buttons.
+The studio draws a long subtitle word or a name plate smaller to fit the box of the app.
 A key thought that leaves the box stops the build.
+With nothing to lay over, every app gets the same levelled file.
 The joined file before levelling stays beside the reel as `before-<stamp>.mp4`.
 The download always serves the levelled file.
 A bar follows the parts, the levelling, the inserts and the text.
@@ -198,7 +201,8 @@ After a new choice it says the file no longer matches.
 
 The «Оформление» step sets «Шум» to «Оставить», «Убрать слегка» or «Убрать сильно».
 A reel starts with «Убрать сильно», and a choice stays with its reel.
-«Убрать слегка» cuts the room noise by 8 dB and «Убрать сильно» by 18 dB, both with the ffmpeg `afftdn` filter after a 70 Hz high-pass.
+Both strengths use the ffmpeg `afftdn` filter after a 70 Hz high-pass.
+The filter uses an 8 dB reduction for «Убрать слегка» and 18 dB for «Убрать сильно», with more reduction in the lower bands.
 When the step opens, the studio cleans the preview sound of each video in the cut with both strengths, on the home computer, in the queue of the other heavy jobs.
 The preview picture is copied, and the originals stay untouched.
 While it runs, the step shows the share done, and the player plays the reel as it is.
@@ -207,7 +211,29 @@ A change of the source file or of the filter settings cleans the video again.
 Under the choices, the step shows the noise level of the pauses before and after the cleaning, from 0.1 s windows of the whole source files.
 A pause is a window more than 20 dB below the median window, so a recording with no such window shows no level.
 The build and the sound check apply the chosen strength to the sound of each part before the levelling.
-The «Готовый ролик» stage counts a file built with another choice as no longer matching the cut.
+On «Ролики», files built with another choice count as out of date.
+## The subtitle look
+
+The «Оформление» step sets how the subtitles look, in `looks.json`.
+The person picks one of three look cards and one of two sizes, «Обычные» or «Крупные».
+
+| Look | What the subtitles are |
+| --- | --- |
+| «Ваш стиль» | The serif words with a black outline of the style profile, the default |
+| «Жёлтая плашка» | Dark sans words on a yellow plate |
+| «Как в примере» | The font, colour, outline, plate and capitals the chat model took from an example reel in `example.json` |
+
+«Как в примере» opens only while `example.json` exists, and the server refuses to save it before.
+When the example is removed later, the build falls back to the style profile.
+The card lists the lines the chat model took from the example, and the plan quotes the same lines.
+The title place of the example, `top` or `middle`, moves the titles and key thoughts: `middle` centres them in the clear zone of the box of the app, not on the face.
+The preview on the step draws the same look the build burns.
+
+The name plate is a line such as a name and a job, up to 40 characters.
+When it is switched on and has text, the build shows it for the first 4 s of the second part, or of the cut when it has one part.
+It stands low in the clear zone, above the subtitles.
+The studio measures the ink of every look and of the plate before the render, and draws a word or the plate smaller when it leaves the clear zone.
+The sans look uses Onest Bold, which `tools/fonts/onest_bold.py` makes from the page fonts.
 
 ## Keys
 
@@ -258,13 +284,15 @@ Each place says how many seconds it can cut, or names the word that keeps the ey
 A place with nothing to cut offers no «Обрезать».
 
 The zoom only enlarges and moves the picture inside its own edges, so no black band shows.
-It enlarges by at most 15 %, and a place that needs more offers no «Выровнять».
+It enlarges by at most 15 %, or more when the original has the pixels: up to its shown width over the 1080 px of the reel.
+A place that needs more offers no «Выровнять».
 A place whose eyes already sit on one line offers no «Выровнять».
 «Выровнять» is on from the start at every place that offers it, so such a place counts as answered until the person picks another answer.
 The zoom holds until the next join, so the picture does not jump back in the middle of a block.
 Once a join is aligned, «Как было» plays the same seconds without the zoom.
 The page shows the zoom at once, and the built reel crops the same window from the original.
 The zoom needs the frame shape of the measured video, which the gaze measure writes as `aspect`.
+After the measure the studio adds the shown height of the original as `height`, read with ffprobe, and without it the limit stays at 15 %.
 Until a gaze file holds it, the place says the studio is still measuring.
 The answer is kept in `timeline.json` with the two ends of the join, so a change of the cut that moves the join opens it again.
 The studio re-measures by itself, in the background, a video whose gaze file holds no head positions or no `aspect`.
@@ -275,8 +303,9 @@ It shows the chosen picture from 1 s before the join to 1.5 s after it, and take
 ## Inserts
 
 An insert shows a file the person attached in the chat or to the task over the video while a phrase is said: a picture or a screenshot, a video clip, or one page of a PDF.
+The text of a law counts as a PDF: when the brief names a page on the internet, the chat model saves it by its address, the studio prints it as a PDF to `attached/` and lists it in `web-pages.json`, and the model places it as it places any PDF.
 The chat model chooses the phrase by its meaning and writes it to `inserts.json`, as the reels-inserts skill says.
-The studio leaves out an insert with a repeated id, a file that is not in `attached/`, that the person removed from the task and no chat message names, or that is not of its kind, a quote that the text of its PDF page does not hold, or word numbers the transcript does not hold, and the page says how many it left out.
+The studio leaves out an insert with a repeated id, a file that is not in `attached/`, that the person removed from the task and no chat message or saved web page names, or that is not of its kind, a quote that the text of its PDF page does not hold, or word numbers the transcript does not hold, and the page says how many it left out.
 The quote is matched without regard to case, ё, line breaks and hyphens.
 An insert covers the words of its phrase that the cut plays, and at least 2 s.
 Two inserts never stand at once: the later one starts where the earlier one ends, and one left shorter than 1 s is dropped.
@@ -290,12 +319,31 @@ A clip plays from its `start` for as long as its phrase, and holds its last fram
 A clip is silent until the person turns its sound on, and it does not grow.
 A PDF page is rendered 1800 px wide, its quoted lines are marked in yellow, and it is cropped around the marked lines as wide as the text of the page, at most square and no taller than the text, so it stands as a card.
 The marked page and the clip preview the page plays are kept in `attached-views/<file>/`.
+The studio opens a page from the internet only on the computer it runs on and refuses an address on the home network.
+The insert card of a saved page names the site with a link, and the licence the page states or that it states none.
+The card, the part title, the subtitle words, each key thought and each removed part warn when they name an article that the saved law pages do not hold.
 
 The row of blocks shows each insert as a mark under the blocks it covers, and the mark plays it.
 The «Паузы и склейки» stage lists every insert as a place to check, with what it shows, its words and the reason the model gave.
 «Посмотреть» plays 1 s before the insert, the insert and 1 s after it, with the insert over the player as the reel shows it.
 «Оставить» keeps it, «Со звуком» keeps a clip with its sound, «Заменить» puts another attached picture in its place, and «Убрать» takes it out of the reel.
 Each answer takes the place off the count, and `timeline.json` keeps it by the insert id.
+
+## Zooms on key words
+
+The chat model marks the key words of the reel by their meaning and writes them to `zooms.json`, as the reels-plan skill says.
+On each, the picture pushes in slowly around the eyes, so they stay on one line, then pulls back over 0.3 s.
+The push grows over the key words and lasts at least 0.6 s.
+A strong zoom enlarges by 15 % and a soft one by 7 %.
+With a join zoom in the same part, the two together stay within the join zoom limit.
+Two pushes of one video never add up: the earlier one pulls back fully before the later one starts.
+When that leaves the earlier one less than 0.3 s to push in, the studio leaves it out, and the step does not list it.
+
+The step «Монтаж» lists the zooms of each part under «Приближение», with their words and time.
+«Нет», «Мягкое» and «Сильное» set one zoom, and `timeline.json` keeps the answer by the zoom id.
+A zoom with no answer follows the zoom rule.
+«Смотреть» plays 1.5 s before the words and 3 s after them, with the push.
+The page and the built reel use the same push.
 
 ## Doubtful words
 
@@ -325,6 +373,15 @@ Both are kept as a subtitle correction in `timeline.json`, so a word the person 
 
 The chat model writes the key thoughts to `texts.json`, each tied to the words of one phrase.
 The «Паузы и склейки» stage lists every key thought of `texts.json` under «Ключевые мысли», with its lines and, when the studio knows them, its words and its time in the cut.
+The step «Монтаж» lists the first shown text of the first part as «Заголовок» and the rest as «Мысль 1», «Мысль 2» and so on, and the stage list uses the same names.
+Each shown text on that step is a place to check.
+It shows its lines, its words and its time, and «Посмотреть» plays 1 s before it, the text and 1 s after it.
+«Оставить» keeps the wording, «Исправить» opens a field for each line to retype it, and «Убрать» takes the text out of the reel.
+`timeline.json` keeps each answer by the text id, and a retyped text keeps its new lines and shows the proposed ones under them.
+A line holds at most 20 characters, or 8 in an accent line, and a text holds at most 3 lines.
+The page does not save a longer or empty wording, and the server refuses it with «Надпись не помещается на экране».
+The built file carries the retyped lines or leaves out a removed text.
+
 A key thought the reel cannot show stays in the list, marked «не встанет в ролик», with its reason:
 
 | Reason | What the list says |
@@ -333,24 +390,30 @@ A key thought the reel cannot show stays in the list, marked «не встане
 | Its word numbers are not in the transcript, or the first comes after the last | The video text has no such words |
 | The cut removed every word of its phrase | The phrase is not in the reel now |
 | It has no line with text | There is nothing to show |
-| An earlier thought in time already stands for the whole phrase | The list names that thought by its number and says it holds the screen |
+| The person removed it | The person removed it from the reel |
+| An earlier thought in time already stands for the whole phrase | The list names that thought and says it holds the screen |
 
 When `texts.json` does not read, the list says so.
 
 ## Rules
 
 A rule is a setting the studio applies to the whole reel at once.
-Only the pause rule exists: the seconds of silence a shortened pause keeps, from 0 to 0.5 s, and 0.2 s when the reel has no value.
-The step «Монтаж» lists the rule under «Правила» as a short phrase, such as «пауза остаётся 0,2 с».
+Two rules exist:
+
+- The pause rule: the seconds of silence a shortened pause keeps, from 0 to 0.5 s, and 0.2 s when the reel has no value.
+- The zoom rule: the strength of the zooms on key words, `off`, `soft` or `full`, and `full` when the reel has no value.
+
+The step «Монтаж» lists the rules under «Правила» as short phrases, such as «пауза остаётся 0,2 с».
 A step with no rule of its own shows no list.
-The person changes a rule by writing in the chat, such as «оставляй паузы подлиннее», and the chat model writes `rules.json`.
-The step then shows the change, every pause it moved and a button that returns the old value.
-The button undoes the last chat change only.
+The person changes a rule by writing in the chat, such as «оставляй паузы подлиннее» or «медленнее», and the chat model writes `rules.json`.
+The step then shows the change, every pause it moved, every zoom it moved that the step lists, and one button that returns the old values.
+A zoom the person set by hand keeps its answer.
+When one reply changed both rules, the button returns both.
 The pin next to a rule keeps its value for the next reels, and a new reel starts with the pinned values.
 A pinned rule follows a chat change and its undo.
 Unpinning keeps the value in the current reel and drops it from the next ones.
 The pin and the undo button are off while a chat reply streams.
-The studio adds a note with the current pause value to each message the person sends, since the person can return a rule on the page and the earlier replies do not show it.
+The studio adds a note with the current rule values to each message the person sends, since the person can return a rule on the page and the earlier replies do not show it.
 
 ## Files
 
@@ -358,22 +421,26 @@ Each video folder holds these next to `plan.json`:
 
 | Path | What it holds |
 | --- | --- |
-| `gaze/<video>.json` | One sample per 0.2 s: `camera`, `away` or `hidden`, and where the eyes are and the face height, as shares of the frame height, and the frame shape as `aspect` |
+| `gaze/<video>.json` | One sample per 0.2 s: `camera`, `away` or `hidden`, and where the eyes are and the face height, as shares of the frame height, and the frame shape as `aspect`, and the shown height of the original as `height` |
 | `gaze/<video>.txt` | The share of looks into the camera for each stretch of speech, which the chat model reads |
 | `blocks.json` | The blocks and their takes, written by the chat model |
 | `inserts.json` | The pictures, clips and PDF pages to show over phrases, written by the chat model |
 | `doubts.json` | The proposed right words for the doubtful words, written by the chat model |
 | `texts.json` | The titles and key thoughts to show over phrases, written by the chat model |
-| `rules.json` | The rules of the reel, now `pause`, the seconds a shortened pause keeps. A new reel starts with the pinned rules, and the chat model may write it |
+| `web-pages.json` | The file, address, licence and time of each page saved from the internet. Only the studio writes it |
+| `zooms.json` | The key words to zoom on, each with an id, its video and its word numbers, written by the chat model |
+| `rules.json` | The rules of the reel, `pause` and `zoom`. A new reel starts with the pinned rules, and the chat model may write it |
 | `rules-change.json` | The last rule change made from the chat, with the value before it, so one press can undo it. Only the studio writes it |
-| `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses, the subtitle corrections and the answers to the places to check and to the inserts |
-| `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
+| `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses, the subtitle corrections and the answers to the places to check, to the inserts, to the texts and to the zooms |
+| `reel/reel-<stamp>-<app>.mp4` | The published reel video of one app, `instagram`, `youtube` or `tiktok`, named by its build time |
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
 | `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |
-| `reel/reel.json` | The build time, the video file it published, the parts, the crop window of each video, the inserts, a hash of the subtitles and key thoughts, the face and noise settings, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
+| `reel/reel.json` | The build time, the video file it published for each app, the parts with their pushes, the crop window of each video, the inserts, a hash of the subtitles, key thoughts, subtitle look, title place and name plate as the person answered them, the face and noise settings, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
 | `reel/sound.json` | The parts of the last checked cut with the heard clip inserts, its measured loudness before and after levelling, and the gain of each part over its source time, which the montage plays |
 | `reel/sound-work/` | The sound of each clip and the levelled sound while a check runs, removed when it ends |
-| `looks.json` | The face setting of the reel, `off` or `light`, and the noise setting, `off`, `light` or `strong`, written when the person picks one |
+| `posts.json` | The caption and hashtags the person wrote for each app on «Ролики», so choosing an app again brings its text back |
+| `looks.json` | The face setting of the reel, `off` or `light`, the subtitle look, `brand`, `plate` or `example`, with its size, `normal` or `large`, the noise choice, and the name plate, shown or not, with its text, written when the person picks them |
+| `example.json` | What the chat model took from an example reel the person attached: up to three lines for the person, the subtitle font, colour, outline, plate and capitals, and the title place, `top` or `middle` |
 | `noise/<video>.json` | The key of the last cleaning of a video, its source size and time with the filter settings, and the level of each 0.1 s window before and after each strength |
 | `noise/<light or strong>/<video>.mp4` | The preview of a video with its sound cleaned at that strength |
 | `noise/work/` | The cleaned previews while a cleaning runs, removed when it ends |

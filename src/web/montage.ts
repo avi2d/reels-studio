@@ -1,6 +1,7 @@
 import { Data, Effect } from "effect"
 import { faceLeft, VIEW_WIDTH } from "../shared/framing.ts"
 import { fadeGain, type Clip, type Frame, type VideoFaces } from "../shared/timeline.ts"
+import { zoomAt, type Zoom } from "../shared/zooms.ts"
 import * as Api from "./api.ts"
 import { h } from "./dom.ts"
 
@@ -109,14 +110,18 @@ const LOADED = ["seeked", "loadeddata", "canplay"] as const
 
 const hasFrame = (node: HTMLVideoElement): boolean => node.readyState >= HAVE_CURRENT_DATA && !node.seeking
 
-const transformOf = (frame: Frame | undefined): string =>
-  frame === undefined ? "" : `scale(${frame.scale}) translate(${-frame.left / VIEW_WIDTH * 100}%, ${-frame.top * 100}%)`
+// The push goes first in the list, so it enlarges the framed picture around a point of the view rather than of the source.
+const transformOf = (frame: Frame | undefined, zoom: Zoom | undefined): string => {
+  const push = zoom === undefined ? "" : `translate(${zoom.x / VIEW_WIDTH * 100}%, ${zoom.y * 100}%) scale(${zoom.scale}) translate(${-zoom.x / VIEW_WIDTH * 100}%, ${-zoom.y * 100}%) `
+  return push + (frame === undefined ? "" : `scale(${frame.scale}) translate(${-frame.left / VIEW_WIDTH * 100}%, ${-frame.top * 100}%)`)
+}
 
 interface Screen {
   readonly node: HTMLElement
   readonly nodes: Map<string, HTMLVideoElement>
   readonly seek: (node: HTMLVideoElement, at: number, frame: Frame | undefined) => void
   readonly reveal: (node: HTMLVideoElement) => void
+  readonly zoom: (node: HTMLVideoElement, zoom: Zoom | undefined) => void
   readonly nodeOf: (video: string) => HTMLVideoElement
   readonly source: (urlOf: UrlOf, onLoaded: (node: HTMLVideoElement) => void) => void
   shown: HTMLVideoElement | undefined
@@ -134,17 +139,19 @@ const screenOf = (projectId: string, events: ScreenEvents, facesFor: (video: str
   const files: { urlOf: UrlOf } = { urlOf: (video) => Api.previewUrl(projectId, video) }
   const wanted = new WeakMap<HTMLVideoElement, number>()
   const framing = new WeakMap<HTMLVideoElement, Frame | undefined>()
+  const zooming = new WeakMap<HTMLVideoElement, Zoom | undefined>()
   const applyFrame = (video: HTMLVideoElement): void => {
     const faces = facesFor(video.dataset.video ?? "")
     const left = faces?.aspect === undefined ? undefined : faceLeft(faces.heads, faces.aspect)
     const across = left === undefined || faces?.aspect === undefined ? 50 : left / (faces.aspect - VIEW_WIDTH) * 100
     video.style.objectPosition = `${across}% 50%`
-    video.style.transform = transformOf(framing.get(video))
+    video.style.transform = transformOf(framing.get(video), zooming.get(video))
   }
   // The new frame waits for the seek, or the last picture of the old place shows enlarged for a moment.
   const seek = (video: HTMLVideoElement, at: number, frame: Frame | undefined): void => {
     wanted.set(video, at)
     framing.set(video, frame)
+    zooming.delete(video)
     if (video.readyState < HAVE_METADATA) return
     if (Math.abs(video.currentTime - at) > SEEK_SLACK) video.currentTime = at
     else applyFrame(video)
@@ -169,6 +176,11 @@ const screenOf = (projectId: string, events: ScreenEvents, facesFor: (video: str
         for (const event of LOADED) video.addEventListener(event, loaded)
         video.src = url
       }
+    },
+    zoom: (video, zoom) => {
+      if (zoom === undefined && zooming.get(video) === undefined) return
+      zooming.set(video, zoom)
+      applyFrame(video)
     },
     reveal: (shown) => {
       for (const other of nodes.values()) other.classList.toggle("shown", other === shown)
@@ -206,6 +218,12 @@ const screenOf = (projectId: string, events: ScreenEvents, facesFor: (video: str
 const sourceFor = (screen: Screen, isWatching: () => boolean, start: (node: HTMLVideoElement) => void) => (urlOf: UrlOf): void => {
   const playing = isWatching() ? screen.shown : undefined
   screen.source(urlOf, (node) => { if (node === playing && isWatching() && screen.shown === node) start(node) })
+}
+
+const followClip = (node: HTMLVideoElement, clip: Clip, levelling: Levelling, screen: Screen): void => {
+  node.volume = fadeGain(clip, node.currentTime)
+  screen.zoom(node, zoomAt(clip.pushes ?? [], node.currentTime))
+  levelling.follow(node)
 }
 
 export const montage = (projectId: string, onChange: (playing: Playing | undefined) => void, levelAt: LevelAt, facesFor: (video: string) => VideoFaces | undefined): Montage => {
@@ -273,8 +291,7 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
     } else if (!node.seeking && node.readyState >= HAVE_METADATA) {
       if (node.ended || node.currentTime >= clip.end) cue(state.index + 1)
       else {
-        node.volume = fadeGain(clip, node.currentTime)
-        levelling.follow(node)
+        followClip(node, clip, levelling, screen)
         onChange({ clip, elapsed: state.before + Math.max(0, node.currentTime - clip.start) })
       }
     }

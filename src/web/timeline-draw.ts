@@ -14,6 +14,7 @@ import { margins, type Margins } from "./margins.ts"
 import { blockDetail, deletedList, pauseList, type DetailActions } from "./timeline-detail.ts"
 import { cutMap } from "./timeline-map.ts"
 import { insertList, type InsertActions } from "./timeline-inserts.ts"
+import { namedTexts, type NamedText } from "./text-names.ts"
 import { textList } from "./timeline-texts.ts"
 import { placeList, type PlaceActions, type PlaceCoverage } from "./timeline-places.ts"
 import { blockRow, type RowActions } from "./timeline-row.ts"
@@ -278,7 +279,7 @@ const drawPanels = (
   deleted: ReturnType<typeof arrange>["deleted"],
   faces: ReturnType<typeof facesByVideo>,
   inserts: ReturnType<typeof insertPlaces>,
-  texts: ReturnType<typeof textPlaces>,
+  texts: ReadonlyArray<NamedText>,
   actions: Actions
 ): { readonly places: ReturnType<typeof placesOf>; readonly coverage: PlaceCoverage } => {
   replaceLists(parts.detailHolder,
@@ -290,7 +291,7 @@ const drawPanels = (
   replaceLists(parts.placeHolder,
     placeList(places, displayed, coverage, pictures, actions),
     ...insertList({ planned: loaded.view.inserts, places: inserts, pictures, phraseOf: (one) => phraseOf(loaded.transcripts, one) }, actions),
-    ...textList({ planned: loaded.view.texts, places: texts, phraseOf: (one) => phraseOf(loaded.transcripts, one) }))
+    ...textList({ planned: loaded.view.texts, texts, phraseOf: (one) => phraseOf(loaded.transcripts, one) }))
   replaceLists(parts.pauseHolder, pauseList(displayed, rest, (video, at) => loaded.transcripts.get(video)?.words[at]?.text ?? "", actions))
   return { places, coverage }
 }
@@ -325,7 +326,7 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): DrawnRe
   const shown = shownInserts(inserts, reel, edits, loaded.view.pictures)
   drawRows(parts, displayed, open, shown, actions)
   const { texts } = loaded.view
-  const thoughts = textPlaces(texts.state === "ready" ? texts.planned : [], reel, loaded.transcripts)
+  const thoughts = namedTexts(textPlaces(texts.state === "ready" ? texts.planned : [], reel, loaded.transcripts, edits.texts ?? []), placed, reel)
   const { places, coverage } = drawPanels(parts, displayed, placed, open, index, loaded, edits, timeline.rest, deleted, faces, inserts, thoughts, actions)
   return {
     open,

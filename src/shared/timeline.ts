@@ -1,7 +1,11 @@
 import { Effect, Schema } from "effect"
 import type { Span, Transcript } from "./plan.ts"
 import { PlannedDoubts } from "./doubts-file.ts"
-import { PlannedTexts } from "./texts.ts"
+import { PlannedTexts, TextAnswer, textKey } from "./texts.ts"
+import { PageSource } from "./web-pages.ts"
+import { PlannedZooms, ZoomAnswer, ZoomLevel, type Push } from "./zoom-plan.ts"
+
+export { Push } from "./zoom-plan.ts"
 
 export const MIN_PAUSE = 0.5
 export const PAUSE_REST = 0.2
@@ -21,12 +25,14 @@ const HeadSamples = Schema.Array(Schema.NullOr(Head))
 const GazeSamples = Schema.Array(Schema.Literals(["camera", "away", "hidden"]))
 
 const Aspect = Schema.Finite.check(Schema.isGreaterThan(0))
+const PixelHeight = Schema.Int.check(Schema.isGreaterThan(0))
 
 export const Gaze = Schema.Struct({
   step: Step,
   samples: GazeSamples,
   heads: Schema.optionalKey(HeadSamples),
-  aspect: Schema.optionalKey(Aspect)
+  aspect: Schema.optionalKey(Aspect),
+  height: Schema.optionalKey(PixelHeight)
 })
 export type Gaze = typeof Gaze.Type
 
@@ -88,11 +94,13 @@ export const Edits = Schema.Struct({
   kept: Schema.optionalKey(Schema.Array(PauseRef)),
   joins: Schema.Array(AnsweredJoin).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   inserts: Schema.Array(InsertAnswer).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  texts: Schema.optionalKey(Schema.Array(TextAnswer)),
+  zooms: Schema.Array(ZoomAnswer).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   subtitles: Schema.optionalKey(Schema.Array(WordCorrection))
 })
 export type Edits = typeof Edits.Type
 
-export const NO_EDITS: Edits = { order: [], deleted: [], chosen: [], pauses: [], kept: [], joins: [], inserts: [] }
+export const NO_EDITS: Edits = { order: [], deleted: [], chosen: [], pauses: [], kept: [], joins: [], inserts: [], zooms: [] }
 
 export const GazeFailure = Schema.Literals(["no-tool", "tool-failed", "file-unreadable", "video-unreadable"])
 export type GazeFailure = typeof GazeFailure.Type
@@ -102,7 +110,14 @@ const Look = Schema.Union([
   Schema.Struct({ video: Schema.String, state: Schema.Literal("failed"), reason: GazeFailure })
 ])
 
-export const VideoFaces = Schema.Struct({ video: Schema.String, step: Step, gaze: GazeSamples, heads: HeadSamples, aspect: Schema.optionalKey(Aspect) })
+export const VideoFaces = Schema.Struct({
+  video: Schema.String,
+  step: Step,
+  gaze: GazeSamples,
+  heads: HeadSamples,
+  aspect: Schema.optionalKey(Aspect),
+  height: Schema.optionalKey(PixelHeight)
+})
 export type VideoFaces = typeof VideoFaces.Type
 
 const insertPhrase = { id: Schema.String, video: Schema.String, from: Schema.Int, to: Schema.Int, reason: Schema.String }
@@ -128,10 +143,12 @@ export const TimelineView = Schema.Struct({
   pictures: Schema.Array(Schema.String),
   inserts: PlannedInserts,
   texts: PlannedTexts,
+  sources: Schema.Array(PageSource).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  zooms: PlannedZooms,
   doubts: PlannedDoubts.pipe(Schema.withDecodingDefaultKey(Effect.succeed({ state: "none" as const }))),
   timeline: Schema.Union([
     Schema.Struct({ state: Schema.Literals(["none", "unreadable"]) }),
-    Schema.Struct({ state: Schema.Literal("ready"), blocks: Schema.Array(Block), dropped: Schema.Int, edits: Edits, rest: PauseRest })
+    Schema.Struct({ state: Schema.Literal("ready"), blocks: Schema.Array(Block), dropped: Schema.Int, edits: Edits, rest: PauseRest, zoom: ZoomLevel })
   ])
 })
 export type TimelineView = typeof TimelineView.Type
@@ -275,6 +292,7 @@ export interface Clip extends Span {
   readonly video: string
   readonly block: string
   readonly frame?: Frame
+  readonly pushes?: ReadonlyArray<Push>
 }
 
 export const clipsOf = (placed: ReadonlyArray<Placed>): ReadonlyArray<Clip> =>
@@ -333,14 +351,19 @@ export const mergeEdits = (base: Edits, local: Edits, current: Edits): Edits => 
       : local.joins.find((have) => sameEnds(have, one))
     return picked === undefined ? [] : [picked]
   })
-  const insertOf = (list: ReadonlyArray<InsertAnswer>, id: string): InsertAnswer | undefined => list.find((one) => one.id === id)
-  const insertIds = [...new Set([...base.inserts, ...local.inserts, ...current.inserts].map((one) => one.id))]
-  const sameInsert = (left: InsertAnswer | undefined, right: InsertAnswer | undefined): boolean =>
-    left === undefined || right === undefined ? left === right : insertKey(left) === insertKey(right)
-  const inserts = insertIds.flatMap((id) => {
-    const entry = sameInsert(insertOf(base.inserts, id), insertOf(local.inserts, id)) ? insertOf(current.inserts, id) : insertOf(local.inserts, id)
-    return entry === undefined ? [] : [entry]
-  })
+  const mergeAnswers = <Answer extends { readonly id: string }>(key: (answer: Answer) => string) =>
+    (baseAnswers: ReadonlyArray<Answer>, localAnswers: ReadonlyArray<Answer>, currentAnswers: ReadonlyArray<Answer>): Array<Answer> => {
+      const find = (list: ReadonlyArray<Answer>, id: string): Answer | undefined => list.find((one) => one.id === id)
+      const same = (left: Answer | undefined, right: Answer | undefined): boolean =>
+        left === undefined || right === undefined ? left === right : key(left) === key(right)
+      return [...new Set([...baseAnswers, ...localAnswers, ...currentAnswers].map((one) => one.id))].flatMap((id) => {
+        const entry = same(find(baseAnswers, id), find(localAnswers, id)) ? find(currentAnswers, id) : find(localAnswers, id)
+        return entry === undefined ? [] : [entry]
+      })
+    }
+  const inserts = mergeAnswers(insertKey)(base.inserts, local.inserts, current.inserts)
+  const texts = mergeAnswers(textKey)(base.texts ?? [], local.texts ?? [], current.texts ?? [])
+  const zooms = mergeAnswers((zoom: ZoomAnswer) => zoom.level)(base.zooms, local.zooms, current.zooms)
   const corrections = [...(base.subtitles ?? []), ...(local.subtitles ?? []), ...(current.subtitles ?? [])]
   const sameWord = (left: WordCorrection, right: WordCorrection): boolean =>
     left.block === right.block && left.video === right.video && left.index === right.index
@@ -368,6 +391,8 @@ export const mergeEdits = (base: Edits, local: Edits, current: Edits): Edits => 
     kept: mergePauses(local.kept ?? [], base.kept ?? [], current.kept ?? []),
     joins,
     inserts,
+    ...(texts.length === 0 ? {} : { texts }),
+    zooms,
     ...(subtitles.length === 0 ? {} : { subtitles })
   }
 }

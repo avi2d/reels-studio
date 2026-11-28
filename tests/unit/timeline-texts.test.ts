@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import type { TextPlace } from "../../src/shared/captions.ts"
+import { namedTexts } from "../../src/web/text-names.ts"
 import { textList } from "../../src/web/timeline-texts.ts"
 
 interface Drawn {
@@ -31,7 +32,7 @@ const dropped = (id: string, reason: Exclude<Extract<TextPlace, { state: "droppe
 
 const render = (places: ReadonlyArray<TextPlace>, state: "ready" | "unreadable" = "ready"): Drawn => {
   const view = state === "ready" ? { state, planned: places.map((place) => place.planned) } : { state }
-  const [list]: ReadonlyArray<unknown> = textList({ planned: view, places, phraseOf: () => "Аванс" })
+  const [list]: ReadonlyArray<unknown> = textList({ planned: view, texts: namedTexts(places, [], []), phraseOf: () => "Аванс" })
   if (!isDrawn(list)) throw new Error("no key thought list")
   return list
 }

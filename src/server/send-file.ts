@@ -22,9 +22,3 @@ export const sendFile = Effect.fnUntraced(function*(target: string, contentType:
     headers: { ...headers, "content-range": `bytes ${range.start}-${range.end}/${size}` }
   })
 }, Effect.mapError((cause) => cause instanceof ApiError ? cause : UNREADABLE))
-
-// The ASCII name serves a browser that ignores filename*, which alone carries the Russian title.
-export const attachment = (title: string): string => {
-  const name = `${title.trim() || "reel"}.mp4`
-  return `attachment; filename="reel.mp4"; filename*=UTF-8''${encodeURIComponent(name)}`
-}

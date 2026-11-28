@@ -19,13 +19,15 @@ const blocks: ReadonlyArray<Block> = [{
 const fix = "Роспотребнадзор"
 
 const pageWith = (edits: typeof NO_EDITS): { readonly view: TimelinePage; readonly timeline: Extract<TimelinePage["timeline"], { readonly state: "ready" }> } => {
-  const timeline = { state: "ready" as const, blocks, dropped: 0, edits, rest: 0.2 }
+  const timeline = { state: "ready" as const, blocks, dropped: 0, edits, rest: 0.2, zoom: "full" as const }
   const view: TimelinePage = {
     looks: [],
     faces: [],
     pictures: [],
     inserts: { state: "none" },
     texts: { state: "none" },
+    sources: [],
+    zooms: { state: "none" },
     doubts: { state: "ready", planned: [{ video: "a.mov", index: 6, fix, reason: "" }, { video: "a.mov", index: 26, fix, reason: "" }], dropped: 0 },
     timeline,
     gathering: false,

@@ -7,6 +7,7 @@ import { Schema } from "effect"
 import type { Page, Request } from "playwright-core"
 import { UploadedVideo } from "../../../src/shared/library.ts"
 import { STEPS, STUDIO_PATH, stepPath } from "../../../src/shared/page.ts"
+import { TimelinePage } from "../../../src/shared/timeline.ts"
 import { CHAT_PICTURE, CHAT_REPLY, FIRST_WORDS, PLAN_TASK, PLAN_TEXT, SLOW_MESSAGE, SOURCE_VIDEO, TASK_FILE, setting, timeout } from "./scenario.ts"
 
 const HEARING = 60_000
@@ -15,6 +16,9 @@ const address = (path: string): string => new URL(path, setting("REELS_BROWSER_U
 
 const folderExists = (id: string): Promise<boolean> =>
   stat(join(setting("REELS_BROWSER_DIR"), "projects", id)).then(() => true, () => false)
+
+// The heading gains the cut's length once the montage loads, so an exact «Монтаж» matches only before that.
+const montageHeading = (page: Page) => page.getByRole("heading", { name: /^Монтаж(?: \d+:\d{2})?$/u, level: 1 })
 
 const reelId = (page: Page): string => {
   const id = /^\/new\/([a-z0-9-]+)\/records$/u.exec(new URL(page.url()).pathname)?.[1]
@@ -194,7 +198,7 @@ const approvePlan = async (page: Page, id: string): Promise<void> => {
   await page.getByRole("list", { name: "Файлы к заданию" }).getByText(TASK_FILE, { exact: true }).waitFor()
   await page.getByRole("button", { name: "Да, делайте", exact: true }).click()
   await page.waitForURL(address(stepPath(id, "montage")), { timeout })
-  await page.getByRole("heading", { name: "Монтаж", exact: true, level: 1 }).waitFor()
+  await montageHeading(page).waitFor()
   await page.getByRole("link", { name: "Шаг 2: План", exact: true }).click()
   const work = page.getByRole("region", { name: "Что сделала студия" })
   await work.getByRole("listitem").filter({ hasText: "«Конец»" }).waitFor()
@@ -391,7 +395,7 @@ const streamingChat: ProductCheck = {
     const title = "Ролик с остановленным ответом"
     const id = await createReel(page, title)
     await page.getByRole("link", { name: "Шаг 3: Монтаж", exact: true }).click()
-    await page.getByRole("heading", { name: "Монтаж", exact: true, level: 1 }).waitFor()
+    await montageHeading(page).waitFor()
     await page.getByRole("button", { name: "Чат", exact: true }).click()
     const chat = page.getByRole("dialog", { name: "Чат", exact: true })
     const send = chat.getByRole("button", { name: "Отправить", exact: true })
@@ -513,4 +517,59 @@ const builtStatus: ProductCheck = {
   }
 }
 
-export const studioChecks = [createListDelete, recordsStep, finishedUploadStays, repickedUploads, addedRowsStayBusy, streamingChat, pageWidths, renamePersists, builtStatus] satisfies readonly ProductCheck[]
+const BUILD = 120_000
+
+const sizeOf = async (path: string): Promise<string> => {
+  const probe = Bun.spawn(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", path], { stdout: "pipe" })
+  const size = (await new Response(probe.stdout).text()).trim()
+  await probe.exited
+  return size
+}
+
+const downloadReel = async (page: Page, app: string): Promise<string> => {
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: `Скачать для ${app}`, exact: true }).click()])
+  const path = join(await mkdtemp(join(tmpdir(), "reels-download-")), "reel.mp4")
+  await download.saveAs(path)
+  return path
+}
+
+const dropFirstBlock = async (page: Page, id: string): Promise<void> => {
+  const { timeline } = Schema.decodeUnknownSync(TimelinePage)(await (await page.request.get(address(`/api/projects/${id}/timeline`))).json())
+  assert(timeline.state === "ready", "The approved plan must leave a ready montage")
+  const first = timeline.blocks[0]?.id
+  assert(first !== undefined, "The approved plan must leave a block in the montage")
+  const saved = await page.request.put(address(`/api/projects/${id}/timeline`), { data: { base: timeline.edits, edits: { ...timeline.edits, deleted: [...timeline.edits.deleted, first] } } })
+  assert(saved.ok(), `The studio refused the montage edit: ${saved.status()}`)
+}
+
+const reelsStep: ProductCheck = {
+  name: "step 5 builds the reel with progress, downloads a 1080 by 1920 file for each chosen app and none for the unchosen one, reads «Ролики устарели» after a montage edit, and a stopped rebuild keeps the earlier file instead of dropping it",
+  run: async (page) => {
+    page.setDefaultTimeout(timeout)
+    const title = "Ролик до скачивания"
+    const takes = await uploadOnStudioPage(page)
+    const id = await addChosen(page, title, takes.slice(0, 1))
+    await approvePlan(page, id)
+    await page.getByRole("link", { name: "Шаг 5: Ролики", exact: true }).click()
+    await page.getByRole("heading", { name: "Ролики", exact: true, level: 1 }).waitFor()
+    await page.getByRole("button", { name: "Собрать ролик", exact: true }).click()
+    await page.getByRole("heading", { name: "Собираю ролики", exact: true, level: 1 }).waitFor()
+    await page.getByRole("heading", { name: "Ролики готовы", exact: true, level: 1 }).waitFor({ timeout: BUILD })
+    assert.deepEqual(await page.getByRole("tab").allInnerTexts(), ["Instagram", "TikTok"], "Step 5 must show a tab for each chosen app and none for YouTube Shorts")
+    assert.equal(await sizeOf(await downloadReel(page, "Instagram")), "1080,1920", "The Instagram reel must be 1080 by 1920")
+    await page.getByRole("tab", { name: "TikTok", exact: true }).click()
+    assert.equal(await sizeOf(await downloadReel(page, "TikTok")), "1080,1920", "The TikTok reel must be 1080 by 1920")
+    const href = await page.getByRole("link", { name: "Скачать для TikTok", exact: true }).getAttribute("href")
+    await dropFirstBlock(page, id)
+    await page.getByRole("heading", { name: "Ролики устарели", exact: true, level: 1 }).waitFor()
+    await page.getByRole("button", { name: "Собрать заново", exact: true }).click()
+    await page.getByRole("button", { name: "Остановить", exact: true }).click()
+    await page.getByRole("heading", { name: "Ролики устарели", exact: true, level: 1 }).waitFor({ timeout: BUILD })
+    assert.equal(await page.getByRole("link", { name: "Скачать для TikTok", exact: true }).getAttribute("href"), href, "A stopped rebuild must keep the earlier file")
+    await deleteReel(page, title)
+    await removeUploads(takes)
+    return { targets: ["«Новый ролик» to step 5", "build progress", "«Ролики готовы» with a tab per chosen app", "the downloaded Instagram and TikTok files are 1080 by 1920", "«Ролики устарели» after a montage edit", "«Остановить» keeps the earlier file"], found: [] }
+  }
+}
+
+export const studioChecks = [createListDelete, recordsStep, finishedUploadStays, repickedUploads, addedRowsStayBusy, streamingChat, pageWidths, renamePersists, builtStatus, reelsStep] satisfies readonly ProductCheck[]

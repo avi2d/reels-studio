@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { faceOf, noiseOf } from "../../src/server/face.ts"
+import { looksOf } from "../../src/server/looks.ts"
 import { cleanPreviewArgs, noiseFilters, partArgs, partSoundFilter } from "../../src/server/media-commands.ts"
 import { soundKeyOf } from "../../src/server/sound-check.ts"
 import { soundPartArgs } from "../../src/server/sound-commands.ts"
@@ -35,16 +35,16 @@ test("the build and the sound check clean the voice with the same filter, so the
 })
 
 test("a project with no noise choice is cleaned at the strong setting, not left with its room noise", () => {
-  expect(noiseOf(undefined)).toBe("strong")
-  expect(noiseOf("not json")).toBe("strong")
-  expect(noiseOf(JSON.stringify({ face: "light" }))).toBe("strong")
-  expect(noiseOf(JSON.stringify({ face: "off", noise: "light" }))).toBe("light")
+  expect(looksOf(undefined).noise).toBe("strong")
+  expect(looksOf("not json").noise).toBe("strong")
+  expect(looksOf(JSON.stringify({ face: "light" })).noise).toBe("strong")
+  expect(looksOf(JSON.stringify({ face: "off", noise: "light" })).noise).toBe("light")
 })
 
 test("the noise choice and the face choice share one file without one resetting the other", () => {
   const both = JSON.stringify({ face: "light", noise: "off" })
-  expect(faceOf(both)).toBe("light")
-  expect(noiseOf(both)).toBe("off")
+  expect(looksOf(both).face).toBe("light")
+  expect(looksOf(both).noise).toBe("off")
 })
 
 test("the player plays the cleaned file of the chosen strength, not the plain preview, once the cleaning is made", () => {

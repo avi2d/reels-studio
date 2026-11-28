@@ -45,7 +45,8 @@
 .studio-rules__pin--on .ic svg { fill: currentColor; }
 .studio-rules__change { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
 .studio-rules__change > p { overflow-wrap: anywhere; }
-.studio-rules__change > button { justify-self: start; }
+.studio-rules__changes { display: grid; gap: 8px; }
+.studio-rules__changes > button { justify-self: start; }
 .studio-rules__pauses { list-style: decimal; padding-inline-start: 1.5em; font-variant-numeric: tabular-nums; }
 .studio-rules__pauses li + li { margin-top: 0.25em; }
 .studio-rules > .error:empty, .studio-rules > div:empty { display: none; }

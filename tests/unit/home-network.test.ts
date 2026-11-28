@@ -6,6 +6,12 @@ test("a public address is refused, not treated as home", () => {
   expect(isHomeAddress("2001:4860:4860::8888")).toBe(false)
 })
 
+test("carrier-grade NAT is not home, including mapped addresses", () => {
+  for (const address of ["100.64.0.0", "100.100.100.100", "100.127.255.255", "::ffff:6440:1"]) {
+    expect(isHomeAddress(address)).toBe(false)
+  }
+})
+
 test("the RFC 1918 block 172.16/12 ends at 172.31, so 172.32 is not home", () => {
   expect(isHomeAddress("172.16.0.1")).toBe(true)
   expect(isHomeAddress("172.31.255.254")).toBe(true)
@@ -23,6 +29,9 @@ test("192.168/16 and 10/8 are home, 192.169 and 11 are not", () => {
 test("an IPv4-mapped IPv6 address is judged by its IPv4 part, not passed as IPv6", () => {
   expect(isHomeAddress("::ffff:192.168.1.5")).toBe(true)
   expect(isHomeAddress("::ffff:8.8.8.8")).toBe(false)
+  expect(isHomeAddress("::ffff:c0a8:105")).toBe(true)
+  expect(isHomeAddress("0:0:0:0:0:ffff:c0a8:105")).toBe(true)
+  expect(isHomeAddress("::ffff:808:808")).toBe(false)
 })
 
 test("loopback, unique local fc00::/7 and link-local fe80::/10 are home", () => {
