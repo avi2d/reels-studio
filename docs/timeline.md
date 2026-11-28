@@ -145,6 +145,13 @@ For each joined pair of videos, the build saves two pictures of their first join
 The «Внешность» stage shows them side by side under the skin and eye trial.
 
 The stage plays the built file and offers «Скачать».
+On the step «Ролики» of the new screens, «Скачать» opens only when four checks pass: every on-screen text inside the Instagram margins, no open question in «Монтаж», a length of up to 3:00, which Instagram takes at most, and a loudness that is not «bad».
+Each check shows a plain sentence, and a failed one has «Исправить», which opens «Монтаж» with the failing part selected through `?part=` in the address.
+A failed text, question or length check also stops the build: the build answers 400 with the same sentence.
+The loudness is heard on the built file, so it never stops a build.
+The text check draws the texts as the build does and keeps its result for the reel, the length, the texts and the subtitle look.
+After a build, the step lays 6 even frames of the built file, and one from the middle of each stretch where the buttons cover the face, up to 9, under a mask of the Instagram player.
+It warns with the times when the buttons cover the face, measured on the built 1080 by 1920 file.
 The stage names the measured loudness of the built file with a plain verdict word.
 It says when the peaks stay clean.
 A chart shows the 3 s short-term loudness over time before and after the levelling, with the target as a line and the jumps marked.
@@ -411,8 +418,9 @@ Each video folder holds these next to `plan.json`:
 | `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses, the subtitle corrections and the answers to the places to check, to the inserts, to the texts and to the zooms |
 | `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
+| `reel/reel-<stamp>-frame-<n>.jpg` | A frame of the built file for the sheet under the mask of the Instagram player |
 | `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |
-| `reel/reel.json` | The build time, the video file it published, the parts with their pushes, the crop window of each video, the inserts, a hash of the subtitles, key thoughts, subtitle look, title place and name plate as the person answered them, the face setting, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
+| `reel/reel.json` | The build time, the video file it published, the parts with their pushes, the crop window of each video, the inserts, a hash of the subtitles, key thoughts, subtitle look, title place and name plate as the person answered them, the face setting, the skin colour and gain of each video, the times of the sheet frames and the stretches where the buttons cover the face, and the measured loudness it holds, so the stage can tell whether the cut changed since |
 | `reel/sound.json` | The parts of the last checked cut with the heard clip inserts, its measured loudness before and after levelling, and the gain of each part over its source time, which the montage plays |
 | `reel/sound-work/` | The sound of each clip and the levelled sound while a check runs, removed when it ends |
 | `looks.json` | The face setting of the reel, `off` or `light`, the subtitle look, `brand`, `plate` or `example`, with its size, `normal` or `large`, and the name plate, shown or not, with its text, written when the person picks them |
