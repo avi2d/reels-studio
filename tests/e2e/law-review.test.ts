@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test"
 import { chromium } from "playwright-core"
 
-const chrome = process.env.REELS_CHROME ?? (process.platform === "darwin" ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : "google-chrome")
+const command = process.env.REELS_CHROME ?? (process.platform === "darwin" ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : "google-chrome")
+const chrome = Bun.which(command) ?? command
 
 test("law warnings cover titles, unillustrated subtitles and thoughts instead of only page inserts", async () => {
   const bundle = await Bun.build({ entrypoints: ["tests/e2e/law-review-fixture.ts"], target: "browser" })

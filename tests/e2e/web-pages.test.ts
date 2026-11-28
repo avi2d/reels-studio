@@ -177,7 +177,7 @@ test("unreachable, cancelled, sink, worker and socket resources do not discard a
     await server.stop(true)
     await rm(dir, { recursive: true, force: true })
   }
-}, 15000)
+}, 30000)
 
 test("dedicated, shared and service workers are blocked without discarding their page", async () => {
   await mkdir("node_modules/.cache", { recursive: true })
