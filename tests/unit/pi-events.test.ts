@@ -31,6 +31,11 @@ test("a tool start becomes a Russian step, not the tool's name", () => {
   expect(toChatEvents(line({ type: "tool_execution_start", toolName: "mystery" }))).toEqual([{ type: "step", text: "Работаю" }])
 })
 
+test("saving a web page is shown as opening a page, not as the generic step", () => {
+  expect(toChatEvents(line({ type: "tool_execution_start", toolName: "save_web_page" })))
+    .toEqual([{ type: "step", text: "Открываю страницу в интернете" }])
+})
+
 test("a new assistant message is a boundary event, not text the model wrote", () => {
   expect(toChatEvents(line({ type: "message_start", message: { role: "assistant" } })))
     .toEqual([{ type: "start" }])

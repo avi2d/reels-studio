@@ -19,7 +19,7 @@ const initial: LooksView = { subtitles: { style: "brand", size: "normal" }, plat
 const decodeChange = Schema.decodeUnknownSync(NewLooks)
 const rejected = "Сначала приложите пример ролика к заданию или в чате."
 const timeline: TimelinePage = {
-  looks: [], faces: [], pictures: [], inserts: { state: "none" }, zooms: { state: "none" }, doubts: { state: "none" },
+  looks: [], faces: [], pictures: [], sources: [], inserts: { state: "none" }, zooms: { state: "none" }, doubts: { state: "none" },
   texts: { state: "ready", planned: [{ id: "title", video: "a.mp4", from: 0, to: 0, lines: [{ text: "Аванс", accent: true }] }] },
   timeline: { state: "ready", dropped: 0, edits: NO_EDITS, rest: 0.2, zoom: "off", blocks: [
     { id: "first", title: "Начало", takes: [{ video: "a.mp4", from: 0, to: 0, reason: "" }] },

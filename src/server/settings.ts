@@ -6,6 +6,8 @@ const DEFAULT_MODELS = [
   "openai/gpt-6.1-sol"
 ]
 
+const MAC_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
 const config = Config.all({
   host: Config.String("REELS_HOST").pipe(Config.withDefault("0.0.0.0")),
   port: Config.Port("REELS_PORT").pipe(Config.withDefault(8765)),
@@ -13,7 +15,8 @@ const config = Config.all({
   pi: Config.String("REELS_PI").pipe(Config.withDefault("pi")),
   models: Config.Array(Schema.String, "REELS_MODELS").pipe(Config.withDefault(DEFAULT_MODELS)),
   heavy: Config.String("REELS_HEAVY").pipe(Config.withDefault("")),
-  encoder: Config.String("REELS_ENCODER").pipe(Config.withDefault("libx264"))
+  encoder: Config.String("REELS_ENCODER").pipe(Config.withDefault("libx264")),
+  chrome: Config.String("REELS_CHROME").pipe(Config.withDefault(process.platform === "darwin" ? MAC_CHROME : "google-chrome"))
 })
 
 export interface StudioSettings {
@@ -24,6 +27,7 @@ export interface StudioSettings {
   readonly models: ReadonlyArray<string>
   readonly heavy: ReadonlyArray<string>
   readonly encoder: string
+  readonly chrome: string
   readonly root: string
 }
 

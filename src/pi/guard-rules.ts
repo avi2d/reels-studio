@@ -7,6 +7,7 @@ export type Verdict = { readonly allowed: true } | { readonly allowed: false; re
 
 const READ_TOOLS = new Set(["read", "grep", "find", "ls"])
 const WRITE_TOOLS = new Set(["write", "edit"])
+export const WEB_PAGE_TOOL = "save_web_page"
 
 const UNICODE_SPACES = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000\uFEFF]/g
 const SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]*:/
@@ -26,6 +27,7 @@ const inside = (root: string, target: string): boolean => target === root || tar
 const refuse = (reason: string): Verdict => ({ allowed: false, reason })
 
 export const judge = (scope: GuardScope, toolName: string, target: string | undefined): Verdict => {
+  if (toolName === WEB_PAGE_TOOL) return { allowed: true }
   const cleaned = (target ?? ".").replace(UNICODE_SPACES, " ")
   const trimmed = cleaned.trimStart()
   if (trimmed.startsWith("~") || trimmed.startsWith("@") || SCHEME.test(trimmed)) {
@@ -43,7 +45,7 @@ export const judge = (scope: GuardScope, toolName: string, target: string | unde
   if (!inside(project, resolved)) return refuse("Writing is limited to the project folder.")
   const top = resolved.slice(project.length + 1).split("/")[0] ?? ""
   if (top === ".pi" || top === ".agents") return refuse("Writing is limited to the project folder.")
-  if (["source", "attached", "attached-views", "uploads", "chat", "gather", "transcripts", "preview", "work", "gaze", "reel", "retouch", "looks.json", "project.json", "chat.jsonl", "timeline.json", "brief.md", "task.json", "approval.json", "gathered.json", "rules-change.json"].includes(top)) {
+  if (["source", "attached", "attached-views", "uploads", "chat", "gather", "transcripts", "preview", "work", "gaze", "reel", "retouch", "looks.json", "project.json", "chat.jsonl", "timeline.json", "brief.md", "task.json", "approval.json", "gathered.json", "rules-change.json", "web-pages.json"].includes(top)) {
       return refuse(`The studio owns ${top}. Write notes, plan.md, plan.json, blocks.json, doubts.json, inserts.json, texts.json, zooms.json, example.json and rules.json next to it.`)
   }
   return { allowed: true }

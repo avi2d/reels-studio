@@ -56,6 +56,7 @@ const detailOf = (cut: Cut, loaded: Loaded, state: State, actions: PartActions):
     transcripts: loaded.transcripts,
     edits: state.edits,
     pictures: loaded.view.pictures,
+    sources: loaded.view.sources,
     words,
     phraseOf: phraseOf(loaded.transcripts),
     textName: (id) => nameIn(texts, id)
