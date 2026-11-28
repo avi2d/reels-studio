@@ -282,6 +282,30 @@ The «Паузы и склейки» stage lists every insert as a place to chec
 «Оставить» keeps it, «Со звуком» keeps a clip with its sound, «Заменить» puts another attached picture in its place, and «Убрать» takes it out of the reel.
 Each answer takes the place off the count, and `timeline.json` keeps it by the insert id.
 
+## Doubtful words
+
+The subtitles show each word as the studio heard it, so a misheard law term, name or number goes on screen as heard.
+The recognizer gives each word a share of how sure it is, which `transcripts/<video>.json` keeps as `sure`.
+A low share alone marks many words the recognizer heard right, so the studio marks a word by itself only in three cases:
+
+| Word | Marked below |
+| --- | --- |
+| Any word | 0.2 |
+| A word with a digit | 0.6 |
+| A word with a capital letter that does not open a sentence | 0.5 |
+
+`transcripts/<video>.txt` names the marked word numbers in its third line, so the chat model reads them.
+The chat model proposes the right word for a marked word by its meaning and writes it to `doubts.json`, as the reels-plan skill says.
+The studio leaves out a doubt whose word is not marked, or whose fix is empty or the same as the heard word.
+So a model that corrects what the speaker said clearly cannot change the subtitles.
+A video heard before the recognizer gave the share has no marked words.
+
+The «Монтаж» step asks about every doubtful word the cut plays, above the words of its part, and «Вопросы» walks to it.
+The word is marked in the words of the part until it is answered.
+«Послушать» plays 1 s before the word, the word and 1 s after it.
+«Взять» puts the proposed word into the subtitles, and «Оставить» keeps the word as heard.
+Both are kept as a subtitle correction in `timeline.json`, so a word the person corrects in the words of the part counts as answered too.
+
 ## Key thoughts
 
 The chat model writes the key thoughts to `texts.json`, each tied to the words of one phrase.
@@ -323,6 +347,7 @@ Each video folder holds these next to `plan.json`:
 | `gaze/<video>.txt` | The share of looks into the camera for each stretch of speech, which the chat model reads |
 | `blocks.json` | The blocks and their takes, written by the chat model |
 | `inserts.json` | The pictures, clips and PDF pages to show over phrases, written by the chat model |
+| `doubts.json` | The proposed right words for the doubtful words, written by the chat model |
 | `texts.json` | The titles and key thoughts to show over phrases, written by the chat model |
 | `rules.json` | The rules of the reel, now `pause`, the seconds a shortened pause keeps. A new reel starts with the pinned rules, and the chat model may write it |
 | `rules-change.json` | The last rule change made from the chat, with the value before it, so one press can undo it. Only the studio writes it |

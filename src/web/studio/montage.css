@@ -45,6 +45,7 @@
 .group__title { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
 
 .transcript .word { min-height: 28px; }
+.word--doubt { background: var(--amber-soft); text-decoration: underline wavy var(--amber); text-underline-offset: 3px; }
 .word--fixed { background: var(--blue-soft); text-decoration: underline dotted var(--blue); text-underline-offset: 3px; }
 .word-field { min-width: 3ch; padding: 0 4px; border: 1px solid var(--blue); border-radius: 4px; background: var(--surface); font: inherit; font-size: 16px; }
 

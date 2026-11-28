@@ -3,7 +3,7 @@ import { Schema } from "effect"
 export const Span = Schema.Struct({ start: Schema.Finite, end: Schema.Finite })
 export type Span = typeof Span.Type
 
-const Word = Schema.Struct({ start: Schema.Finite, end: Schema.Finite, text: Schema.String })
+const Word = Schema.Struct({ start: Schema.Finite, end: Schema.Finite, text: Schema.String, sure: Schema.optionalKey(Schema.Finite) })
 
 export const Transcript = Schema.Struct({ duration: Schema.Finite, words: Schema.Array(Word) })
 export type Transcript = typeof Transcript.Type
