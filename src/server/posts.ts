@@ -1,8 +1,6 @@
 import { Effect, FileSystem, Option, Schema, Semaphore } from "effect"
-import type { App } from "../shared/brief.ts"
-import { emptyPost, type Post, Posts } from "../shared/posts.ts"
+import { type Post, Posts } from "../shared/posts.ts"
 import { readText } from "./approval.ts"
-import { readApps } from "./task-choices.ts"
 
 const PostsFile = Schema.fromJsonString(Posts)
 const decodePosts = Schema.decodeUnknownOption(PostsFile)
@@ -19,28 +17,19 @@ const savedPosts = Effect.fnUntraced(function*(dir: string) {
   return []
 })
 
-const inAppsOf = (apps: ReadonlyArray<App>, saved: ReadonlyArray<Post>): Posts =>
-  ({ posts: apps.map((app) => saved.find((post) => post.app === app) ?? emptyPost(app)) })
-
 export const readPosts = Effect.fnUntraced(function*(dir: string) {
-  return inAppsOf(yield* readApps(dir), yield* savedPosts(dir))
+  return { posts: yield* savedPosts(dir) }
 })
 
-// The posts of two apps are saved from two requests into one file, so a write without the lock can drop the other.
+// Concurrent saves can drop a post unless the lock covers both the read and the write.
 const writing = Semaphore.makeUnsafe(1)
 
-// A post of an app chosen earlier stays in the file, so choosing that app again brings its text back.
-const replacePost = Effect.fnUntraced(function*(dir: string, post: Post) {
+export const writePost = Effect.fnUntraced(function*(dir: string, post: Post) {
   const fs = yield* FileSystem.FileSystem
   const saved = yield* savedPosts(dir)
   const posts = [...saved.filter((one) => one.app !== post.app), post]
   const file = postsFile(dir)
   yield* fs.writeFileString(`${file}.new`, yield* encodePosts({ posts }))
   yield* fs.rename(`${file}.new`, file)
-  return posts
-})
-
-export const writePost = Effect.fnUntraced(function*(dir: string, post: Post) {
-  const posts = yield* replacePost(dir, post).pipe(Semaphore.withPermit(writing))
-  return inAppsOf(yield* readApps(dir), posts)
-})
+  return { posts }
+}, Semaphore.withPermit(writing))
