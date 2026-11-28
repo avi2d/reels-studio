@@ -56,7 +56,7 @@ const attachPage = Effect.fnUntraced(function*(capture: Capture, session: string
   yield* cdp.send("Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }, session)
   yield* cdp.send("Network.setBypassServiceWorker", { bypass: true }, session)
   yield* cdp.send("Fetch.enable", { patterns: [{ urlPattern: "*", requestStage: "Request" }] }, session)
-  capture.pages.add(session)
+  if (type === "page") capture.pages.add(session)
   yield* cdp.send("Page.enable", {}, session)
   yield* cdp.send("Page.setLifecycleEventsEnabled", { enabled: true }, session)
   if (capture.main === undefined && type === "page") {

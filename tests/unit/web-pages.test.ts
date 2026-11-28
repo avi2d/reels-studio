@@ -111,6 +111,17 @@ test("a list after the article word stops at a number that counts something else
   expect(articleMentions(["статьи", "620", "и", "621", "ГК"])).toEqual(["620", "621"])
 })
 
+test.each([
+  ["159 статья 2 часть", ["159"]],
+  ["по 228 статье 2 части", ["228"]],
+  ["статья 159 2 и 3 части", ["159"]],
+  ["статье 159 3 пункт", ["159"]],
+  ["статья 159 часть 2", ["159"]],
+  ["статья 159 и 5 и 6 лет", ["159"]]
+])("a part or quantity spoken after the article number is not another article: %s", (phrase, expected) => {
+  expect(articleMentions(phrase.split(" "))).toEqual(expected)
+})
+
 test("a number before a plural article form is a count, not an article number", () => {
   expect(articleMentions(["в", "3", "статьях", "закона"])).toEqual([])
   expect(articleMentions(["по", "2", "статьям", "УК"])).toEqual([])

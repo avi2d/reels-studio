@@ -66,6 +66,35 @@ test("an outside page keeps its PDF and licence from one load, not a second ungu
   }
 }, 30000)
 
+test("an outside page keeps its PDF when a cross-site iframe on it loads, not fails on freezing the frame", async () => {
+  await mkdir("node_modules/.cache", { recursive: true })
+  const dir = await mkdtemp("node_modules/.cache/web-frame-")
+  const paths = new Set<string>()
+  const server = Bun.serve({
+    hostname: "127.0.0.1", port: 0,
+    fetch(request): Response {
+      const path = new URL(request.url).pathname
+      paths.add(path)
+      const pages: Readonly<Record<string, string>> = {
+        "/page": `<h1>Статья 620</h1><a rel="license">CC BY 4.0</a><iframe src="http://localhost:${server.port}/frame"></iframe>`,
+        "/frame": "<p>embedded</p>"
+      }
+      return new Response(pages[path] ?? "", { headers: { "content-type": "text/html" } })
+    }
+  })
+  try {
+    const result = await saved(dir, `http://outside.test:${server.port}/page`)
+    expect(Result.isSuccess(result)).toBe(true)
+    if (!Result.isSuccess(result)) throw result.failure
+    expect(result.success.licence).toBe("CC BY 4.0")
+    expect((await readFile(`${dir}/attached/${result.success.file}`)).subarray(0, 5).toString()).toBe("%PDF-")
+    expect(paths.has("/frame")).toBe(true)
+  } finally {
+    await server.stop(true)
+    await rm(dir, { recursive: true, force: true })
+  }
+}, 30000)
+
 test("home requests leave no PDF or source record", async () => {
   await mkdir("node_modules/.cache", { recursive: true })
   let privateHits = 0

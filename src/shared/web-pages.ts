@@ -43,18 +43,19 @@ const numberOf = (token: string): string | undefined => NUMBER.exec(token)?.[1]
 
 const isInRun = (token: string): boolean => token === "и" || numberOf(token) !== undefined
 
-const runOpener = (tokens: ReadonlyArray<string>, at: number): string => {
-  const before = tokens.slice(0, at).reverse()
-  return before[before.findIndex((token) => !isInRun(token))] ?? ""
+const runOpenerAt = (tokens: ReadonlyArray<string>, at: number): number => {
+  let opener = at - 1
+  while (opener >= 0 && isInRun(tokens[opener] ?? "")) opener--
+  return opener
 }
 
-const isListedAfterArticleWord = (tokens: ReadonlyArray<string>, at: number): boolean =>
-  ARTICLE_WORD.test(tokens[at - 1] ?? "") || (ARTICLE_WORD.test(runOpener(tokens, at)) && !COUNT_UNIT.test(tokens[at + 1] ?? ""))
+const runCloser = (tokens: ReadonlyArray<string>, at: number): string =>
+  tokens.slice(at + 1).find((token) => !isInRun(token)) ?? ""
 
 const isBeforeArticleWord = (tokens: ReadonlyArray<string>, at: number): boolean => {
-  const next = tokens[at + 1] ?? ""
-  if (!ARTICLE_WORD.test(next) || PART_WORD.test(runOpener(tokens, at))) return false
   const token = tokens[at] ?? ""
+  const next = tokens[at + 1] ?? ""
+  if (numberOf(token) === undefined || !ARTICLE_WORD.test(next) || PART_WORD.test(tokens[runOpenerAt(tokens, at)] ?? "")) return false
   if (!BARE_NUMBER.test(token)) return true
   const lastTwo = Number(token.slice(-2))
   const last = lastTwo % 10
@@ -62,6 +63,13 @@ const isBeforeArticleWord = (tokens: ReadonlyArray<string>, at: number): boolean
     || (next === "статья" && last === 1 && lastTwo !== 11)
     || (next === "статьи" && last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14))
   return !counts
+}
+
+const isListedAfterArticleWord = (tokens: ReadonlyArray<string>, at: number): boolean => {
+  const opener = runOpenerAt(tokens, at)
+  if (!ARTICLE_WORD.test(tokens[opener] ?? "") || isBeforeArticleWord(tokens, opener - 1)) return false
+  const closer = runCloser(tokens, at)
+  return opener === at - 1 || !(PART_WORD.test(closer) || COUNT_UNIT.test(closer))
 }
 
 export const articleMentions = (words: ReadonlyArray<string>): ReadonlyArray<string> => {
