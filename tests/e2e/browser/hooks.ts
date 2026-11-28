@@ -3,17 +3,15 @@ import { copyFile, mkdir, mkdtemp, readdir, stat, writeFile } from "node:fs/prom
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { ProductCheck } from "@avi2dg/checks/browser-hooks.ts"
-import { Option, Schema } from "effect"
+import { Schema } from "effect"
 import type { Page, Request } from "playwright-core"
 import { UploadedVideo } from "../../../src/shared/library.ts"
 import { HOME_PATH, STEPS, stepPath } from "../../../src/shared/page.ts"
-import { ReelView } from "../../../src/shared/reel.ts"
 import { TimelinePage } from "../../../src/shared/timeline.ts"
-import { CHAT_PICTURE, CHAT_REPLY, FIRST_WORDS, PLAN_TASK, PLAN_TEXT, SLOW_MESSAGE, SOURCE_VIDEO, TASK_FILE, setting, timeout } from "./scenario.ts"
+import { BUILD, downloadReel, sizeOf, waitForBuilt } from "./build.ts"
+import { CHAT_PICTURE, CHAT_REPLY, FIRST_WORDS, PLAN_TASK, PLAN_TEXT, SLOW_MESSAGE, SOURCE_VIDEO, TASK_FILE, address, setting, timeout } from "./scenario.ts"
 
 const HEARING = 60_000
-
-const address = (path: string): string => new URL(path, setting("REELS_BROWSER_URL")).href
 
 const folderExists = (id: string): Promise<boolean> =>
   stat(join(setting("REELS_BROWSER_DIR"), "projects", id)).then(() => true, () => false)
@@ -539,22 +537,6 @@ const builtStatus: ProductCheck = {
   }
 }
 
-const BUILD = 120_000
-
-const sizeOf = async (path: string): Promise<string> => {
-  const probe = Bun.spawn(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", path], { stdout: "pipe" })
-  const size = (await new Response(probe.stdout).text()).trim()
-  await probe.exited
-  return size
-}
-
-const downloadReel = async (page: Page, app: string): Promise<string> => {
-  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: `Скачать для ${app}`, exact: true }).click()])
-  const path = join(await mkdtemp(join(tmpdir(), "reels-download-")), "reel.mp4")
-  await download.saveAs(path)
-  return path
-}
-
 const dropFirstBlock = async (page: Page, id: string): Promise<void> => {
   const { timeline } = Schema.decodeUnknownSync(TimelinePage)(await (await page.request.get(address(`/api/projects/${id}/timeline`))).json())
   assert(timeline.state === "ready", "The approved plan must leave a ready montage")
@@ -562,22 +544,6 @@ const dropFirstBlock = async (page: Page, id: string): Promise<void> => {
   assert(first !== undefined, "The approved plan must leave a block in the montage")
   const saved = await page.request.put(address(`/api/projects/${id}/timeline`), { data: { base: timeline.edits, edits: { ...timeline.edits, deleted: [...timeline.edits.deleted, first] } } })
   assert(saved.ok(), `The studio refused the montage edit: ${saved.status()}`)
-}
-
-const waitForBuilt = async (page: Page, id: string): Promise<void> => {
-  const heading = page.getByRole("heading", { level: 1 })
-  try {
-    await page.getByRole("heading", { name: "Ролики готовы", exact: true, level: 1 }).waitFor({ timeout: BUILD })
-  } catch (cause) {
-    const screen = await heading.textContent({ timeout })
-    const response = await page.request.get(address(`/api/projects/${id}/reel`), { timeout })
-    const view = Schema.decodeUnknownOption(ReelView)(await response.json())
-    const state = Option.match(view, {
-      onNone: () => ({ status: response.status() }),
-      onSome: ({ job, file }) => ({ job, fresh: file?.fresh, status: response.status() })
-    })
-    throw new Error(`Step 5 did not show ready reels. Heading: ${screen}. Server: ${JSON.stringify(state)}`, { cause })
-  }
 }
 
 const reelsStep: ProductCheck = {

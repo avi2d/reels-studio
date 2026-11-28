@@ -16,3 +16,5 @@ export const setting = (name: "REELS_BROWSER_DIR" | "REELS_BROWSER_URL"): string
   assert(value !== undefined, `The browser runner must set ${name}`)
   return value
 }
+
+export const address = (path: string): string => new URL(path, setting("REELS_BROWSER_URL")).href
