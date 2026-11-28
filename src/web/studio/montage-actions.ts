@@ -1,7 +1,7 @@
 import { withText } from "../../shared/captions.ts"
 import { aroundInsert, reelWithin, shiftedBy, withInsert, type Shown } from "../../shared/inserts.ts"
 import { AROUND_JOIN_SECONDS, aroundJoin, cutOf, facesByVideo, withAnswer, withCover } from "../../shared/joins.ts"
-import { lengthOf } from "../../shared/plan.ts"
+import { lengthOf, type Span } from "../../shared/plan.ts"
 import {
   arrange, assemble, clipsOf, playedSpans, withChoice, withDeleted, withManualPauses, within,
   type Block, type Clip, type Edits, type Take
@@ -84,6 +84,10 @@ const blockActions = ({ state, history, toast }: ActionsContext): Pick<PartActio
 
 export const partActions = (context: ActionsContext): PartActions => {
   const { projectId, state, history, hear } = context
+  const showAround = (span: Span): void => {
+    const window = aroundInsert(span)
+    hear(reelWithin(state.cut?.reel ?? [], window), shiftedBy(state.shown, window.start))
+  }
   return {
     ...Api.insertUrls(projectId),
     ...joinActions(context),
@@ -95,15 +99,9 @@ export const partActions = (context: ActionsContext): PartActions => {
     },
     setPause: (video, after, removed) => { history.change(withManualPauses(state.edits, [{ video, after }], removed)) },
     fixWord: (block, video, index, text) => { history.change(correctSubtitle(state.edits, block, video, index, text)) },
-    showInsert: (span) => {
-      const window = aroundInsert(span)
-      hear(reelWithin(state.cut?.reel ?? [], window), shiftedBy(state.shown, window.start))
-    },
+    showInsert: showAround,
     answerInsert: (answer) => { history.change(withInsert(state.edits, answer)) },
-    showText: (span) => {
-      const window = aroundInsert(span)
-      hear(reelWithin(state.cut?.reel ?? [], window), shiftedBy(state.shown, window.start))
-    },
+    showText: showAround,
     answerText: (answer) => { history.change(withText(state.edits, answer)) }
   }
 }

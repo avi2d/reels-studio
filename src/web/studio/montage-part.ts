@@ -2,6 +2,7 @@ import { lengthOf, type Transcript } from "../../shared/plan.ts"
 import { playedSpans, type Block, type Edits, type Pause, type Placed, type Take } from "../../shared/timeline.ts"
 import { h } from "../dom.ts"
 import { formatLength, formatPause } from "../format.ts"
+import { isAsked } from "../text-names.ts"
 import type { EditableSubtitle } from "../timeline-row.ts"
 import { icon } from "./icons.ts"
 import { insertAsk, joinAsk, type AskActions } from "./montage-asks.ts"
@@ -128,9 +129,9 @@ const joinGroup = (part: Part, data: PartData, actions: PartActions): ReadonlyAr
 
 export const screenGroup = (part: Pick<Part, "texts" | "inserts">, data: PartData, actions: PartActions, title = "На экране"): ReadonlyArray<HTMLElement> => {
   if (part.texts.length === 0 && part.inserts.length === 0) return []
-  const dropped = part.texts.flatMap(({ place, name }) => place.state === "dropped" && place.reason !== "removed" ? [droppedText(name, place, data.textName)] : [])
+  const dropped = part.texts.flatMap(({ place, name }) => place.state === "dropped" && !isAsked(place) ? [droppedText(name, place, data.textName)] : [])
   return [group(title,
-    ...part.texts.flatMap((text) => text.place.state === "shown" || text.place.reason === "removed" ? [textAsk(text, data.phraseOf(text.place.planned), actions)] : []),
+    ...part.texts.flatMap((text) => isAsked(text.place) ? [textAsk(text, data.phraseOf(text.place.planned), actions)] : []),
     ...dropped.length === 0 ? [] : [h("ul", { class: "thoughts" }, ...dropped)],
     ...part.inserts.map((place) => insertAsk(place, data.phraseOf(place.place.planned), data.pictures, actions)))]
 }
