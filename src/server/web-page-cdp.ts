@@ -14,8 +14,8 @@ const Event = Schema.Struct({
 export type BrowserEvent = typeof Event.Type
 
 const Message = Schema.fromJsonString(Schema.Union([
-  Schema.Struct({ id: Schema.Number, result: Schema.Unknown }),
-  Schema.Struct({ id: Schema.Number, error: Schema.Struct({ message: Schema.String }) }),
+  Schema.Struct({ id: Schema.Finite, result: Schema.Unknown }),
+  Schema.Struct({ id: Schema.Finite, error: Schema.Struct({ message: Schema.String }) }),
   Event
 ]))
 const decodeMessage = Schema.decodeUnknownEffect(Message)

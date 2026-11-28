@@ -56,11 +56,11 @@ export const piCommand = (
     "--no-prompt-templates",
     "--extension", join(root, "src", "pi", "project-guard.ts"),
     "--extension", join(root, "src", "pi", "web-page.ts"),
+    "--reels-studio-url", reach.studio,
+    "--reels-project", reach.project,
     "--system-prompt", systemPrompt + "\nThe uploaded videos:\n" + known
   ], {
     cwd: dir,
-    env: { REELS_STUDIO_URL: reach.studio, REELS_PROJECT: reach.project },
-    extendEnv: true,
     stdin: Stream.concat(Stream.make(new TextEncoder().encode(prompt + "\n")), Stream.never)
   })
 }

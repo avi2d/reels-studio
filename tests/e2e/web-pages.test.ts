@@ -55,7 +55,7 @@ test("an outside page keeps its PDF and licence from one load, not a second ungu
       if (!Result.isSuccess(result)) throw result.failure
       expect(result.success.licence).toBe("CC BY 4.0")
       expect((await readFile(`${folder}/attached/${result.success.file}`)).subarray(0, 5).toString()).toBe("%PDF-")
-      const record = Schema.decodeUnknownSync(Schema.fromJsonString(WebPagesFile))(await readFile(`${folder}/web-pages.json`, "utf8"))
+      const record = Schema.decodeSync(Schema.fromJsonString(WebPagesFile))(await readFile(`${folder}/web-pages.json`, "utf8"))
       expect(record.pages).toHaveLength(1)
       expect(record.pages[0]?.address).toBe(`http://outside.test:${server.port}${path}`)
       expect(loads - before).toBe(1)
@@ -163,7 +163,7 @@ test("unreachable, cancelled, sink, worker and socket resources do not discard a
     if (!Result.isSuccess(result)) throw result.failure
     expect(result.success.licence).toBe("CC BY 4.0")
     expect((await readFile(`${dir}/attached/${result.success.file}`)).subarray(0, 5).toString()).toBe("%PDF-")
-    const record = Schema.decodeUnknownSync(Schema.fromJsonString(WebPagesFile))(await readFile(`${dir}/web-pages.json`, "utf8"))
+    const record = Schema.decodeSync(Schema.fromJsonString(WebPagesFile))(await readFile(`${dir}/web-pages.json`, "utf8"))
     expect(record.pages).toHaveLength(1)
     expect(paths.has("/cancelled")).toBe(true)
     expect(paths.has("/abort-ack")).toBe(true)

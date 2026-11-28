@@ -1,8 +1,6 @@
 import { lookup } from "node:dns/promises"
-import { request as httpRequest } from "node:http"
-import { request as httpsRequest } from "node:https"
-import { Context, Effect, Schema } from "effect"
-import { ApiError, badRequest } from "./api-error.ts"
+import { Context, Effect, Schema, Stream } from "effect"
+import { badRequest } from "./api-error.ts"
 import { checkedRequestAddress, isOutside, isSinkAddress } from "./web-page-commands.ts"
 
 export const AT_HOME = "Этот адрес ведёт в домашнюю сеть. Студия открывает только страницы в интернете."
@@ -30,44 +28,57 @@ export const PageRequest = Schema.Struct({
 })
 export type PageRequest = typeof PageRequest.Type
 
+const MAX_BODY = 16 * 1024 * 1024
+const HOP_BY_HOP = /^(?:connection|transfer-encoding)$/iu
+const OWN_HEADERS = /^(?:host|connection|content-length|transfer-encoding|accept-encoding)$/iu
+
+const bodyOf = (response: Response) => {
+  if (response.body === null) return Effect.succeed(Buffer.alloc(0))
+  const stream = response.body
+  let size = 0
+  return Stream.fromReadableStream({ evaluate: () => stream, onError: () => badRequest(NOT_OPENED) }).pipe(
+    Stream.mapEffect((chunk) => {
+      size += chunk.length
+      return size > MAX_BODY ? Effect.fail(badRequest(NOT_OPENED)) : Effect.succeed(chunk)
+    }),
+    Stream.runCollect,
+    Effect.map((chunks) => Buffer.concat(chunks))
+  )
+}
+
+// Connects to the address that was checked and verifies the certificate against the page's own name, so DNS cannot answer differently in between.
+const fetchPinned = (url: URL, destination: { readonly address: string; readonly family: number }, request: PageRequest) => {
+  const pinned = new URL(url)
+  pinned.hostname = destination.family === 6 ? `[${destination.address}]` : destination.address
+  const headers = new Headers({ host: url.host, "accept-encoding": "identity" })
+  for (const [name, value] of Object.entries(request.headers)) if (!OWN_HEADERS.test(name)) headers.set(name, value)
+  return Effect.tryPromise({
+    try: (signal) => fetch(pinned, {
+      method: request.method,
+      headers,
+      redirect: "manual",
+      decompress: false,
+      signal,
+      tls: { serverName: url.hostname.replace(/^\[|\]$/gu, "") },
+      ...request.method === "GET" || request.method === "HEAD" || request.postData === undefined ? {} : { body: request.postData }
+    }),
+    catch: () => badRequest(NOT_OPENED)
+  }).pipe(
+    Effect.flatMap((response) => bodyOf(response).pipe(
+      Effect.map((body) => {
+        const responseHeaders: Array<{ name: string; value: string }> = []
+        response.headers.forEach((value, name) => {
+          if (!HOP_BY_HOP.test(name)) responseHeaders.push({ name, value })
+        })
+        return { responseCode: response.status, responseHeaders, body: body.toString("base64") }
+      })
+    ))
+  )
+}
+
 export const pageResponse = Effect.fnUntraced(function*(request: PageRequest) {
   const url = checkedRequestAddress(request.url)
   if (url === undefined) return yield* badRequest(NOT_OPENED)
   const destination = yield* (yield* WebPageAddress)(url.hostname)
-  return yield* Effect.callback<{
-    readonly responseCode: number
-    readonly responseHeaders: ReadonlyArray<{ readonly name: string; readonly value: string }>
-    readonly body: string
-  }, ApiError>((resume) => {
-    const send = url.protocol === "https:" ? httpsRequest : httpRequest
-    const headers = { ...request.headers, "accept-encoding": "identity" }
-    const outgoing = send(url, {
-      method: request.method, headers, agent: false, family: destination.family,
-      lookup: (_host, _options, done) => done(null, destination.address, destination.family)
-    }, (incoming) => {
-      const chunks: Array<Buffer> = []
-      let size = 0
-      incoming.on("data", (chunk: Buffer) => {
-        size += chunk.length
-        if (size > 16 * 1024 * 1024) {
-          resume(Effect.fail(badRequest(NOT_OPENED)))
-          incoming.destroy()
-          outgoing.destroy()
-        } else chunks.push(chunk)
-      })
-      incoming.on("error", () => { resume(Effect.fail(badRequest(NOT_OPENED))) })
-      incoming.on("end", () => {
-        const responseHeaders: Array<{ name: string; value: string }> = []
-        for (let index = 0; index < incoming.rawHeaders.length; index += 2) {
-          const name = incoming.rawHeaders[index]
-          const value = incoming.rawHeaders[index + 1]
-          if (name !== undefined && value !== undefined && !/^(?:connection|transfer-encoding)$/iu.test(name)) responseHeaders.push({ name, value })
-        }
-        resume(Effect.succeed({ responseCode: incoming.statusCode ?? 502, responseHeaders, body: Buffer.concat(chunks).toString("base64") }))
-      })
-    })
-    outgoing.on("error", () => { resume(Effect.fail(badRequest(NOT_OPENED))) })
-    outgoing.end(request.postData)
-    return Effect.sync(() => { outgoing.destroy() })
-  })
+  return yield* fetchPinned(url, destination, request)
 })

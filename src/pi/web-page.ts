@@ -15,6 +15,8 @@ interface Tool {
 
 interface Host {
   readonly registerTool: (tool: Tool) => void
+  readonly registerFlag: (name: string, options: { readonly type: "string"; readonly description: string }) => void
+  readonly getFlag: (name: string) => boolean | string | undefined
 }
 
 const said = (text: string): Answer => ({ content: [{ type: "text", text }], details: {} })
@@ -37,11 +39,13 @@ const replyOf = (saved: unknown): string => {
   ].join(" ")
 }
 
-// pi loads this file with -e and runs it on node; the studio passes its own address and the project in the environment.
+const STUDIO_FLAG = "reels-studio-url"
+const PROJECT_FLAG = "reels-project"
+
+// pi loads this file with -e and runs it on node; the studio passes its own address and the project as flags, which pi only fills in after the factory returns.
 export default function webPage(pi: Host): void {
-  const studio = process.env["REELS_STUDIO_URL"]
-  const project = process.env["REELS_PROJECT"]
-  if (studio === undefined || project === undefined) return
+  pi.registerFlag(STUDIO_FLAG, { type: "string", description: "The address of the studio" })
+  pi.registerFlag(PROJECT_FLAG, { type: "string", description: "The project the page is saved into" })
   pi.registerTool({
     name: WEB_PAGE_TOOL,
     label: "Save a web page",
@@ -52,8 +56,11 @@ export default function webPage(pi: Host): void {
       required: ["address"],
       additionalProperties: false
     },
-    execute: (_callId, params, signal) =>
-      fetch(`${studio}/api/projects/${encodeURIComponent(project)}/web-pages`, {
+    execute: (_callId, params, signal) => {
+      const studio = pi.getFlag(STUDIO_FLAG)
+      const project = pi.getFlag(PROJECT_FLAG)
+      if (typeof studio !== "string" || typeof project !== "string") return Promise.resolve(said("The studio did not save the page: it gave no address."))
+      return fetch(`${studio}/api/projects/${encodeURIComponent(project)}/web-pages`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ address: typeof params.address === "string" ? params.address : "" }),
@@ -63,5 +70,6 @@ export default function webPage(pi: Host): void {
           response.ok ? said(replyOf(answer)) : said(`The studio did not save the page: ${textField(answer, "error") ?? response.statusText}`)
         )
       )
+    }
   })
 }

@@ -28,7 +28,7 @@ const rejectHomeTarget = Effect.fnUntraced(function*(address: string) {
   const url = checkedRequestAddress(address.replace(/^ws(s?):/u, "http$1:"))
   if (url !== undefined) yield* (yield* WebPageAddress)(url.hostname).pipe(
     Effect.timeout("3 seconds"),
-    Effect.catch((error) => error instanceof ApiError && error.message === AT_HOME ? Effect.fail(error) : Effect.void)
+    Effect.catchIf((error) => !(error instanceof ApiError && error.message === AT_HOME), () => Effect.void)
   )
 })
 
@@ -141,10 +141,10 @@ const handle = (capture: Capture, event: BrowserEvent) => {
 
 const settleBeforeSave = Effect.fnUntraced(function*(capture: Capture, session: string) {
   const { cdp } = capture
-  yield* Effect.raceFirst(Deferred.await(capture.idle), Effect.sleep("4 seconds"))
+  yield* Deferred.await(capture.idle).pipe(Effect.timeoutOrElse({ duration: "4 seconds", orElse: () => Effect.void }))
   yield* Effect.forEach([...capture.pages], (page) => cdp.send("Page.setWebLifecycleState", { state: "frozen" }, page))
   yield* cdp.send("Page.stopLoading", {}, session)
-  yield* Effect.all([...capture.active].map((done) => Deferred.await(done)), { concurrency: "unbounded" })
+  yield* Effect.forEach([...capture.active], (done) => Deferred.await(done), { concurrency: "unbounded" })
 })
 
 const openAndSave = Effect.fnUntraced(function*(capture: Capture, address: string) {
