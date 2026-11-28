@@ -203,8 +203,8 @@ The «Оформление» step sets «Шум» to «Оставить», «У�
 A reel starts with «Убрать сильно», and a choice stays with its reel.
 Both strengths use the ffmpeg `afftdn` filter after a 70 Hz high-pass.
 The filter uses an 8 dB reduction for «Убрать слегка» and 18 dB for «Убрать сильно», with more reduction in the lower bands.
-When the step opens, the studio cleans the preview sound of each video in the cut with both strengths, on the home computer, in the queue of the other heavy jobs.
-The preview picture is copied, and the originals stay untouched.
+When the step opens, the studio cleans the original sound of each video in the cut with both strengths, on the home computer, in the queue of the other heavy jobs.
+It pairs the cleaned sound with a copy of the preview picture, and the originals stay untouched.
 While it runs, the step shows the share done, and the player plays the reel as it is.
 When it ends, the player plays the chosen strength, so the person hears the difference on the cut itself.
 A change of the source file or of the filter settings cleans the video again.

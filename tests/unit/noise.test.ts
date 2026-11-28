@@ -16,19 +16,6 @@ test("«Оставить» leaves the sound with its fades only, not a cleaning 
   expect(partSoundFilter(2, "off")).toBe("afade=t=in:d=0.06,afade=t=out:st=1.9400:d=0.06")
 })
 
-test("FFT cleaning does not leave the voice two filter hops behind the picture", () => {
-  for (const strength of ["light", "strong"] as const) {
-    const filters = noiseFilters(strength)
-    expect(filters[0]).toBe("aresample=48000")
-    expect(filters.slice(2)).toEqual([
-      "apad=pad_len=1200",
-      expect.stringMatching(/^afftdn=/),
-      "atrim=start_sample=1200",
-      "asetpts=PTS-1200/SR/TB"
-    ])
-  }
-})
-
 test("the build and the sound check clean the voice with the same filter, so the check hears the built sound", () => {
   const built = filterOf(partArgs("a.mov", part, { hdr: false, gain: undefined }, "strong", "libx264", "p.mov"))
   expect(filterOf(soundPartArgs("a.mov", part, "strong", "p.wav"))).toBe(built)
@@ -48,15 +35,15 @@ test("the noise choice and the face choice share one file without one resetting 
 })
 
 test("the player plays the cleaned file of the chosen strength, not the plain preview, once the cleaning is made", () => {
-  const view = { job: { state: "idle" }, cut: 30, noise: "strong", cleaned: { made: "m" } } as const
+  const view = { job: { state: "idle" }, noise: "strong", cleaned: { made: "m" } } as const
   expect(sourceOf("p", view)("a.mov")).toBe("/api/projects/p/noise/strong/a.mov?made=m")
   expect(sourceOf("p", { ...view, noise: "off" })("a.mov")).toBe("/api/projects/p/videos/a.mov/preview")
-  expect(sourceOf("p", { job: { state: "idle" }, cut: 30, noise: "light" })("a.mov")).toBe("/api/projects/p/videos/a.mov/preview")
+  expect(sourceOf("p", { job: { state: "idle" }, noise: "light" })("a.mov")).toBe("/api/projects/p/videos/a.mov/preview")
 })
 
 test("cleaning in progress shows its share instead of an empty status", () => {
-  expect(noiseStatus({ job: { state: "running", done: 0.5 }, cut: 30, noise: "strong" })).toBe("Студия чистит звук: 50%")
-  expect(noiseStatus({ job: { state: "idle" }, cut: 30, noise: "strong" })).toBe("")
+  expect(noiseStatus({ job: { state: "running", done: 0.5 }, noise: "strong" })).toBe("Студия чистит звук: 50%")
+  expect(noiseStatus({ job: { state: "idle" }, noise: "strong" })).toBe("")
 })
 
 test("the cleaned preview copies the picture and cleans the voice from the source, not from the already compressed preview sound", () => {

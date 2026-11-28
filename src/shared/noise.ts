@@ -44,7 +44,6 @@ export const pauseNoise = (windows: Windows): PauseNoise | undefined => {
 
 export const NoiseView = Schema.Struct({
   job: ReelJob,
-  cut: Schema.Finite,
   noise: Noise,
   cleaned: Schema.optionalKey(Schema.Struct({
     made: Schema.String,

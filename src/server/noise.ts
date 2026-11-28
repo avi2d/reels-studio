@@ -3,7 +3,7 @@ import { CLEANED, LEVEL_STEP, QUIETEST_DB, pauseNoise, type Cleaned, type NoiseV
 import type { ReelJob } from "../shared/reel.ts"
 import type { Clip } from "../shared/timeline.ts"
 import { readNoise } from "./looks.ts"
-import { cleanPreviewArgs, noiseFilters, partsOf, secondsOf } from "./media-commands.ts"
+import { cleanPreviewArgs, noiseFilters } from "./media-commands.ts"
 import { places, tool } from "./media-jobs.ts"
 import { windowLevelArgs, windowLevelsOf } from "./loudness-meter.ts"
 import { Settings } from "./settings.ts"
@@ -104,15 +104,14 @@ const joined = (records: ReadonlyArray<{ readonly windows: Windows }>): Windows 
 })
 
 export const readCleaning = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, job: ReelJob) {
-  const cut = secondsOf(partsOf(clips))
   const noise = yield* readNoise(dir)
   const videos = videosOf(clips)
   const records = yield* Effect.forEach(videos, (video) => freshRecord(dir, video))
   const fresh = records.filter((record) => record !== undefined)
-  if (videos.length === 0 || fresh.length < videos.length) return { job, cut, noise } satisfies NoiseView
+  if (videos.length === 0 || fresh.length < videos.length) return { job, noise } satisfies NoiseView
   const made = fresh.map((record) => record.key).join(",")
   const pauses = pauseNoise(joined(fresh))
-  return { job, cut, noise, cleaned: { made, ...(pauses === undefined ? {} : { pauses }) } } satisfies NoiseView
+  return { job, noise, cleaned: { made, ...(pauses === undefined ? {} : { pauses }) } } satisfies NoiseView
 })
 
 export const cleanedPreview = Effect.fnUntraced(function*(dir: string, noise: Cleaned, video: string) {
