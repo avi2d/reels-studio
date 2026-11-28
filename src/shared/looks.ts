@@ -51,7 +51,7 @@ export type ExampleLook = typeof ExampleLook.Type
 export const LooksView = Schema.Struct({
   subtitles: SubtitleLook,
   plate: NamePlate,
-  example: Schema.optionalKey(Schema.Struct({ took: Schema.Array(Schema.String), subtitles: ExampleSubtitles }))
+  example: Schema.optionalKey(ExampleLook)
 })
 export type LooksView = typeof LooksView.Type
 

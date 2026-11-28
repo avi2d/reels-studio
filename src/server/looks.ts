@@ -2,6 +2,7 @@ import { Effect, FileSystem, Option, Schema, Semaphore } from "effect"
 import { ExampleLook, Looks, NO_LOOKS, type LooksView, type NewLooks } from "../shared/looks.ts"
 import { badRequest, orUnavailable } from "./api-error.ts"
 import { readText } from "./approval.ts"
+import { reportUnreadable } from "./unreadable.ts"
 
 const LooksFile = Schema.fromJsonString(Looks)
 const decodeLooks = Schema.decodeUnknownOption(LooksFile)
@@ -35,18 +36,11 @@ export const updateLooks = Effect.fnUntraced(function*(dir: string, change: (loo
   return yield* replaceLooks(dir, change).pipe(Semaphore.withPermit(writing))
 })
 
-const unreadableExamples = new Map<string, string>()
-
 export const readExample = Effect.fnUntraced(function*(dir: string) {
   const file = exampleFile(dir)
   const text = yield* readText(file)
   const example = text === undefined ? undefined : Option.getOrUndefined(decodeExample(text))
-  if (text === undefined || example !== undefined) unreadableExamples.delete(file)
-  else if (unreadableExamples.get(file) !== text) {
-    if (unreadableExamples.size >= 100) unreadableExamples.delete(unreadableExamples.keys().next().value ?? "")
-    unreadableExamples.set(file, text)
-    yield* Effect.logError("the look of the example is unreadable", file)
-  }
+  yield* reportUnreadable(file, example === undefined ? text : undefined, "the look of the example is unreadable")
   return example
 })
 
@@ -56,7 +50,7 @@ export const looksView = Effect.fnUntraced(function*(dir: string) {
   return {
     subtitles: looks.subtitles,
     plate: looks.plate,
-    ...(example === undefined ? {} : { example: { took: example.took, subtitles: example.subtitles } })
+    ...(example === undefined ? {} : { example })
   } satisfies LooksView
 })
 

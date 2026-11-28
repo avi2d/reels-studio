@@ -10,26 +10,14 @@ import { run } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
 import { readApproval, readText } from "./approval.ts"
 import { readExample, readLooks } from "./looks.ts"
+import { reportUnreadable } from "./unreadable.ts"
 
 const decodeTexts = Schema.decodeUnknownOption(Schema.fromJsonString(TextsFile))
-const unreadableTexts = new Map<string, string>()
-
 const textsOf = Effect.fnUntraced(function*(texts: string | undefined, dir: string) {
-  const file = `${dir}/texts.json`
-  if (texts === undefined) {
-    unreadableTexts.delete(file)
-    return { state: "none" } satisfies PlannedTexts
-  }
-  const decoded = Option.getOrUndefined(decodeTexts(texts))
-  if (decoded !== undefined) {
-    unreadableTexts.delete(file)
-    return { state: "ready", planned: decoded.texts } satisfies PlannedTexts
-  }
-  if (unreadableTexts.get(file) !== texts) {
-    if (unreadableTexts.size >= 100) unreadableTexts.delete(unreadableTexts.keys().next().value ?? "")
-    unreadableTexts.set(file, texts)
-    yield* Effect.logError("the on-screen texts are unreadable", file)
-  }
+  const decoded = texts === undefined ? undefined : Option.getOrUndefined(decodeTexts(texts))
+  yield* reportUnreadable(`${dir}/texts.json`, decoded === undefined ? texts : undefined, "the on-screen texts are unreadable")
+  if (texts === undefined) return { state: "none" } satisfies PlannedTexts
+  if (decoded !== undefined) return { state: "ready", planned: decoded.texts } satisfies PlannedTexts
   return { state: "unreadable" } satisfies PlannedTexts
 })
 

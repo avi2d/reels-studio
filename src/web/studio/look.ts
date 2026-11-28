@@ -2,6 +2,7 @@ import { lookAt, type Shown } from "../../shared/inserts.ts"
 import { stepPath } from "../../shared/page.ts"
 import type { ShownWord } from "../../shared/subtitles.ts"
 import { NO_EDITS, type Edits } from "../../shared/timeline.ts"
+import { FRAME, textAreaOf } from "../../shared/zones.ts"
 import * as Api from "../api.ts"
 import { h } from "../dom.ts"
 import { formatLength } from "../format.ts"
@@ -59,7 +60,13 @@ export const lookStep = (projectId: string): LookStep => {
   const clock = h("span", { class: "clock" })
   const frame = h("div", { class: "frame" }, overlay.node, thought)
   const face = lookFace(projectId)
-  const subtitles = lookSubtitles(projectId, () => { paint(state.playing) })
+  const subtitles = lookSubtitles(projectId, (view) => {
+    const middle = view.subtitles.style === "example" && view.example?.title === "middle"
+    const { box } = textAreaOf("Instagram")
+    thought.style.top = middle ? `${(box.top + box.bottom) / 2 / FRAME.height * 100}%` : ""
+    thought.style.transform = middle ? "translateY(-50%)" : ""
+    paint(state.playing)
+  })
   frame.append(subtitles.plate, subtitles.subtitle, margins.overlay)
   const empty = h("p", { class: "hint", hidden: true }, EMPTY)
   const work = h("div", { class: "look", hidden: true },

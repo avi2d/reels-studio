@@ -89,8 +89,8 @@ export interface LookSubtitles {
   readonly dispose: () => void
 }
 
-export const lookSubtitles = (projectId: string, onChange: () => void): LookSubtitles => {
-  const state: { view: LooksView | undefined; asked: number; timer: number } = { view: undefined, asked: 0, timer: 0 }
+export const lookSubtitles = (projectId: string, onChange: (view: LooksView) => void): LookSubtitles => {
+  const state: { view: LooksView | undefined; confirmed: LooksView | undefined; asked: number; timer: number } = { view: undefined, confirmed: undefined, asked: 0, timer: 0 }
   const cards = styleCards((change) => { choose(change) })
   const sizes = SIZES.map(([size, name]) => ({ size, choice: button("quiet", name, { "aria-pressed": "false", click: () => { choose({ size }) } }) }))
   const exampleNote = h("div", { class: "hint look-example", id: "look-example-note" })
@@ -122,17 +122,21 @@ export const lookSubtitles = (projectId: string, onChange: () => void): LookSubt
     shown.checked = view.plate.shown
     textRow.hidden = !view.plate.shown
     if (document.activeElement !== text) text.value = view.plate.text
-    onChange()
+    onChange(view)
   }
 
   const ask = (call: Effect.Effect<LooksView, Api.Failed>): void => {
     state.asked += 1
     const asked = state.asked
     Effect.runFork(call.pipe(
-      Effect.map((view) => { if (asked === state.asked) show(view) }),
+      Effect.map((view) => {
+        if (asked !== state.asked) return
+        state.confirmed = view
+        show(state.timer === 0 || state.view === undefined ? view : { ...view, plate: state.view.plate })
+      }),
       Effect.catchTag("Failed", (error) => Effect.sync(() => {
         if (asked !== state.asked) return
-        if (state.view !== undefined) show(state.view)
+        if (state.confirmed !== undefined) show(state.confirmed)
         problem.textContent = error.message
       }))
     ))
@@ -161,15 +165,13 @@ export const lookSubtitles = (projectId: string, onChange: () => void): LookSubt
     const chosen = plateNow()
     textRow.hidden = !chosen.shown
     if (chosen.shown && document.activeElement !== text && chosen.text.trim() === "") text.focus()
-    if (state.view !== undefined) state.view = { ...state.view, plate: chosen }
-    onChange()
+    if (state.view !== undefined) show({ ...state.view, plate: chosen })
     save({ plate: chosen })
   }
 
   function savePlateLater(): void {
     globalThis.clearTimeout(state.timer)
-    if (state.view !== undefined) state.view = { ...state.view, plate: plateNow() }
-    onChange()
+    if (state.view !== undefined) show({ ...state.view, plate: plateNow() })
     state.timer = Number(globalThis.setTimeout(savePlate, SAVE_AFTER_MS))
   }
 
