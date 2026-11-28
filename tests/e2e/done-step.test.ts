@@ -91,6 +91,34 @@ test("a fresh file built before build checks asks for a rebuild instead of showi
   expect(await page.getByText("Скачать ролик можно, когда пройдены все проверки выше.", { exact: true }).count()).toBe(0)
 }))
 
+test("switching to TikTok does not keep Instagram's frames, button mask, or face warning", () => withPage(async (page) => {
+  const checks = { ...PASSING, texts: { ...PASSING.texts, apps: ["Instagram", "TikTok"] } } satisfies ReelView["checks"]
+  const view = {
+    ...ready,
+    checks,
+    file: {
+      ...ready.file,
+      checks,
+      apps: [{ app: "Instagram", size: 1000 }, { app: "TikTok", size: 1100 }],
+      sheets: [
+        { app: "Instagram", frames: [1], covered: [] },
+        { app: "TikTok", frames: [3], covered: [{ from: 2, to: 4 }] }
+      ]
+    }
+  } satisfies ReelView
+  await page.route("**/api/projects/review/reel", (route) => route.fulfill({ json: view }))
+  await open(page)
+  const sheet = page.locator(".done-sheet")
+  await sheet.getByText("Кнопки Instagram нигде не закрывают лицо.", { exact: true }).waitFor()
+  await page.getByRole("tab", { name: "TikTok" }).click()
+  await sheet.getByText("Кнопки TikTok закрывают лицо: 0:02–0:04.", { exact: true }).waitFor()
+  const image = sheet.getByRole("img", { name: "Кадр на 0:03", exact: true })
+  const source = await image.evaluate((node) => node.getAttribute("src") ?? "")
+  expect(new URL(source, server.url).searchParams.get("app")).toBe("tiktok")
+  expect(await sheet.locator(".done-frame--covered").count()).toBe(1)
+  expect(await sheet.locator(".done-zones").evaluate((node) => node.style.getPropertyValue("--buttons-top"))).toBe("41.15%")
+}))
+
 test("an offline idle poll does not leave an alert after the built reel reconnects", () => withPage(async (page) => {
   let polls = 0
   await page.route("**/api/projects/review/reel", async (route) => {
