@@ -1,5 +1,5 @@
 import { Data, Effect, FileSystem, Option, Path, Schema } from "effect"
-import { assOf, fitWord, hasCaptions, NO_CAPTIONS, shownTexts, type CaptionPart, type Captions } from "../shared/captions.ts"
+import { assOf, fitPlate, fitWord, hasCaptions, NO_CAPTIONS, plateOf, shownTexts, wordLookOf, type CaptionPart, type Captions } from "../shared/captions.ts"
 import type { Transcript } from "../shared/plan.ts"
 import { correctedWord, subtitleWords } from "../shared/subtitles.ts"
 import { TextsFile, type PlannedTexts } from "../shared/texts.ts"
@@ -9,6 +9,7 @@ import { REEL_RATE } from "./media-commands.ts"
 import { run } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
 import { readApproval, readText } from "./approval.ts"
+import { readExample, readLooks } from "./looks.ts"
 
 const decodeTexts = Schema.decodeUnknownOption(Schema.fromJsonString(TextsFile))
 const unreadableTexts = new Map<string, string>()
@@ -37,10 +38,21 @@ export const readTexts = Effect.fnUntraced(function*(dir: string) {
 })
 
 export const readCaptions = Effect.fnUntraced(function*(dir: string, clips: ReadonlyArray<Clip>, transcripts: ReadonlyMap<string, Transcript>, blocks: ReadonlyArray<Block>, edits: Edits) {
+  const looks = yield* readLooks(dir)
+  const example = looks.subtitles.style === "example" ? yield* readExample(dir) : undefined
+  const styled = {
+    look: wordLookOf(looks.subtitles, example?.subtitles),
+    title: example?.title ?? "top",
+    plate: plateOf(looks.plate, clips)
+  } satisfies Partial<Captions>
   const approval = yield* readApproval(dir)
-  if (approval.plan.state !== "approved") return NO_CAPTIONS
+  if (approval.plan.state !== "approved") return { ...NO_CAPTIONS, ...styled }
   const texts = yield* textsOf(approval.texts, dir)
-  return { words: subtitleWords(clips, transcripts, (clip, index) => correctedWord(blocks, transcripts, edits.subtitles ?? [], clip.block, clip.video, index)), texts: texts.state === "ready" ? shownTexts(texts.planned, clips, transcripts) : [] } satisfies Captions
+  return {
+    ...styled,
+    words: subtitleWords(clips, transcripts, (clip, index) => correctedWord(blocks, transcripts, edits.subtitles ?? [], clip.block, clip.video, index)),
+    texts: texts.state === "ready" ? shownTexts(texts.planned, clips, transcripts) : []
+  } satisfies Captions
 })
 
 // Two levels: the option value inside the filter, then the filter inside the graph.
@@ -65,7 +77,12 @@ export const inkOf = (stderr: string): ReadonlyArray<Ink> =>
     rect: { left: Number(match[2]), right: Number(match[3]) + 1, top: Number(match[4]), bottom: Number(match[5]) + 1 }
   }))
 
-class TextOutside extends Data.TaggedError("TextOutside")<{ readonly part: CaptionPart; readonly ink: Ink }> {}
+class TextOutside extends Data.TaggedError("TextOutside")<{ readonly part: CaptionPart; readonly ink: Ink }> {
+  override get message(): string {
+    const { left, right, top, bottom } = this.ink.rect
+    return `the ${this.part} at ${this.ink.at} s inked x ${left}-${right}, y ${top}-${bottom}, outside the clear zone`
+  }
+}
 
 const fontsDir = Effect.fnUntraced(function*() {
   const settings = yield* Settings
@@ -73,15 +90,35 @@ const fontsDir = Effect.fnUntraced(function*() {
   return path.join(settings.root, "brands", "azalia", "fonts")
 })
 
-// Words and key thoughts are measured apart, because the box around both at once can reach the button column neither touches.
+// The next try after the ink of a part left the area, or undefined when shrinking cannot help.
+const refit = (part: CaptionPart, placed: Captions, outside: ReadonlyArray<Ink>): Captions | undefined => {
+  const first = outside[0]
+  if (first === undefined || part === "texts") return undefined
+  if (part === "plate") {
+    const plate = placed.plate === undefined ? undefined : fitPlate(placed.plate, first.rect)
+    return plate === undefined || plate.size === placed.plate?.size ? undefined : { ...placed, plate }
+  }
+  const words = placed.words.map((word) => {
+    const ink = outside.find((one) => one.at >= Math.round(word.start * 100) / 100 && one.at < Math.round(word.end * 100) / 100)
+    return ink === undefined ? word : fitWord(word, ink.rect, placed.look.size)
+  })
+  return words.every((word, index) => word.size === placed.words[index]?.size) ? undefined : { ...placed, words }
+}
+
+const present = (captions: Captions): Readonly<Record<CaptionPart, boolean>> =>
+  ({ words: captions.words.length > 0, texts: captions.texts.length > 0, plate: captions.plate !== undefined })
+
+// Each part is measured apart, because the box around two at once can reach the button column neither touches.
 export const placeCaptions = Effect.fnUntraced(function*(work: string, captions: Captions, seconds: number) {
   if (!hasCaptions(captions)) return undefined
   const fs = yield* FileSystem.FileSystem
   const fonts = yield* fontsDir()
   const area = textAreaOf("Instagram")
   const { heavy } = yield* Settings
+  const parts = present(captions)
   let placed = captions
-  for (const part of ["words", "texts"] as const) {
+  for (const part of ["words", "texts", "plate"] as const) {
+    if (!parts[part]) continue
     const file = `${work}/ink-${part}.ass`
     for (;;) {
       yield* fs.writeFileString(file, assOf(placed, [part]))
@@ -89,13 +126,9 @@ export const placeCaptions = Effect.fnUntraced(function*(work: string, captions:
       const outside = inkOf(stderr).filter((ink) => !fitsArea(ink.rect, area))
       const first = outside[0]
       if (first === undefined) break
-      if (part === "texts") return yield* new TextOutside({ part, ink: first })
-      const words = placed.words.map((word) => {
-        const ink = outside.find((one) => one.at >= Math.round(word.start * 100) / 100 && one.at < Math.round(word.end * 100) / 100)
-        return ink === undefined ? word : fitWord(word, ink.rect)
-      })
-      if (words.every((word, index) => word.size === placed.words[index]?.size)) return yield* new TextOutside({ part, ink: first })
-      placed = { ...placed, words }
+      const next = refit(part, placed, outside)
+      if (next === undefined) return yield* new TextOutside({ part, ink: first })
+      placed = next
     }
   }
   const file = `${work}/captions.ass`

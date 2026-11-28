@@ -3,13 +3,13 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { BunFileSystem } from "@effect/platform-bun"
 import { Effect } from "effect"
 import { filterPath, inkOf, readCaptions, readTexts } from "../../src/server/captions.ts"
-import { fitWord, NO_CAPTIONS, shownTexts, textPlaces } from "../../src/shared/captions.ts"
+import { fitWord, NO_CAPTIONS, plateOf, shownTexts, textPlaces, wordLookOf } from "../../src/shared/captions.ts"
 import { readApproval } from "../../src/server/approval.ts"
 import { NO_EDITS, type Block } from "../../src/shared/timeline.ts"
 
 test("a long subtitle word shrinks instead of reaching under the Instagram button column", () => {
   const word = { text: "высокопрофессиональный", start: 0, end: 1 }
-  const fitted = fitWord(word, { left: 148, right: 932, top: 1412, bottom: 1486 })
+  const fitted = fitWord(word, { left: 148, right: 932, top: 1412, bottom: 1486 }, 78)
   const size = fitted.size ?? 78
   expect(size).toBeGreaterThan(0)
   expect(size).toBeLessThan(78)
@@ -19,9 +19,28 @@ test("a long subtitle word shrinks instead of reaching under the Instagram butto
   expect([fitted.start, fitted.end]).toEqual([0, 1])
 })
 
+test("the name plate stands for four seconds from the start of the second part instead of over the opening title", () => {
+  const clips = [
+    { video: "a.mov", block: "opening", start: 0, end: 2 },
+    { video: "a.mov", block: "opening", start: 5, end: 8 },
+    { video: "b.mov", block: "second", start: 1, end: 10 }
+  ]
+  expect(plateOf({ shown: true, text: " Мария Белова, юрист " }, clips)).toEqual({ text: "Мария Белова, юрист", start: 5, end: 9 })
+})
+
+test("a name plate switched off or left empty is not drawn instead of showing a blank plate", () => {
+  const clips = [{ video: "a.mov", block: "opening", start: 0, end: 5 }, { video: "a.mov", block: "second", start: 5, end: 9 }]
+  expect(plateOf({ shown: false, text: "Мария" }, clips)).toBeUndefined()
+  expect(plateOf({ shown: true, text: "  " }, clips)).toBeUndefined()
+})
+
+test("the example look without an example falls back to the brand look instead of an empty style", () => {
+  expect(wordLookOf({ style: "example", size: "large" }, undefined)).toEqual(wordLookOf({ style: "brand", size: "large" }, undefined))
+})
+
 test("a subtitle word whose ink fits comes back unchanged instead of shrinking", () => {
   const word = { text: "слово", start: 0, end: 1 }
-  expect(fitWord(word, { left: 400, right: 680, top: 1412, bottom: 1486 })).toBe(word)
+  expect(fitWord(word, { left: 400, right: 680, top: 1412, bottom: 1486 }, 78)).toBe(word)
 })
 
 test("changed or newly added text cannot reach captions under an older approval", async () => {
