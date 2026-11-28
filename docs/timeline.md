@@ -243,13 +243,15 @@ Each place says how many seconds it can cut, or names the word that keeps the ey
 A place with nothing to cut offers no «Обрезать».
 
 The zoom only enlarges and moves the picture inside its own edges, so no black band shows.
-It enlarges by at most 15 %, and a place that needs more offers no «Выровнять».
+It enlarges by at most 15 %, or more when the original has the pixels: up to its shown width over the 1080 px of the reel.
+A place that needs more offers no «Выровнять».
 A place whose eyes already sit on one line offers no «Выровнять».
 «Выровнять» is on from the start at every place that offers it, so such a place counts as answered until the person picks another answer.
 The zoom holds until the next join, so the picture does not jump back in the middle of a block.
 Once a join is aligned, «Как было» plays the same seconds without the zoom.
 The page shows the zoom at once, and the built reel crops the same window from the original.
 The zoom needs the frame shape of the measured video, which the gaze measure writes as `aspect`.
+After the measure the studio adds the shown height of the original as `height`, read with ffprobe, and without it the limit stays at 15 %.
 Until a gaze file holds it, the place says the studio is still measuring.
 The answer is kept in `timeline.json` with the two ends of the join, so a change of the cut that moves the join opens it again.
 The studio re-measures by itself, in the background, a video whose gaze file holds no head positions or no `aspect`.
@@ -281,6 +283,22 @@ The «Паузы и склейки» stage lists every insert as a place to chec
 «Посмотреть» plays 1 s before the insert, the insert and 1 s after it, with the insert over the player as the reel shows it.
 «Оставить» keeps it, «Со звуком» keeps a clip with its sound, «Заменить» puts another attached picture in its place, and «Убрать» takes it out of the reel.
 Each answer takes the place off the count, and `timeline.json` keeps it by the insert id.
+
+## Zooms on key words
+
+The chat model marks the key words of the reel by their meaning and writes them to `zooms.json`, as the reels-plan skill says.
+On each, the picture pushes in slowly around the eyes, so they stay on one line, then pulls back over 0.3 s.
+The push grows over the key words and lasts at least 0.6 s.
+A strong zoom enlarges by 15 % and a soft one by 7 %.
+With a join zoom in the same part, the two together stay within the join zoom limit.
+Two pushes of one video never add up: the earlier one pulls back fully before the later one starts.
+When that leaves the earlier one less than 0.3 s to push in, the studio leaves it out, and the step does not list it.
+
+The step «Монтаж» lists the zooms of each part under «Приближение», with their words and time.
+«Нет», «Мягкое» and «Сильное» set one zoom, and `timeline.json` keeps the answer by the zoom id.
+A zoom with no answer follows the zoom rule.
+«Смотреть» plays 1.5 s before the words and 3 s after them, with the push.
+The page and the built reel use the same push.
 
 ## Doubtful words
 
@@ -335,17 +353,22 @@ When `texts.json` does not read, the list says so.
 ## Rules
 
 A rule is a setting the studio applies to the whole reel at once.
-Only the pause rule exists: the seconds of silence a shortened pause keeps, from 0 to 0.5 s, and 0.2 s when the reel has no value.
-The step «Монтаж» lists the rule under «Правила» as a short phrase, such as «пауза остаётся 0,2 с».
+Two rules exist:
+
+- The pause rule: the seconds of silence a shortened pause keeps, from 0 to 0.5 s, and 0.2 s when the reel has no value.
+- The zoom rule: the strength of the zooms on key words, `off`, `soft` or `full`, and `full` when the reel has no value.
+
+The step «Монтаж» lists the rules under «Правила» as short phrases, such as «пауза остаётся 0,2 с».
 A step with no rule of its own shows no list.
-The person changes a rule by writing in the chat, such as «оставляй паузы подлиннее», and the chat model writes `rules.json`.
-The step then shows the change, every pause it moved and a button that returns the old value.
-The button undoes the last chat change only.
+The person changes a rule by writing in the chat, such as «оставляй паузы подлиннее» or «медленнее», and the chat model writes `rules.json`.
+The step then shows the change, every pause or zoom it moved and one button that returns the old values.
+A zoom the person set by hand keeps its answer.
+When one reply changed both rules, the button returns both.
 The pin next to a rule keeps its value for the next reels, and a new reel starts with the pinned values.
 A pinned rule follows a chat change and its undo.
 Unpinning keeps the value in the current reel and drops it from the next ones.
 The pin and the undo button are off while a chat reply streams.
-The studio adds a note with the current pause value to each message the person sends, since the person can return a rule on the page and the earlier replies do not show it.
+The studio adds a note with the current rule values to each message the person sends, since the person can return a rule on the page and the earlier replies do not show it.
 
 ## Files
 
@@ -353,19 +376,20 @@ Each video folder holds these next to `plan.json`:
 
 | Path | What it holds |
 | --- | --- |
-| `gaze/<video>.json` | One sample per 0.2 s: `camera`, `away` or `hidden`, and where the eyes are and the face height, as shares of the frame height, and the frame shape as `aspect` |
+| `gaze/<video>.json` | One sample per 0.2 s: `camera`, `away` or `hidden`, and where the eyes are and the face height, as shares of the frame height, and the frame shape as `aspect`, and the shown height of the original as `height` |
 | `gaze/<video>.txt` | The share of looks into the camera for each stretch of speech, which the chat model reads |
 | `blocks.json` | The blocks and their takes, written by the chat model |
 | `inserts.json` | The pictures, clips and PDF pages to show over phrases, written by the chat model |
 | `doubts.json` | The proposed right words for the doubtful words, written by the chat model |
 | `texts.json` | The titles and key thoughts to show over phrases, written by the chat model |
-| `rules.json` | The rules of the reel, now `pause`, the seconds a shortened pause keeps. A new reel starts with the pinned rules, and the chat model may write it |
+| `zooms.json` | The key words to zoom on, each with an id, its video and its word numbers, written by the chat model |
+| `rules.json` | The rules of the reel, `pause` and `zoom`. A new reel starts with the pinned rules, and the chat model may write it |
 | `rules-change.json` | The last rule change made from the chat, with the value before it, so one press can undo it. Only the studio writes it |
-| `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses, the subtitle corrections and the answers to the places to check, to the inserts and to the texts |
+| `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses, the subtitle corrections and the answers to the places to check, to the inserts, to the texts and to the zooms |
 | `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
 | `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |
-| `reel/reel.json` | The build time, the video file it published, the parts, the crop window of each video, the inserts, a hash of the subtitles and key thoughts as the person answered them, the face setting, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
+| `reel/reel.json` | The build time, the video file it published, the parts with their pushes, the crop window of each video, the inserts, a hash of the subtitles and key thoughts as the person answered them, the face setting, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
 | `reel/sound.json` | The parts of the last checked cut with the heard clip inserts, its measured loudness before and after levelling, and the gain of each part over its source time, which the montage plays |
 | `reel/sound-work/` | The sound of each clip and the levelled sound while a check runs, removed when it ends |
 | `looks.json` | The face setting of the reel, `off` or `light`, written when the person picks it |

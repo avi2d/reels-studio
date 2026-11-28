@@ -17,10 +17,13 @@ import { quoteOnPage } from "./insert-files.ts"
 import { places, readGaze, readTranscript } from "./media-jobs.ts"
 import { readReachable } from "./attached-files.ts"
 import { reelRules } from "./rules.ts"
+import { ZoomsFile, type PlannedZooms } from "../shared/zoom-plan.ts"
+import { zoomedOf } from "../shared/zooms.ts"
 
 const decodeBlocks = Schema.decodeUnknownOption(Schema.fromJsonString(Blocks))
 const decodeGathered = Schema.decodeUnknownOption(Schema.fromJsonString(Gathered))
 const decodeInserts = Schema.decodeUnknownOption(Schema.fromJsonString(InsertsFile))
+const decodeZooms = Schema.decodeUnknownOption(Schema.fromJsonString(ZoomsFile))
 const decodeDoubts = Schema.decodeUnknownOption(Schema.fromJsonString(DoubtsFile))
 
 export const readGathered = Effect.fnUntraced(function*(dir: string) {
@@ -99,6 +102,23 @@ const readInserts = Effect.fnUntraced(function*(dir: string, transcripts: Readon
   return { state: "ready", planned, dropped: written.inserts.length - planned.length } satisfies PlannedInserts
 })
 
+// A zoom on words its video does not hold, or a second zoom under one id, is left out.
+const readZooms = Effect.fnUntraced(function*(dir: string, transcripts: ReadonlyMap<string, Transcript>) {
+  const fs = yield* FileSystem.FileSystem
+  const file = `${dir}/zooms.json`
+  if (!(yield* fs.exists(file))) return { state: "none" } satisfies PlannedZooms
+  const written = Option.getOrUndefined(decodeZooms(yield* fs.readFileString(file)))
+  if (written === undefined) {
+    yield* Effect.logError("the zooms are unreadable", file)
+    return { state: "unreadable" } satisfies PlannedZooms
+  }
+  const planned = written.zooms.filter((one, index) => {
+    const words = transcripts.get(one.video)?.words ?? []
+    return written.zooms.findIndex((other) => other.id === one.id) === index && one.from >= 0 && one.from <= one.to && words[one.to] !== undefined
+  })
+  return { state: "ready", planned } satisfies PlannedZooms
+})
+
 const readDoubts = Effect.fnUntraced(function*(dir: string, transcripts: ReadonlyMap<string, Transcript>) {
   const fs = yield* FileSystem.FileSystem
   const file = `${dir}/doubts.json`
@@ -114,8 +134,11 @@ const readDoubts = Effect.fnUntraced(function*(dir: string, transcripts: Readonl
 
 const facesOf = (name: string, measured: Gaze): ReadonlyArray<VideoFaces> => {
   if (measured.heads === undefined) return []
-  const faces = { video: name, step: measured.step, gaze: measured.samples, heads: measured.heads }
-  return [measured.aspect === undefined ? faces : { ...faces, aspect: measured.aspect }]
+  return [{
+    video: name, step: measured.step, gaze: measured.samples, heads: measured.heads,
+    ...measured.aspect === undefined ? {} : { aspect: measured.aspect },
+    ...measured.height === undefined ? {} : { height: measured.height }
+  }]
 }
 
 const readHeard = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>) {
@@ -145,10 +168,12 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
   const pictures = picturesOf(attached)
   const inserts = yield* readInserts(dir, transcripts, attached)
   const texts = yield* readTexts(dir)
+  const zooms = yield* readZooms(dir, transcripts)
   const doubts = yield* readDoubts(dir, transcripts)
   const written = yield* readBlocks(dir)
-  if (written === "none" || written === "unreadable") return { looks, faces, pictures, inserts, texts, doubts, timeline: { state: written } } satisfies TimelineView
-  return { looks, faces, pictures, inserts, texts, doubts, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir), rest: (yield* reelRules(dir)).pause } } satisfies TimelineView
+  if (written === "none" || written === "unreadable") return { looks, faces, pictures, inserts, texts, zooms, doubts, timeline: { state: written } } satisfies TimelineView
+  const rules = yield* reelRules(dir)
+  return { looks, faces, pictures, inserts, texts, zooms, doubts, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir), rest: rules.pause, zoom: rules.zoom } } satisfies TimelineView
 })
 
 export interface Cut {
@@ -165,9 +190,11 @@ export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyA
   const edits = yield* readEdits(dir)
   const attached = yield* readReachable(dir)
   const pictures = picturesOf(attached)
-  const base = cutOf(clipsOf(assemble(blocks, edits, transcripts, (yield* reelRules(dir)).pause)), facesByVideo(faces), transcripts, edits)
+  const rules = yield* reelRules(dir)
+  const base = cutOf(clipsOf(assemble(blocks, edits, transcripts, rules.pause)), facesByVideo(faces), transcripts, edits)
   const resolved = coversOf(base, edits, pictures)
-  const clips = onFrames(base)
+  const zooms = yield* readZooms(dir, transcripts)
+  const clips = zoomedOf(onFrames(base), zooms.state === "ready" ? zooms.planned : [], facesByVideo(faces), transcripts, edits, rules.zoom).clips
   const planned = yield* readInserts(dir, transcripts, attached)
   const placesNow = insertPlaces(planned.state === "ready" ? planned.planned : [], clips, transcripts, edits, pictures)
   return { clips, inserts: shownInserts(placesNow, clips, edits, pictures, resolved), captions: yield* readCaptions(dir, clips, transcripts, blocks, edits) } satisfies Cut

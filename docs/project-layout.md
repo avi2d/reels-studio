@@ -14,6 +14,8 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/shared/plan.ts` | The transcript and plan formats and the spans the player skips, used by the server and the page |
 | `src/shared/timeline.ts` | The formats of the gaze samples, the blocks, the takes and the person's choices, and the spans the montage plays |
 | `src/shared/framing.ts` | The zoom that keeps the eyes on one line across a join, used by the page and the reel build |
+| `src/shared/zoom-plan.ts` | The format of `zooms.json`, the zoom strengths and the push a part plays |
+| `src/shared/zooms.ts` | Where each zoom on a key word stands in the cut, its strength and the push curve, used by the page and the reel build |
 | `src/shared/joins.ts` | The places to check at joins and the cuts at answered places, used by the page |
 | `src/shared/face.ts` | The face setting of the reel, off or light, and the two causes of a trial that finds no face, used by the server and the page |
 | `src/shared/retouch.ts` | The state of the skin and eye trial, the time a minute of video takes and the second from which the trial looks for a face, used by the server and the page |
@@ -26,7 +28,7 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/shared/captions.ts` | The key thoughts of `texts.json` in the cut with the person's answers, the reason each dropped one is not shown, and the subtitle file libass draws |
 | `src/server/captions.ts` | Reads `texts.json` for the page and the approved texts for the build, shrinks long subtitle words, and measures the ink against the box before the build |
 | `src/server/approval.ts` | Reads the saved yes and checks it against the plan and the on-screen texts |
-| `src/shared/rules.ts` | The format of `rules.json` and of the rule change, the studio's own values, and the rules the page lists with the pauses a change moved, used by the server and the page |
+| `src/shared/rules.ts` | The format of `rules.json` and of the rule change, the studio's own values, and the rules the page lists with the pauses and zooms a change moved, used by the server and the page |
 | `src/server/rules.ts` | Reads and writes the rules of a reel, the pinned rules and the last chat change, and undoes it |
 | `src/shared/reel.ts` | The state of a reel build and of the built file, used by the server and the page |
 | `src/shared/gather.ts` | When the studio asks the chat model to gather the blocks by itself |

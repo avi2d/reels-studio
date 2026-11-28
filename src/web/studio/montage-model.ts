@@ -6,6 +6,7 @@ import { lengthOf, type Transcript } from "../../shared/plan.ts"
 import { bareWord, correctedWord } from "../../shared/subtitles.ts"
 import { arrange, assemble, clipsOf, type Block, type Clip, type Edits, type Placed, type TimelinePage } from "../../shared/timeline.ts"
 import { isAsked, namedTexts, partAt, type NamedText } from "../text-names.ts"
+import { zoomedOf, type ZoomPlace } from "../../shared/zooms.ts"
 
 export interface Numbered<T> {
   readonly place: T
@@ -20,6 +21,7 @@ export interface Part {
   readonly joins: ReadonlyArray<Numbered<Place>>
   readonly inserts: ReadonlyArray<Numbered<InsertPlace>>
   readonly texts: ReadonlyArray<NamedText>
+  readonly zooms: ReadonlyArray<Numbered<ZoomPlace>>
   readonly words: ReadonlyArray<Numbered<WordPlace>>
 }
 
@@ -80,15 +82,23 @@ const wordsOf = (one: Placed, transcripts: ReadonlyMap<string, Transcript>, edit
     const corrections = edits.subtitles ?? []
     const direct = corrections.find((fix) => fix.block === one.block.id && fix.video === video && fix.index === doubt.index)
     const shown = correctedWord([one.block], transcripts, corrections, one.block.id, video, doubt.index)
-    const corrected = direct?.text ?? (shown === word.text ? undefined : shown)
+    const corrected = direct?.text ?? (bareWord(shown) === heard ? undefined : shown)
     return [{ ...doubt, video, heard, answer: doubtAnswer(heard, doubt.fix, corrected) }]
   })
 }
 
-export const cutOfPage = (view: TimelinePage, timeline: Ready, transcripts: ReadonlyMap<string, Transcript>, edits: Edits): Cut => {
+export const zoomedReel = (view: TimelinePage, timeline: Ready, transcripts: ReadonlyMap<string, Transcript>, edits: Edits): ReturnType<typeof zoomedOf> & { readonly placed: ReadonlyArray<Placed> } => {
   const placed = assemble(timeline.blocks, edits, transcripts, timeline.rest)
   const faces = facesByVideo(view.faces)
-  const reel = cutOf(clipsOf(placed), faces, transcripts, edits)
+  return { ...zoomedOf(cutOf(clipsOf(placed), faces, transcripts, edits), view.zooms.state === "ready" ? view.zooms.planned : [], faces, transcripts, edits, timeline.zoom), placed }
+}
+
+export const cutOfPage = (view: TimelinePage, timeline: Ready, transcripts: ReadonlyMap<string, Transcript>, edits: Edits): Cut => {
+  const zoomed = zoomedReel(view, timeline, transcripts, edits)
+  const { placed } = zoomed
+  const faces = facesByVideo(view.faces)
+  const reel = zoomed.clips
+  const zooms = numbered(zoomed.places)
   const joins = numbered(placesOf(clipsOf(placed), faces, transcripts, edits))
   const inserts = numbered(insertPlaces(view.inserts.state === "ready" ? view.inserts.planned : [], reel, transcripts, edits, view.pictures))
   const texts = namedTexts(textPlaces(view.texts.state === "ready" ? view.texts.planned : [], reel, transcripts, edits.texts ?? []), placed, reel)
@@ -109,6 +119,7 @@ export const cutOfPage = (view: TimelinePage, timeline: Ready, transcripts: Read
       joins: joins.filter(({ place }) => place.join.start.block === one.block.id),
       inserts: inserts.filter((place) => insertPart(place) === one.block.id),
       texts: texts.filter((text) => text.part === one.block.id),
+      zooms: zooms.filter(({ place }) => place.block === one.block.id),
       words: doubts
     }
     start += part.length

@@ -63,7 +63,8 @@ const editKey = (edits: Edits): string => JSON.stringify([
   (edits.kept ?? []).map((one) => [one.video, one.after]),
   edits.joins.map((one) => [one.end.video, one.end.at, one.start.video, one.start.at, replyKey(one)]),
   edits.inserts.map((one) => [one.id, insertKey(one)]),
-  (edits.subtitles ?? []).map((one) => [one.block, one.video, one.index, one.text])
+  (edits.subtitles ?? []).map((one) => [one.block, one.video, one.index, one.text]),
+  edits.zooms.map((one) => [one.id, one.level])
 ])
 
 const adoptServer = (local: Edits, acked: Edits, server: Edits): boolean =>

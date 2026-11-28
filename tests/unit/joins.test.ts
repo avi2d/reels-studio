@@ -141,7 +141,7 @@ test("the seconds around a join reach back across an earlier cut instead of stop
 
 test("a timeline saved before joins took answers keeps its removed pauses instead of reading as no edits", () => {
   const old = JSON.stringify({ order: [], deleted: [], chosen: [], pauses: [{ video: "a", after: 3 }] })
-  expect(Schema.decodeSync(Schema.fromJsonString(Edits))(old)).toEqual({ order: [], deleted: [], chosen: [], pauses: [{ video: "a", after: 3 }], joins: [], inserts: [] })
+  expect(Schema.decodeSync(Schema.fromJsonString(Edits))(old)).toEqual({ order: [], deleted: [], chosen: [], pauses: [{ video: "a", after: 3 }], joins: [], inserts: [], zooms: [] })
 })
 
 const framed = (video: string, y: number): VideoFaces => ({ ...still(video, y, 5), aspect: 9 / 16 })

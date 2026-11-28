@@ -1,6 +1,6 @@
 ---
 name: reels-plan
-description: The order of work on one Reels video, plan first and video second, and the formats of plan.json, blocks.json, doubts.json and rules.json. Use at the start of every conversation about a video, when the person asks to cut, shorten, caption or assemble a video, to gather its blocks and takes or to change a rule such as the length of pauses, and before writing or changing plan.md, plan.json, blocks.json, doubts.json or rules.json.
+description: The order of work on one Reels video, plan first and video second, and the formats of plan.json, blocks.json, doubts.json, zooms.json and rules.json. Use at the start of every conversation about a video, when the person asks to cut, shorten, caption or assemble a video, to gather its blocks and takes, to change the zooms on key words or a rule such as the length of pauses, and before writing or changing plan.md, plan.json, blocks.json, doubts.json, zooms.json or rules.json.
 ---
 
 # Plan first, video second
@@ -154,21 +154,48 @@ Write `doubts.json` every time you write `blocks.json`.
 - List every video of the project, with an empty `remove` for a video that stays whole.
 - Write the whole file again on every change, as valid JSON and nothing else.
 
+## zooms.json
+
+`zooms.json` holds the key words of the reel.
+On each of them the studio slowly pushes the picture in toward the face and back out, and keeps the eyes where they were.
+Write it with the plan, before you show the plan, and change it whenever the person asks about the zooms, without waiting for a new yes.
+After the yes change only `zooms.json`, and leave `plan.md` as it is.
+
+```json
+{
+  "zooms": [
+    { "id": "advance-sum", "video": "IMG_0002.MOV", "from": 14, "to": 15 }
+  ]
+}
+```
+
+- A key word carries the meaning of its thought: the sum, the term, the turn of the argument. A filler, a linking word or a word every sentence has is never one.
+- Mark one key word or a phrase of two or three words, and at most one in each block, in the take the plan names.
+- Leave at least five seconds of speech between two zooms, so the reel does not pulse.
+- `id` is a short Latin name that stays the same for the same key word every time you write the file, because the page keeps the person's choices by it.
+- `video` is the file name from `source/`, exactly as written there, and `from` and `to` are the word numbers of the first and last word.
+- When the person asks for fewer zooms in plain words, such as «меньше приближений», keep about half: the key words that carry the most meaning. For «больше приближений» add key words in the blocks that have none.
+- How strong the zooms are is the zoom rule in `rules.json`, not this file.
+- A single zoom on the page is not yours to change: the person sets or removes one there, and the page keeps that choice even when you rewrite the file.
+- Write the whole file again on every change, as valid JSON and nothing else.
+
 ## Rules
 
 `rules.json` holds the rules of this reel, and the studio applies them to the whole reel at once.
-The page lists each rule under «Правила» on the stage it belongs to: the pause rule on «Монтаж».
+The page lists each rule under «Правила» on the stage it belongs to: the pause rule and the zoom rule on «Монтаж».
 
 ```json
-{ "pause": 0.4 }
+{ "pause": 0.4, "zoom": "soft" }
 ```
 
 - `pause` is the seconds of silence each shortened pause keeps, from 0 to 0.5. Without it the studio keeps 0.2 s.
+- `zoom` is how strong the push on each key word of `zooms.json` is: `"off"` for none, `"soft"` for a soft one and `"full"` for a strong one. Without it the studio gives a strong one.
+- For «медленнее», «мягче» or «не так сильно» about the zooms, move the zoom rule one step down from the value `rules.json` holds now, from `"full"` to `"soft"` and from `"soft"` to `"off"`. For «быстрее» or «сильнее» move it one step up. A softer zoom takes the same time, so it moves slower. For «без приближений» write `"off"`.
 - When the person asks to change a rule in plain words, such as «оставляй паузы подлиннее» or «паузы покороче», write `rules.json` at once and ask nothing.
 - Read `rules.json` again before every change, since the person can return a rule on the page and the chat does not show it.
 - For «подлиннее» or «покороче» without a number, move the pause by 0.1 s from the value `rules.json` holds now, never from a value in an earlier message, and stay within 0 to 0.5.
-- Answer with the new rule in one short phrase, such as «пауза остаётся 0,3 с», and say that the stage «Монтаж» lists every pause it changed and a button that returns the old rule.
-- A single pause is not a rule: the person removes or returns one pause on the page, and you never write that.
+- Answer with the new rule in one short phrase, such as «пауза остаётся 0,3 с» or «приближения на ключевых словах мягкие», and say that the stage «Монтаж» lists every pause or zoom it changed and a button that returns the old rule.
+- A single pause or a single zoom is not a rule: the person changes one on the page, and you never write that.
 - The person keeps a rule for the next reels with the pin next to it, and you never write that either.
 - Keep every other key, and write the whole file again on every change, as valid JSON and nothing else.
 
@@ -182,6 +209,7 @@ The plan answers the brief and covers every stage the studio can do, in this ord
   Each part names its text on screen and its template from the reels-style skill.
 - The take of every block the studio will choose after the yes, with its reason, and every block with one take.
 - The pauses longer than half a second that the studio will shorten.
+- The key words of `zooms.json`, quoted, on which the picture slowly pushes in.
 - What to remove and why.
 - The apps the person chose for the reel, by their names, and what differs between their versions.
   Name only the chosen apps.
@@ -201,6 +229,7 @@ It gathers the blocks and takes of all videos, and the round play/stop button un
 After the yes it chooses the takes, shortens the pauses and lists what it did.
 It shows the person's attached pictures and screenshots over the phrases they belong to, as the reels-inserts skill says.
 After the yes it draws one-word subtitles and the titles and key thoughts of `texts.json` on the reel, as the reels-style skill says.
+After the yes it pushes in slowly on each key word of `zooms.json`, and the stage «Монтаж» lists every zoom.
 It cannot yet cut a video, save several videos as one file, crop a video or send a file anywhere.
 Say so in one sentence when the person asks for any of these.
 Never say that a video is cut or ready.

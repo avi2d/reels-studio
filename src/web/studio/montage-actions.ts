@@ -1,20 +1,25 @@
 import { withText } from "../../shared/captions.ts"
 import { aroundInsert, reelWithin, shiftedBy, withInsert, type Shown } from "../../shared/inserts.ts"
-import { AROUND_JOIN_SECONDS, aroundJoin, cutOf, facesByVideo, withAnswer, withCover } from "../../shared/joins.ts"
+import { AROUND_JOIN_SECONDS, aroundJoin, withAnswer, withCover } from "../../shared/joins.ts"
 import { lengthOf, type Span } from "../../shared/plan.ts"
 import {
-  arrange, assemble, clipsOf, playedSpans, withChoice, withDeleted, withManualPauses, within,
+  arrange, playedSpans, withChoice, withDeleted, withManualPauses, within,
   type Block, type Clip, type Edits, type Take
 } from "../../shared/timeline.ts"
 import * as Api from "../api.ts"
 import { h } from "../dom.ts"
 import type { EditHistory } from "../edit-history.ts"
 import { correctSubtitle } from "../timeline-subtitles.ts"
+import { withZoom } from "../../shared/zooms.ts"
+import { zoomedReel } from "./montage-model.ts"
 import type { PartActions } from "./montage-part.ts"
 import type { State } from "./montage-screen.ts"
 import { button } from "./ui.ts"
 
 const PAUSE_AROUND_SECONDS = 1.5
+const ZOOM_BEFORE_SECONDS = 1.5
+const ZOOM_AFTER_SECONDS = 3
+
 const WORD_AROUND_SECONDS = 1
 
 const wordWindow = (reel: ReadonlyArray<Clip>, block: string, video: string, word: Span): Span | undefined => {
@@ -74,8 +79,7 @@ const joinActions = ({ state, history, hear }: ActionsContext): Pick<PartActions
     const timeline = loaded?.view.timeline
     if (loaded === undefined || timeline?.state !== "ready") return
     const leave = withAnswer(state.edits, join, "leave")
-    const reel = cutOf(clipsOf(assemble(timeline.blocks, leave, loaded.transcripts, timeline.rest)), facesByVideo(loaded.view.faces), loaded.transcripts, leave)
-    hear(aroundJoin(reel, join, AROUND_JOIN_SECONDS), [])
+    hear(aroundJoin(zoomedReel(loaded.view, timeline, loaded.transcripts, leave).clips, join, AROUND_JOIN_SECONDS), [])
   },
   answer: (join, answer) => { history.change(withAnswer(state.edits, join, answer)) },
   cover: (join, picture) => { history.change(withCover(state.edits, join, picture)) }
@@ -121,6 +125,11 @@ export const partActions = (context: ActionsContext): PartActions => {
     showInsert: showAround,
     answerInsert: (answer) => { history.change(withInsert(state.edits, answer)) },
     showText: showAround,
-    answerText: (answer) => { history.change(withText(state.edits, answer)) }
+    answerText: (answer) => { history.change(withText(state.edits, answer)) },
+    setZoom: (id, level) => { history.change(withZoom(state.edits, id, level)) },
+    hearZoom: (place) => {
+      const window = { start: Math.max(0, place.at - ZOOM_BEFORE_SECONDS), end: place.at + ZOOM_AFTER_SECONDS }
+      hear(reelWithin(state.cut?.reel ?? [], window), shiftedBy(state.shown, window.start))
+    }
   }
 }

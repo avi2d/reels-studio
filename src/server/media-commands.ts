@@ -1,9 +1,10 @@
+import { REEL_WIDTH } from "../shared/framing.ts"
 import { unsureIndexes } from "../shared/doubts.ts"
 import type { Transcript } from "../shared/plan.ts"
 import { SILENCE_LUFS } from "../shared/reel.ts"
 import { CLOSE_UP_FROM_SECONDS } from "../shared/retouch.ts"
 import type { Rgb } from "../shared/reel.ts"
-import { cameraShare, FADE, type Clip, type Frame, type Gaze } from "../shared/timeline.ts"
+import { cameraShare, FADE, type Clip, type Frame, type Gaze, type Push } from "../shared/timeline.ts"
 
 const HDR_TRANSFERS = new Set(["arib-std-b67", "smpte2084"])
 
@@ -12,7 +13,7 @@ export const isHdr = (transfer: string | undefined): boolean => transfer !== und
 export const TO_SDR = "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"
 
 export const probeArgs = (source: string): ReadonlyArray<string> =>
-  ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=color_transfer", "-of", "json", source]
+  ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=color_transfer,width,height", "-of", "json", source]
 
 export interface PrepareFiles {
   readonly source: string
@@ -51,6 +52,7 @@ export interface Part {
   readonly start: number
   readonly frames: number
   readonly frame?: Frame
+  readonly pushes?: ReadonlyArray<Push>
 }
 
 // Each part lasts whole frames, so its sound and its picture end together and the joined reel does not drift.
@@ -60,7 +62,7 @@ export const partsOf = (clips: ReadonlyArray<Clip>): ReadonlyArray<Part> =>
     const frames = Math.round(clip.end * REEL_RATE) - first
     if (frames <= 0) return []
     const part = { video: clip.video, start: first / REEL_RATE, frames }
-    return [clip.frame === undefined ? part : { ...part, frame: clip.frame }]
+    return [{ ...part, ...clip.frame === undefined ? {} : { frame: clip.frame }, ...clip.pushes === undefined ? {} : { pushes: clip.pushes } }]
   })
 
 export const onFrames = (clips: ReadonlyArray<Clip>): ReadonlyArray<Clip> =>
@@ -77,7 +79,14 @@ export const sameParts = (left: ReadonlyArray<Part>, right: ReadonlyArray<Part>)
   left.length === right.length && left.every((part, index) => {
     const other = right[index]
     return other !== undefined && other.video === part.video && other.start === part.start && other.frames === part.frames &&
-      sameFrame(other.frame, part.frame)
+      sameFrame(other.frame, part.frame) && samePushes(other.pushes ?? [], part.pushes ?? [])
+  })
+
+const samePushes = (left: ReadonlyArray<Push>, right: ReadonlyArray<Push>): boolean =>
+  left.length === right.length && left.every((push, index) => {
+    const other = right[index]
+    return other !== undefined && push.start === other.start && push.peak === other.peak && push.end === other.end &&
+      push.scale === other.scale && push.x === other.x && push.y === other.y
   })
 
 const sameFrame = (left: Frame | undefined, right: Frame | undefined): boolean =>
@@ -85,7 +94,6 @@ const sameFrame = (left: Frame | undefined, right: Frame | undefined): boolean =
     ? left === right
     : left.scale === right.scale && left.left === right.left && left.top === right.top
 
-const REEL_WIDTH = 1080
 const REEL_HEIGHT = 1920
 
 export const even = (value: number): number => Math.max(2, Math.ceil(value / 2) * 2)
@@ -121,6 +129,38 @@ export interface Look {
 const lookFilter = (look: Look, frame: Frame | undefined): string =>
   [look.hdr ? TO_SDR : "format=yuv420p", ...(look.gain === undefined ? [] : [gainFilter(look.gain)]), reelVideo(frame, look.faceLeft)].join(",")
 
+const number = (value: number): string => value.toFixed(4)
+
+// The smoothstep rise to the peak and fall after it, the same curve the page player draws.
+const shareExpression = (push: Push, time: string): string => {
+  const up = `clip((${time}-${number(push.start)})/${number(push.peak - push.start)},0,1)`
+  const down = push.end > push.peak ? `clip((${time}-${number(push.peak)})/${number(push.end - push.peak)},0,1)` : "1"
+  return `if(lt(${time},${number(push.peak)}),${up}*${up}*(3-2*${up}),1-${down}*${down}*(3-2*${down}))`
+}
+
+// Each corner of the output takes its picture from a point moved toward the eyes by 1 - 1 / zoom, which enlarges the picture around them.
+// Pushes never share a moment, so their moves add up to the one that is under way.
+const pushFilter = (part: Part): string | undefined => {
+  const pushes = part.pushes ?? []
+  if (pushes.length === 0) return undefined
+  const time = `(${number(part.start)}+in/${REEL_RATE})`
+  const pulls = pushes.map((push) => ({ push, pull: `(1-1/(1+${number(push.scale - 1)}*(${shareExpression(push, time)})))` }))
+  const corner = (across: number, down: number): ReadonlyArray<string> => [
+    `'${across}${pulls.map(({ push, pull }) => `+(${number(push.x * REEL_HEIGHT - across)})*${pull}`).join("")}'`,
+    `'${down}${pulls.map(({ push, pull }) => `+(${number(push.y * REEL_HEIGHT - down)})*${pull}`).join("")}'`
+  ]
+  const [x0, y0] = corner(0, 0)
+  const [x1, y1] = corner(REEL_WIDTH, 0)
+  const [x2, y2] = corner(0, REEL_HEIGHT)
+  const [x3, y3] = corner(REEL_WIDTH, REEL_HEIGHT)
+  return `perspective=x0=${x0}:y0=${y0}:x1=${x1}:y1=${y1}:x2=${x2}:y2=${y2}:x3=${x3}:y3=${y3}:interpolation=cubic:eval=frame`
+}
+
+const partVideo = (part: Part, look: Look): string => {
+  const push = pushFilter(part)
+  return [`fps=${REEL_RATE}`, lookFilter(look, part.frame), ...push === undefined ? [] : [push]].join(",")
+}
+
 export const fadesOf = (seconds: number): string => {
   const fade = Math.min(FADE, seconds / 2)
   return `afade=t=in:d=${fade},afade=t=out:st=${(seconds - fade).toFixed(4)}:d=${fade}`
@@ -132,7 +172,7 @@ export const partArgs = (source: string, part: Part, look: Look, encoder: string
     "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y",
     "-ss", part.start.toFixed(4), "-i", source,
     "-map", "0:v:0", "-map", "0:a:0", "-frames:v", String(part.frames), "-t", seconds.toFixed(6),
-    "-vf", `fps=${REEL_RATE},${lookFilter(look, part.frame)}`, "-af", fadesOf(seconds),
+    "-vf", partVideo(part, look), "-af", fadesOf(seconds),
     "-c:v", encoder, "-profile:v", "high", "-b:v", "10M", "-maxrate", "12M", "-bufsize", "24M", "-g", String(REEL_RATE * 2),
     "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
     "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2", "-map_metadata", "-1", "-f", "mov", output
