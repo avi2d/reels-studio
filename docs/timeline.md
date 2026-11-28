@@ -351,7 +351,7 @@ Two rules exist:
 The step «Монтаж» lists the rules under «Правила» as short phrases, such as «пауза остаётся 0,2 с».
 A step with no rule of its own shows no list.
 The person changes a rule by writing in the chat, such as «оставляй паузы подлиннее» or «медленнее», and the chat model writes `rules.json`.
-The step then shows the change, every pause or zoom it moved and one button that returns the old values.
+The step then shows the change, every pause it moved, every zoom it moved that the step lists, and one button that returns the old values.
 A zoom the person set by hand keeps its answer.
 When one reply changed both rules, the button returns both.
 The pin next to a rule keeps its value for the next reels, and a new reel starts with the pinned values.
