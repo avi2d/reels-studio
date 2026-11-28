@@ -14,7 +14,7 @@ It does not publish a video.
 
 - Bun, at the version `.bun-version` pins.
 - pi, the agent the chat runs on, signed in to at least one model provider.
-- ffmpeg and ffprobe, built with the `zscale` and `tonemap` filters for HDR video, and libass with the `ass` and `bbox` filters for text.
+- ffmpeg and ffprobe, built with the `zscale` and `tonemap` filters for HDR video, the `afftdn` filter for room noise, and libass with the `ass` and `bbox` filters for text.
 - Google Chrome, which saves a page from the internet, such as the text of a law, as a PDF.
 - uv, which installs and runs the speech recognizer in `tools/transcribe/`, the gaze measure in `tools/gaze/` and the PDF reader in `tools/pdf/`.
 - A computer on the home network that keeps running while the studio is in use.
@@ -34,15 +34,7 @@ To start the studio:
 1. Open `http://<address of the computer>:8765` in a browser on the same Wi-Fi.
 
 The log prints `Listening on http://0.0.0.0:8765`.
-The reel list at `/` shows reels and uploaded takes five to a page, uploads takes and resumes an interrupted upload.
-Each reel card shows its status, and the reel's top bar menu lets you rename it.
-A reel walks through five steps: «Записи», «План», «Монтаж», «Оформление» and «Ролики».
-Step 1, «Записи», adds the uploaded takes you tick to the reel at once and plays a recording from a word you press.
-Step 2, «План», saves the task with its apps and files, shows the plan and takes the yes, and the chat on every step streams its reply and has «Остановить».
-Step 3, «Монтаж», lists the parts of the reel with their takes, pauses, words, texts and inserts.
-The title and key thoughts show there as places to check: keep one, retype it within the length limit or remove it, and the built file carries the answer.
-Its «Вопросы» button walks through every doubtful word, join, insert and wording still waiting for an answer, and «Отменить» undoes any change on the step.
-The rules, now the length of a pause, show as «Правила» on the step they belong to, change from a chat sentence and carry to the next reels with a pin, as [Takes and blocks](docs/timeline.md) says.
+Open [the studio screens](docs/studio-screens.md) to see how to edit and build a reel.
 
 The studio answers the home network and the owner's Mac through the `local-apps` gateway.
 The gateway must listen only on that Mac's loopback address.

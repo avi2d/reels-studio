@@ -25,6 +25,7 @@ export interface Failures {
   readonly stale: Unheard
   readonly reels: Reels
   readonly trials: Reels
+  readonly cleanings: Reels
   readonly sounds: Reels
 }
 

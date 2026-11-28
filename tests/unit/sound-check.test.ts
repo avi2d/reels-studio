@@ -8,6 +8,7 @@ import { sameParts } from "../../src/server/media-commands.ts"
 import type { ReelJob } from "../../src/shared/reel.ts"
 import type { Clip } from "../../src/shared/timeline.ts"
 import type { Shown } from "../../src/shared/inserts.ts"
+import { NOISE_DEFAULT } from "../../src/shared/noise.ts"
 
 const unframed = { block: "a", video: "a.mov", start: 1, end: 2 } satisfies Clip
 const clip = { ...unframed, frame: { scale: 1, left: 0, top: 0 } } satisfies Clip
@@ -22,7 +23,7 @@ const withRecord = async (run: (dir: string) => Promise<void>): Promise<void> =>
   const dir = await mkdtemp("node_modules/.cache/sound-check-")
   try {
     await mkdir(`${dir}/reel`)
-    await writeFile(`${dir}/reel/sound.json`, JSON.stringify({ ...record, key: soundKeyOf(record.parts, []) }))
+    await writeFile(`${dir}/reel/sound.json`, JSON.stringify({ ...record, key: soundKeyOf(record.parts, [], NOISE_DEFAULT) }))
     await run(dir)
   } finally {
     await rm(dir, { recursive: true, force: true })
@@ -37,12 +38,12 @@ test("sound queue keys ignore every crop axis without making built video crops e
   const bare = [{ video: "a.mov", start: 1, frames: 30 }]
   for (const frame of [{ scale: 1.2, left: 0, top: 0 }, { scale: 1, left: 10, top: 0 }, { scale: 1, left: 0, top: 0.1 }]) {
     const reframed = [{ video: "a.mov", start: 1, frames: 30, frame }]
-    expect(soundKeyOf(reframed, [])).toBe(soundKeyOf(original, []))
+    expect(soundKeyOf(reframed, [], NOISE_DEFAULT)).toBe(soundKeyOf(original, [], NOISE_DEFAULT))
     expect(sameParts(reframed, original)).toBe(false)
   }
-  expect(soundKeyOf(bare, [])).toBe(soundKeyOf(original, []))
+  expect(soundKeyOf(bare, [], NOISE_DEFAULT)).toBe(soundKeyOf(original, [], NOISE_DEFAULT))
   const second = { video: "b.mov", start: 3, frames: 60 }
-  expect(soundKeyOf([...original, second], [])).not.toBe(soundKeyOf([second, ...original], []))
+  expect(soundKeyOf([...original, second], [], NOISE_DEFAULT)).not.toBe(soundKeyOf([second, ...original], [], NOISE_DEFAULT))
 })
 
 test("crop scale, horizontal position, and vertical position do not stale an unchanged soundtrack", async () => {
@@ -82,7 +83,7 @@ test("turning clip sound on stales a voice-only verdict instead of reusing its l
 
 test("heard file, seek, placement, removal, and replacement changes stale the saved mix instead of keeping its verdict", async () => {
   await withRecord(async (dir) => {
-    await writeFile(`${dir}/reel/sound.json`, JSON.stringify({ ...record, key: soundKeyOf(record.parts, [insert]) }))
+    await writeFile(`${dir}/reel/sound.json`, JSON.stringify({ ...record, key: soundKeyOf(record.parts, [insert], NOISE_DEFAULT) }))
     expect((await read(dir, [clip], { state: "idle" }, [insert])).heard?.fresh).toBe(true)
     const changed: ReadonlyArray<ReadonlyArray<Shown>> = [
       [{ ...insert, visual: { ...insert.visual, file: "other.mov" } }],

@@ -42,6 +42,26 @@ export const envelopeArgs = (source: string, metadata: string): ReadonlyArray<st
   "-af", `ebur128=metadata=1,ametadata=mode=print:key=lavfi.r128.S:file=${metadata}`, "-f", "null", "-"
 ]
 
+const WINDOW_RATE = 48000
+
+export const windowLevelArgs = (source: string, metadata: string, stepSeconds: number): ReadonlyArray<string> => [
+  "-hide_banner", "-nostats", "-i", source, "-map", "0:a:0",
+  "-af", `aresample=${WINDOW_RATE},aformat=channel_layouts=mono,asetnsamples=n=${Math.round(WINDOW_RATE * stepSeconds)},astats=metadata=1:reset=1,ametadata=mode=print:key=lavfi.astats.Overall.RMS_level:file=${metadata}`,
+  "-f", "null", "-"
+]
+
+const WINDOW_LEVEL = "lavfi.astats.Overall.RMS_level="
+
+export const windowLevelsOf = (metadata: string, quietest: number): ReadonlyArray<number> =>
+  metadata.split("\n").flatMap((line) => {
+    if (!line.startsWith(WINDOW_LEVEL)) return []
+    const text = line.slice(WINDOW_LEVEL.length).trim()
+    // astats prints -inf for a window of digital silence, and dropping it would shift every later window.
+    const level = text === "-inf" ? quietest : Number(text)
+    if (Number.isNaN(level)) return []
+    return [Math.round(Math.max(quietest, level) * 10) / 10]
+  })
+
 // The chart draws the 3 s short-term level, which the gap a removed pause leaves does not drag down the way a 0.4 s momentary reading does.
 const SHORT_TERM_SECONDS = 3
 

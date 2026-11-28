@@ -7,6 +7,7 @@ export default defineConfig({
     "src/pi/web-page.ts",
     "src/web/studio/main.ts",
     "tests/e2e/law-review-fixture.ts",
+    "tests/e2e/noise-cut-fixture.ts",
     "tests/e2e/browser/hooks.ts",
     "tests/e2e/browser/run.ts",
     "tests/e2e/browser/tool.ts"

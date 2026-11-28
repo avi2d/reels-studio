@@ -1,4 +1,5 @@
 import { lookAt, type Shown } from "../../shared/inserts.ts"
+import type { Noise } from "../../shared/noise.ts"
 import { stepPath } from "../../shared/page.ts"
 import type { ShownWord } from "../../shared/subtitles.ts"
 import { NO_EDITS, type Edits } from "../../shared/timeline.ts"
@@ -14,6 +15,7 @@ import { playback } from "../timeline-subtitles.ts"
 import { icon } from "./icons.ts"
 import { lookFace } from "./look-face.ts"
 import { lookMargins } from "./look-margins.ts"
+import { lookNoise } from "./look-noise.ts"
 import { lookSubtitles } from "./look-subtitles.ts"
 import { cutOfPage, type Cut } from "./montage-model.ts"
 import { paintThought, shownTexts } from "./montage-screen.ts"
@@ -46,12 +48,36 @@ const cutOfLoaded = (loaded: Loaded): Cut | undefined => {
   return timeline.state === "ready" && loaded.transcripts.size > 0 ? cutOfPage(loaded.view, timeline, loaded.transcripts, timeline.edits) : undefined
 }
 
+const noiseSources = (cut: Cut | undefined): string =>
+  [...new Set(cut?.reel.map((clip) => clip.video))].sort().join("/")
+
 const row = (label: string, ...control: ReadonlyArray<Node>): HTMLElement =>
   h("div", { class: "look-row" }, h("span", { class: "look-row__label" }, label), h("div", { class: "look-row__control" }, ...control))
 
+const lookGroups = (subtitles: Node, face: Node, noise: Node): HTMLElement =>
+  h("div", { class: "look-groups" },
+      subtitles,
+      h("section", { class: "group look-settings", "aria-labelledby": "look-picture" },
+        h("h2", { class: "group__title", id: "look-picture" }, "Картинка"),
+        face,
+        row("Цвет", h("p", { class: "look-row__text" }, COLOUR))),
+      h("section", { class: "group look-settings", "aria-labelledby": "look-sound" },
+        h("h2", { class: "group__title", id: "look-sound" }, "Звук"),
+        noise))
+
+const lookSound = (projectId: string) => {
+  const sound = montageSound(projectId, { freshGainsOnly: true })
+  let previewMatchesChoice = false
+  const previewChoice = (choice: Noise | undefined): void => {
+    previewMatchesChoice = choice !== undefined
+    if (previewMatchesChoice) sound.refresh()
+  }
+  return { node: sound.node, previewChoice, dbAt: (video: string, time: number) => previewMatchesChoice ? sound.dbAt(video, time) : 0 }
+}
+
 export const lookStep = (projectId: string): LookStep => {
   const state: State = { loaded: undefined, cut: undefined, drawn: "", edits: NO_EDITS, base: undefined, shown: [], overlay: [], words: [], playing: undefined }
-  const sound = montageSound(projectId)
+  const sound = lookSound(projectId)
   const overlay = insertView(Api.insertUrls(projectId))
   const thought = h("div", { class: "thought-preview", "aria-hidden": "true" })
   const margins = lookMargins(projectId)
@@ -59,6 +85,7 @@ export const lookStep = (projectId: string): LookStep => {
   const clock = h("span", { class: "clock" })
   const frame = h("div", { class: "frame" }, overlay.node, thought)
   const face = lookFace(projectId)
+  const noise = lookNoise(projectId, (urlOf) => { player.source(urlOf) }, sound.previewChoice)
   const subtitles = lookSubtitles(projectId, (view) => {
     const middle = view.subtitles.style === "example" && view.example?.title === "middle"
     const { box } = textAreaOf("Instagram")
@@ -70,12 +97,7 @@ export const lookStep = (projectId: string): LookStep => {
   const empty = h("p", { class: "hint", hidden: true }, EMPTY)
   const work = h("div", { class: "look", hidden: true },
     h("div", { class: "look-viewer" }, frame, h("div", { class: "montage-viewer__bar" }, go, clock), margins.controls),
-    h("div", { class: "look-groups" },
-    subtitles.node,
-    h("section", { class: "group look-settings", "aria-labelledby": "look-picture" },
-      h("h2", { class: "group__title", id: "look-picture" }, "Картинка"),
-      face.node,
-      row("Цвет", h("p", { class: "look-row__text" }, COLOUR)))))
+    lookGroups(subtitles.node, face.node, noise.node))
   const next = h("div", { class: "next", hidden: true }, h("a", { class: "btn btn--main", href: stepPath(projectId, "done") }, "Дальше: ролики", icon("right")))
   const body = h("div", { class: "body body--look" },
     h("div", { class: "head" }, h("h1", { tabindex: "-1" }, "Оформление")),
@@ -102,8 +124,7 @@ export const lookStep = (projectId: string): LookStep => {
   frame.prepend(player.node)
   const { watch } = playback(state, () => state.cut?.reel ?? [], player)
 
-  const draw = (): void => {
-    const cut = state.loaded === undefined ? undefined : cutOfLoaded(state.loaded)
+  const draw = (cut: Cut | undefined): void => {
     state.cut = cut
     state.shown = cut?.shown ?? []
     const first = cut?.reel[0]
@@ -122,7 +143,9 @@ export const lookStep = (projectId: string): LookStep => {
     const drawn = JSON.stringify([loaded.view, [...loaded.transcripts.keys()]])
     if (drawn === state.drawn) return
     state.drawn = drawn
-    draw()
+    const cut = cutOfLoaded(loaded)
+    if (noiseSources(cut) !== noiseSources(state.cut)) noise.refresh()
+    draw(cut)
   }
 
   go.addEventListener("click", () => {
@@ -136,7 +159,6 @@ export const lookStep = (projectId: string): LookStep => {
   // The loader stops once its anchor leaves the page, so the first load waits until the caller has put the body on the page.
   queueMicrotask(() => {
     refresh()
-    sound.refresh()
     face.refresh()
     subtitles.refresh()
   })
@@ -145,6 +167,7 @@ export const lookStep = (projectId: string): LookStep => {
     dispose: () => {
       player.stop()
       face.dispose()
+      noise.dispose()
       subtitles.dispose()
     }
   }

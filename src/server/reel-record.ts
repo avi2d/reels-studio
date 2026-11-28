@@ -2,6 +2,7 @@ import { Array as Arr, Effect, FileSystem, Option, Schema, type PlatformError } 
 import { App } from "../shared/brief.ts"
 import { hasCaptions, type Captions } from "../shared/captions.ts"
 import { Face } from "../shared/face.ts"
+import { Noise } from "../shared/noise.ts"
 import { visualKey, type Shown } from "../shared/inserts.ts"
 import { APP_FILE_NAME, Levelling, VideoColour, type PictureSide } from "../shared/reel.ts"
 import { Frame, Push } from "../shared/timeline.ts"
@@ -28,6 +29,7 @@ const recordFields = {
   inserts: Schema.Array(ShownInsert).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   captions: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed(""))),
   face: Face.pipe(Schema.withDecodingDefaultKey(Effect.succeed("off" as const))),
+  noise: Noise.pipe(Schema.withDecodingDefaultKey(Effect.succeed("off" as const))),
   levelling: Schema.optionalKey(Levelling)
 }
 export const Record = Schema.Struct({ ...recordFields, files: Schema.NonEmptyArray(AppFile) })
