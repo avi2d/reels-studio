@@ -21,6 +21,7 @@
 .done-checks[hidden] { display: none; }
 .done-checks h2, .done-sheet h2 { font-size: 17px; }
 .done-checks__list { display: flex; flex-direction: column; gap: 0; margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.done-checks__list[hidden] { display: none; }
 .done-check { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: start; gap: 4px 12px; padding: 12px 14px; }
 .done-check + .done-check { border-top: 1px solid var(--line); }
 .done-check__mark { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--edge); color: var(--surface); }

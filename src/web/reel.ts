@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import type { Face } from "../shared/face.ts"
+import { opensDownload } from "../shared/reel-checks.ts"
 import { jumpsOf, LOUDNESS_TARGET, type ColourView, type Jump, type Levelling, type Passage, type PictureSide, type ReelView, type Sound } from "../shared/reel.ts"
 import * as Api from "./api.ts"
 import { button } from "./controls.ts"
@@ -201,6 +202,7 @@ const show = (pane: Pane, view: ReelView): void => {
   else if (state.busy) ui.problem.textContent = ""
   ui.file.hidden = view.file === undefined
   if (view.file !== undefined) {
+    ui.save.hidden = !opensDownload(view.file.checks)
     if (state.made !== view.file.made) {
       state.made = view.file.made
       playAfter(pane, view.file.made)

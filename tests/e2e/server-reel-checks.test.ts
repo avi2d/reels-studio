@@ -20,7 +20,7 @@ const cutOf = (title: "top" | "middle"): Cut => ({
   }
 })
 
-const measure = (dir: string, cut: Cut) => readChecks(dir, cut, undefined, 2, undefined)
+const measure = (dir: string, cut: Cut) => readChecks(dir, cut, undefined, 2)
 
 const run = <A, E>(work: Effect.Effect<A, E, Settings | BunServices.BunServices>) =>
   Effect.runPromise(work.pipe(Effect.provide(Settings.layer.pipe(Layer.provideMerge(BunServices.layer)))))
@@ -53,11 +53,10 @@ for (const first of ["top", "middle"] as const) {
     const dir = await mkdtemp("node_modules/.cache/reel-title-")
     const second = first === "top" ? "middle" : "top"
     try {
-      const initial = (await run(measure(dir, cutOf(first)))).texts
-      const fresh = (await run(measure(`${dir}/fresh`, cutOf(second)))).texts
-      expect(initial.state).not.toBe(fresh.state)
-      expect((await run(measure(dir, cutOf(second)))).texts).toEqual(fresh)
-      expect((await run(measure(dir, cutOf(first)))).texts).toEqual(initial)
+      const placement = { top: "inside", middle: "outside" } as const
+      expect((await run(measure(dir, cutOf(first)))).texts.state).toBe(placement[first])
+      expect((await run(measure(dir, cutOf(second)))).texts.state).toBe(placement[second])
+      expect((await run(measure(dir, cutOf(first)))).texts.state).toBe(placement[first])
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

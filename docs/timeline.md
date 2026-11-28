@@ -145,12 +145,16 @@ For each joined pair of videos, the build saves two pictures of their first join
 The «Внешность» stage shows them side by side under the skin and eye trial.
 
 The stage plays the built file and offers «Скачать».
-On the step «Ролики» of the new screens, «Скачать» opens only when four checks pass: every on-screen text inside the Instagram margins, no open question in «Монтаж», a length of up to 3:00, which Instagram takes at most, and a loudness that is not «bad».
-Each check shows a plain sentence, and a failed one has «Исправить», which opens «Монтаж» with the failing part selected through `?part=` in the address.
-A failed text, question or length check also stops the build: the build answers 400 with the same sentence.
-The loudness is heard on the built file, so it never stops a build.
-The text check draws the texts as the build does and keeps its result for the reel, the length, the texts and the subtitle look.
-After a build, the step lays 6 even frames of the built file, and one from the middle of each stretch where the buttons cover the face, up to 9, under a mask of the Instagram player.
+On «Ролики», the download requires four passing checks for the built file.
+The build records whether the texts fit Instagram's margins, no question remains in «Монтаж», and the cut runs no longer than 3:00.
+The studio checks loudness on the built file and finds the part in the cut it built.
+A file without recorded build checks stays playable but cannot be downloaded until rebuilt.
+Edits after a build affect «Собрать заново», not the download of the previous file.
+Each failed check names the fix, and «Исправить» opens «Монтаж» at the part when the check has one.
+If a text, question, or length check fails, the server refuses the build with the same sentence and HTTP 400.
+The text check draws the texts as the build does and keeps the result until the inputs to the draw change.
+After a build, the step shows six evenly spaced frames under an Instagram player mask.
+It also shows a frame from each stretch where the buttons cover the face, up to nine frames in all.
 It warns with the times when the buttons cover the face, measured on the built 1080 by 1920 file.
 The stage names the measured loudness of the built file with a plain verdict word.
 It says when the peaks stay clean.

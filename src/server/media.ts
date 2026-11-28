@@ -11,12 +11,12 @@ import { trialHandlers, type TrialHandlers } from "./media-trial.ts"
 import { Projects } from "./projects.ts"
 import { sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
-import { buildReel, builtSound, readReel, reelFrameAt, reelPictureAt, reelVideoAt, type ReelVersion } from "./reel.ts"
+import { buildReel, readReel, reelDownloadAt, reelFrameAt, reelPictureAt, reelVideoAt, type ReelVersion } from "./reel.ts"
 import { readChecks } from "./reel-checks.ts"
-import { checkSentence, firstBuildFailure } from "../shared/reel-checks.ts"
+import { buildFailures, checkSentence, DOWNLOAD_CLOSED, type BuildChecks } from "../shared/reel-checks.ts"
 import { noFaceOf, runTrial } from "./retouch.ts"
 import { checkSound, readSoundCheck, soundKeyOf } from "./sound-check.ts"
-import { readCut, readMontageCut, readTimeline, type Cut } from "./timeline-files.ts"
+import { readCut, readEdits, readMontageCut, readTimeline, type Cut } from "./timeline-files.ts"
 import { partsOf, secondsOf } from "./media-commands.ts"
 
 interface Running {
@@ -130,14 +130,20 @@ const failedJob = (cause: Cause.Cause<unknown>): ReelJob => Option.match(noFaceO
   onSome: (noFace) => ({ state: "failed", noFace })
 })
 
-type Build<E, R> = (dir: string, cut: Cut, onDone: (share: number) => Effect.Effect<void>) => Effect.Effect<void, E, R>
+type Progress = (share: number) => Effect.Effect<void>
+type Build<E, R> = (dir: string, onDone: Progress) => Effect.Effect<void, E, R>
 
 const reelTask = <E, R>(reels: Reels, dir: string, build: Build<E, R>) =>
   Effect.gen(function*() {
     if (!(yield* startReel(reels, dir))) return
-    const cut = yield* readCut(dir, yield* sourceNames(dir))
-    yield* build(dir, cut, (done) => setReel(reels, dir, { state: "running", done }))
+    yield* build(dir, (done) => setReel(reels, dir, { state: "running", done }))
   }).pipe(Effect.onExit((exit) => Exit.isFailure(exit) && !Cause.hasInterrupts(exit.cause) ? setReel(reels, dir, failedJob(exit.cause)) : forgetReel(reels, dir)))
+
+const withCut = <E, R>(build: (dir: string, cut: Cut, onDone: Progress) => Effect.Effect<void, E, R>) =>
+  (dir: string, onDone: Progress) => Effect.gen(function*() {
+    const cut = yield* readCut(dir, yield* sourceNames(dir))
+    yield* build(dir, cut, onDone)
+  })
 
 type Tried = Ref.Ref<ReadonlyMap<string, string>>
 
@@ -145,17 +151,39 @@ type Tried = Ref.Ref<ReadonlyMap<string, string>>
 const checkSoundOf = (tried: Tried) => (dir: string, cut: Cut, onDone: (share: number) => Effect.Effect<void>) =>
   Ref.update(tried, (map) => new Map([...map, [dir, soundKeyOf(partsOf(cut.clips), cut.inserts)]])).pipe(Effect.andThen(checkSound(dir, cut, onDone)))
 
+const checkedCut = Effect.fnUntraced(function*(dir: string) {
+  const names = yield* sourceNames(dir)
+  const edits = yield* readEdits(dir)
+  const cut = yield* readCut(dir, names, edits)
+  const montage = yield* readMontageCut(dir, names, edits)
+  const checks = yield* readChecks(dir, cut, montage, secondsOf(partsOf(cut.clips)))
+  return { cut, checks }
+})
+
+const buildProblem = (checks: BuildChecks): string | undefined => {
+  if (checks.length.seconds === 0) return "В монтаже нет ни одного блока. Сначала соберите блоки."
+  const failed = buildFailures(checks)[0]
+  return failed === undefined ? undefined : checkSentence(failed)
+}
+
+const checkedBuild = Effect.fnUntraced(function*(dir: string, onDone: Progress) {
+  const { cut, checks } = yield* checkedCut(dir)
+  const problem = buildProblem(checks)
+  if (problem !== undefined) return yield* badRequest(problem)
+  yield* buildReel(dir, cut, checks, onDone)
+})
+
 const step = Effect.fnUntraced(function*(failures: Failures, tried: Tried, work: Ref.Ref<Work>) {
   const { closed, closedJobs } = yield* Ref.get(work)
   const jobs = yield* openJobs(closed, closedJobs)
   const unheard = yield* nextUnheard(failures.unheard, jobs)
   if (unheard !== undefined) return yield* attempt(work, unheard, listen(unheard), () => markFailed(failures.unheard, unheard))
   const reel = yield* nextReel(failures.reels, closed)
-  if (reel !== undefined) return yield* attempt(work, { dir: reel, name: "the reel" }, reelTask(failures.reels, reel, buildReel), () => Effect.void)
+  if (reel !== undefined) return yield* attempt(work, { dir: reel, name: "the reel" }, reelTask(failures.reels, reel, checkedBuild), () => Effect.void)
   const sound = yield* nextReel(failures.sounds, closed)
-  if (sound !== undefined) return yield* attempt(work, { dir: sound, name: "the sound check" }, reelTask(failures.sounds, sound, checkSoundOf(tried)), () => Effect.void)
+  if (sound !== undefined) return yield* attempt(work, { dir: sound, name: "the sound check" }, reelTask(failures.sounds, sound, withCut(checkSoundOf(tried))), () => Effect.void)
   const trial = yield* nextReel(failures.trials, closed)
-  if (trial !== undefined) return yield* attempt(work, { dir: trial, name: "the retouch trial" }, reelTask(failures.trials, trial, (dir, cut, onDone) => runTrial(dir, cut.clips, onDone)), () => Effect.void)
+  if (trial !== undefined) return yield* attempt(work, { dir: trial, name: "the retouch trial" }, reelTask(failures.trials, trial, withCut((dir, cut, onDone) => runTrial(dir, cut.clips, onDone))), () => Effect.void)
   const stale = yield* nextStale(failures.stale, jobs)
   if (stale !== undefined) return yield* attempt(work, stale, refreshPreview(stale), () => markFailed(failures.stale, stale))
   const unseen = yield* nextUnseen(failures.unseen, jobs)
@@ -174,17 +202,9 @@ const stopReel = Effect.fnUntraced(function*(work: Ref.Ref<Work>, reels: Reels, 
 })
 
 const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, reels: Reels, work: Ref.Ref<Work>, context: Context.Context<Needs>) => {
-  const checksOf = Effect.fnUntraced(function*(dir: string) {
-    const names = yield* sourceNames(dir)
-    const cut = yield* readCut(dir, names)
-    const montage = yield* readMontageCut(dir, names)
-    const checks = yield* readChecks(dir, cut, montage, secondsOf(partsOf(cut.clips)), yield* builtSound(dir))
-    return { cut, checks }
-  })
-
   const reelOf = Effect.fnUntraced(function*(dir: string) {
     const job = (yield* Ref.get(reels)).get(dir) ?? { state: "idle" }
-    const { cut, checks } = yield* checksOf(dir)
+    const { cut, checks } = yield* checkedCut(dir)
     return yield* readReel(dir, cut, job, checks)
   })
 
@@ -196,10 +216,9 @@ const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, r
     const dir = yield* folder(id)
     const job = (yield* Ref.get(reels)).get(dir)
     if (job?.state === "waiting" || job?.state === "running") return yield* reelOf(dir)
-    const { cut, checks } = yield* checksOf(dir)
-    if (cut.clips.length === 0) return yield* badRequest("В монтаже нет ни одного блока. Сначала соберите блоки.")
-    const failed = firstBuildFailure(checks)
-    if (failed !== undefined) return yield* badRequest(checkSentence(failed))
+    const { checks } = yield* checkedCut(dir)
+    const problem = buildProblem(checks)
+    if (problem !== undefined) return yield* badRequest(problem)
     yield* queueWaiting(reels, dir)
     return yield* reelOf(dir)
   }, orBroken, Effect.provideContext(context))
@@ -208,6 +227,15 @@ const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, r
     const target = yield* reelVideoAt(yield* folder(id), made, version)
     if (target === undefined) return yield* notFound("Ролик ещё не собран")
     return target
+  }, orBroken, Effect.provideContext(context))
+
+  const reelDownload = Effect.fn("Media.reelDownload")(function*(id: string, made: string) {
+    const file = yield* reelDownloadAt(yield* folder(id), made)
+    switch (file.state) {
+      case "missing": return yield* notFound("Ролик ещё не собран")
+      case "closed": return yield* badRequest(DOWNLOAD_CLOSED)
+      case "ready": return file.target
+    }
   }, orBroken, Effect.provideContext(context))
 
   const reelFrame = Effect.fn("Media.reelFrame")(function*(id: string, made: string, index: number) {
@@ -228,7 +256,7 @@ const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, r
     return yield* reelOf(dir)
   }, orBroken, Effect.provideContext(context))
 
-  return { reel, buildReel: queueReel, cancelReel, reelFile, reelPicture, reelFrame }
+  return { reel, buildReel: queueReel, cancelReel, reelFile, reelDownload, reelPicture, reelFrame }
 }
 
 // A cut is checked once: a failed check waits for the next change of the cut, not for the next poll.
@@ -269,6 +297,7 @@ export class Media extends Context.Service<Media, {
   readonly buildReel: (id: string) => Effect.Effect<ReelView, ApiError>
   readonly cancelReel: (id: string) => Effect.Effect<ReelView, ApiError>
   readonly reelFile: (id: string, made: string, version: ReelVersion) => Effect.Effect<string, ApiError>
+  readonly reelDownload: (id: string, made: string) => Effect.Effect<string, ApiError>
   readonly reelPicture: (id: string, picture: Picture) => Effect.Effect<string, ApiError>
   readonly reelFrame: (id: string, made: string, index: number) => Effect.Effect<string, ApiError>
   readonly sound: (id: string) => Effect.Effect<SoundCheck, ApiError>
@@ -358,13 +387,13 @@ export class Media extends Context.Service<Media, {
 
       const { exchangeEdits, mergeEdits } = yield* makeExchange(projects, context)
 
-      const { reel, buildReel: queueReel, cancelReel, reelFile, reelPicture, reelFrame } = reelHandlers(projects.folder, reels, work, context)
+      const { reel, buildReel: queueReel, cancelReel, reelFile, reelDownload, reelPicture, reelFrame } = reelHandlers(projects.folder, reels, work, context)
 
       const { trial, startTrial, trialFile, setFace } = trialHandlers(projects.folder, trials, context)
 
       const sound = soundHandler(projects.folder, sounds, tried, context)
 
-      return Media.of({ videos, preview, retry, library, reuse, uploaded, retryUploaded, uploadedPreview, removeUploaded, timeline, exchangeEdits, mergeEdits, reel, buildReel: queueReel, cancelReel, reelFile, reelPicture, reelFrame, sound, trial, startTrial, trialFile, setFace, withoutWork })
+      return Media.of({ videos, preview, retry, library, reuse, uploaded, retryUploaded, uploadedPreview, removeUploaded, timeline, exchangeEdits, mergeEdits, reel, buildReel: queueReel, cancelReel, reelFile, reelDownload, reelPicture, reelFrame, sound, trial, startTrial, trialFile, setFace, withoutWork })
     })
   )
 }

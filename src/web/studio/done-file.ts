@@ -1,3 +1,4 @@
+import { DOWNLOAD_CLOSED, opensDownload } from "../../shared/reel-checks.ts"
 import * as Api from "../api.ts"
 import { h } from "../dom.ts"
 import { factsOf, soundLineOf, type File } from "./done-model.ts"
@@ -6,13 +7,12 @@ import { button } from "./ui.ts"
 
 const SAVE_HINT = "На айфоне откройте скачанный файл и выберите «Сохранить видео»: ролик появится в «Фото», и Instagram его найдёт."
 const LISTEN = "Послушать до и после"
-const CLOSED = "Скачать ролик можно, когда пройдены все проверки выше."
 
 type Version = "before" | "after"
 
 export interface ReelFile {
   readonly node: HTMLElement
-  readonly paint: (file: File, stale: boolean, downloadOpen: boolean) => void
+  readonly paint: (file: File, stale: boolean) => void
   readonly pause: () => void
 }
 
@@ -26,7 +26,7 @@ export const reelFile = (projectId: string): ReelFile => {
   const sound = h("p", { class: "done-sound" })
   const facts = h("p", { class: "hint" })
   const download = h("a", { class: "btn btn--main btn--start", download: "" }, icon("download"), "Скачать")
-  const closed = h("p", { class: "done-closed", hidden: true }, CLOSED)
+  const closed = h("p", { class: "done-closed", hidden: true }, DOWNLOAD_CLOSED)
   const save = h("p", { class: "hint" }, SAVE_HINT)
   const node = h("div", { class: "done-file", hidden: true },
     h("div", { class: "done-viewer" }, player, listen),
@@ -61,14 +61,14 @@ export const reelFile = (projectId: string): ReelFile => {
 
   return {
     node,
-    paint: (file, stale, downloadOpen) => {
+    paint: (file, stale) => {
+      const downloadOpen = opensDownload(file.checks)
       download.hidden = !downloadOpen
       save.hidden = !downloadOpen
-      closed.hidden = downloadOpen
-      if (state.made !== file.made) {
-        load(file.made, "after")
-        download.setAttribute("href", Api.reelDownloadUrl(projectId, file.made))
-      }
+      closed.hidden = downloadOpen || file.checks === undefined
+      if (downloadOpen) download.href = Api.reelDownloadUrl(projectId, file.made)
+      else download.removeAttribute("href")
+      if (state.made !== file.made) load(file.made, "after")
       sound.textContent = soundLineOf(file)
       listen.hidden = file.levelling === undefined
       facts.textContent = factsOf(file)

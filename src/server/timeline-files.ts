@@ -162,7 +162,7 @@ const readHeard = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<
   return { transcripts, gazes, gazeWritten, faces }
 })
 
-export const readTimeline = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>, unseen: ReadonlyMap<string, GazeFailure>) {
+export const readTimeline = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>, unseen: ReadonlyMap<string, GazeFailure>, edits?: Edits) {
   const { transcripts, gazes, gazeWritten, faces } = yield* readHeard(dir, names)
   const looks: ReadonlyArray<Look> = [...transcripts.keys()].map((name) =>
     lookOf(name, gazes.get(name), gazeWritten.has(name), unseen.get(places({ dir, name }).source)))
@@ -176,7 +176,7 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
   const written = yield* readBlocks(dir)
   if (written === "none" || written === "unreadable") return { looks, faces, pictures, inserts, texts, sources, zooms, doubts, timeline: { state: written } } satisfies TimelineView
   const rules = yield* reelRules(dir)
-  return { looks, faces, pictures, inserts, texts, sources, zooms, doubts, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir), rest: rules.pause, zoom: rules.zoom } } satisfies TimelineView
+  return { looks, faces, pictures, inserts, texts, sources, zooms, doubts, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: edits ?? (yield* readEdits(dir)), rest: rules.pause, zoom: rules.zoom } } satisfies TimelineView
 })
 
 export interface Cut {
@@ -185,12 +185,12 @@ export interface Cut {
   readonly captions: Captions
 }
 
-export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>) {
+export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>, saved?: Edits) {
   const { transcripts, faces } = yield* readHeard(dir, names)
   const written = yield* readBlocks(dir)
   if (written === "none" || written === "unreadable") return { clips: [], inserts: [], captions: NO_CAPTIONS } satisfies Cut
   const { blocks } = soundBlocks(written, transcripts, new Map())
-  const edits = yield* readEdits(dir)
+  const edits = saved ?? (yield* readEdits(dir))
   const attached = yield* readReachable(dir)
   const pictures = picturesOf(attached)
   const rules = yield* reelRules(dir)
@@ -204,8 +204,8 @@ export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyA
 })
 
 // The same cut the Монтаж step draws, so the final check counts the questions the step shows.
-export const readMontageCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>) {
-  const view = yield* readTimeline(dir, names, new Map())
+export const readMontageCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>, edits: Edits) {
+  const view = yield* readTimeline(dir, names, new Map(), edits)
   if (view.timeline.state !== "ready") return undefined
   const { transcripts } = yield* readHeard(dir, names)
   return cutOfPage(view, view.timeline, transcripts, view.timeline.edits)

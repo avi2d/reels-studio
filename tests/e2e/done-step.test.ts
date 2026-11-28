@@ -8,7 +8,7 @@ let server: ReturnType<typeof Bun.serve>
 
 const file = { made: "2026-01-01T00:00:00.000Z", seconds: 7, size: 1000, fresh: true, face: "off" } satisfies NonNullable<ReelView["file"]>
 const unbuilt = { job: { state: "idle" }, cut: 7, face: "off", checks: PASSING } satisfies ReelView
-const ready = { ...unbuilt, file } satisfies ReelView
+const ready = { ...unbuilt, file: { ...file, checks: PASSING } } satisfies ReelView
 const offline = "Нет связи со студией. Проверьте Wi-Fi."
 
 beforeAll(async () => {
@@ -44,12 +44,42 @@ const withPage = async (run: (page: Page) => Promise<void>): Promise<void> => {
 
 const open = (page: Page): Promise<unknown> => page.goto(server.url.href)
 
+test("a 3:10 edit blocks rebuild but does not hide the checked 2:50 download", () => withPage(async (page) => {
+  const checked = { ...PASSING, length: { id: "length", seconds: 170 } } as const
+  const view = {
+    ...ready, cut: 190, checks: { ...checked, length: { id: "length", seconds: 190 } },
+    file: { ...file, fresh: false, seconds: 170, checks: checked }
+  } satisfies ReelView
+  await page.route("**/api/projects/review/reel", (route) => route.fulfill({ json: view }))
+  await open(page)
+  await page.getByRole("link", { name: "Скачать", exact: true }).waitFor()
+  const rebuild = page.getByRole("button", { name: "Собрать заново", exact: true })
+  expect(await rebuild.isDisabled()).toBe(true)
+  const list = page.getByRole("region", { name: "Проверка перед скачиванием" })
+  expect(await list.getByText("Ролик идёт 2:50.", { exact: true }).count()).toBe(1)
+  expect(await page.getByText(/Ролик идёт 3:10/).count()).toBe(1)
+}))
+
+test("a valid cut leaves the unchecked 3:30 file playable but does not offer its download", () => withPage(async (page) => {
+  const view = {
+    ...ready, cut: 170, checks: { ...PASSING, length: { id: "length", seconds: 170 } },
+    file: { ...file, seconds: 210, fresh: false }
+  } satisfies ReelView
+  await page.route("**/api/projects/review/reel", (route) => route.fulfill({ json: view }))
+  await open(page)
+  const rebuild = page.getByRole("button", { name: "Собрать заново", exact: true })
+  await rebuild.waitFor()
+  expect(await rebuild.isEnabled()).toBe(true)
+  expect(await page.locator("video").isVisible()).toBe(true)
+  expect(await page.getByRole("link", { name: "Скачать", exact: true }).count()).toBe(0)
+}))
+
 test("an offline idle poll does not leave an alert after the built reel reconnects", () => withPage(async (page) => {
   let polls = 0
   await page.route("**/api/projects/review/reel", async (route) => {
     polls += 1
     if (polls === 2) await route.abort("internetdisconnected")
-    else await route.fulfill({ json: polls < 3 ? ready : { ...ready, file: { ...file, fresh: false } } })
+    else await route.fulfill({ json: polls < 3 ? ready : { ...ready, file: { ...ready.file, fresh: false } } })
   })
   await open(page)
   await page.getByRole("heading", { name: "Ролики готовы", exact: true }).waitFor()

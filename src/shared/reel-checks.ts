@@ -22,8 +22,14 @@ export const LoudnessCheck = Schema.Union([
 ])
 export type LoudnessCheck = typeof LoudnessCheck.Type
 
-export const ReelChecks = Schema.Struct({ texts: TextsCheck, places: PlacesCheck, length: LengthCheck, loudness: LoudnessCheck })
+export const BuildChecks = Schema.Struct({ texts: TextsCheck, places: PlacesCheck, length: LengthCheck })
+export type BuildChecks = typeof BuildChecks.Type
+
+export const ReelChecks = Schema.Struct({ ...BuildChecks.fields, loudness: LoudnessCheck })
 export type ReelChecks = typeof ReelChecks.Type
+
+export const UNBUILT_LOUDNESS = { id: "loudness", state: "unbuilt" } satisfies LoudnessCheck
+export const DOWNLOAD_CLOSED = "Скачать ролик можно, когда пройдены все проверки выше."
 
 export type ReelCheck = ReelChecks[keyof ReelChecks]
 
@@ -40,13 +46,13 @@ export const markOf = (check: ReelCheck): Mark => {
 
 export const checkList = (checks: ReelChecks): ReadonlyArray<ReelCheck> => [checks.texts, checks.places, checks.length, checks.loudness]
 
-// Loudness is heard on the built file, so only the other checks can stop a build.
-export const firstBuildFailure = (checks: ReelChecks): ReelCheck | undefined =>
-  checkList(checks).find((check) => check.id !== "loudness" && markOf(check) === "fail")
+export const buildFailures = (checks: BuildChecks): ReadonlyArray<BuildChecks[keyof BuildChecks]> =>
+  [checks.texts, checks.places, checks.length].filter((check) => markOf(check) === "fail")
 
-export const blocksBuild = (checks: ReelChecks): boolean => firstBuildFailure(checks) !== undefined
+export const blocksBuild = (checks: BuildChecks): boolean => buildFailures(checks).length > 0
 
-export const opensDownload = (checks: ReelChecks): boolean => checkList(checks).every((check) => markOf(check) === "pass")
+export const opensDownload = (checks: ReelChecks | undefined): boolean =>
+  checks !== undefined && !blocksBuild(checks) && markOf(checks.loudness) === "pass"
 
 const clock = (seconds: number, round: (value: number) => number = Math.round): string => {
   const whole = round(seconds)

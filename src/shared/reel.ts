@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 import { Face, NoFace } from "./face.ts"
 import { Covered } from "./face-cover.ts"
-import { ReelChecks } from "./reel-checks.ts"
+import { BuildChecks, ReelChecks } from "./reel-checks.ts"
 
 export const ReelJob = Schema.Union([
   Schema.Struct({ state: Schema.Literals(["idle", "waiting"]) }),
@@ -135,7 +135,7 @@ export const ReelView = Schema.Struct({
   job: ReelJob,
   cut: Schema.Finite,
   face: Face,
-  checks: ReelChecks,
+  checks: BuildChecks,
   file: Schema.optionalKey(Schema.Struct({
     made: Schema.String,
     seconds: Schema.Finite,
@@ -144,6 +144,7 @@ export const ReelView = Schema.Struct({
     face: Face,
     colour: Schema.optionalKey(ColourView),
     levelling: Schema.optionalKey(Levelling),
+    checks: Schema.optionalKey(ReelChecks),
     sheet: Schema.optionalKey(Sheet)
   }))
 })

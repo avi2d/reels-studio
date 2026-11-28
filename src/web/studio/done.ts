@@ -1,10 +1,10 @@
 import { Effect } from "effect"
 import { stepPath } from "../../shared/page.ts"
 import type { ReelView } from "../../shared/reel.ts"
-import { blocksBuild, opensDownload } from "../../shared/reel-checks.ts"
+import { buildFailures, UNBUILT_LOUDNESS } from "../../shared/reel-checks.ts"
 import * as Api from "../api.ts"
 import { h } from "../dom.ts"
-import { checkListView } from "./done-checks.ts"
+import { checkListView, checkRows } from "./done-checks.ts"
 import { reelFile } from "./done-file.ts"
 import { sheetView } from "./done-sheet.ts"
 import { failureText, headingOf, phaseOf, progressOf, type Busy, type File, type Phase } from "./done-model.ts"
@@ -54,13 +54,14 @@ export const doneStep = (projectId: string): DoneStep => {
     h("a", { class: "btn btn--quiet btn--start", href: stepPath(projectId, "montage") }, icon("left"), "К монтажу"))
   const stale = h("div", { class: "ask ask--open", hidden: true }, h("p", {}, STALE))
   const checks = checkListView(projectId)
+  const rebuildFailures = checkRows(projectId)
   const file = reelFile(projectId)
   const sheet = sheetView(projectId)
   const build = button("main", "Собрать ролик")
   const blocked = h("p", { class: "hint", hidden: true }, BLOCKED)
   const actions = h("div", { class: "done-actions" }, build, blocked)
   const body = h("div", { class: "body body--done" },
-    h("div", { class: "head" }, title), progress.node, problem, empty, stale, checks.node, file.node, sheet.node, actions)
+    h("div", { class: "head" }, title), progress.node, problem, empty, stale, checks.node, file.node, sheet.node, rebuildFailures.node, actions)
 
   const paint = (view: ReelView): void => {
     const phase = phaseOf(view)
@@ -70,20 +71,23 @@ export const doneStep = (projectId: string): DoneStep => {
     empty.hidden = phase.kind !== "empty"
     stale.hidden = !(phase.kind === "built" && phase.stale)
     file.node.hidden = phase.kind !== "built"
-    checks.node.hidden = phase.kind === "empty"
-    checks.paint(view.checks)
-    sheet.paint(phase.kind === "built" ? phase.file.made : "", phase.kind === "built" ? phase.file.sheet : undefined)
+    const built = phase.kind === "built" ? phase.file : undefined
+    const failures = buildFailures(view.checks)
+    checks.node.hidden = phase.kind === "empty" || phase.kind === "building" || (built !== undefined && built.checks === undefined)
+    checks.paint(built?.checks ?? { ...view.checks, loudness: UNBUILT_LOUDNESS })
+    rebuildFailures.paint(built === undefined ? [] : failures)
+    sheet.paint(built?.made ?? "", built?.sheet)
     actions.hidden = phase.kind === "building" || phase.kind === "empty"
-    state.blocked = blocksBuild(view.checks)
+    state.blocked = failures.length > 0
     build.disabled = state.blocked
     blocked.hidden = !state.blocked
     if (phase.kind === "building") {
       progress.paint(phase.job, phase.kept)
       problem.textContent = ""
     } else if (phase.kind !== "empty" && phase.failed !== undefined) problem.textContent = failureText(phase.failed)
-    if (phase.kind === "built") file.paint(phase.file, phase.stale, opensDownload(view.checks))
+    if (phase.kind === "built") file.paint(phase.file, phase.stale)
     build.replaceChildren(...buildLabel(phase))
-    build.className = `btn btn--${phase.kind === "built" && !phase.stale ? "quiet" : "main"}`
+    build.className = `btn btn--${built?.checks !== undefined && built.fresh ? "quiet" : "main"}`
   }
 
   // A reply to an older request would paint a state the person has already moved past.

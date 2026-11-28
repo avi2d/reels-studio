@@ -4,8 +4,9 @@ import { faceLeft } from "../shared/framing.ts"
 import { visualKey, type Shown } from "../shared/inserts.ts"
 import { Frame, Push } from "../shared/timeline.ts"
 import { Levelling, Sheet, VideoColour, type ColourView, type PictureSide, type ReelView } from "../shared/reel.ts"
-import type { ReelChecks } from "../shared/reel-checks.ts"
-import { lastFrameOf, partArgs, partsOf, pictureArgs, progressSeconds, sameParts, secondsOf, type Part } from "./media-commands.ts"
+import { BuildChecks, opensDownload } from "../shared/reel-checks.ts"
+import { loudnessCheck, loudnessPartOf } from "./reel-checks.ts"
+import { lastFrameOf, onFrames, partArgs, partsOf, pictureArgs, progressSeconds, sameParts, secondsOf, type Part } from "./media-commands.ts"
 import { insertLayerOf } from "./insert-layers.ts"
 import { hasCaptions, type Captions } from "../shared/captions.ts"
 import { placeCaptions } from "./captions.ts"
@@ -40,6 +41,8 @@ const Record = Schema.Struct({
   captions: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed(""))),
   face: Face.pipe(Schema.withDecodingDefaultKey(Effect.succeed("off" as const))),
   levelling: Schema.optionalKey(Levelling),
+  buildChecks: Schema.optionalKey(BuildChecks),
+  loudnessPart: Schema.optionalKey(Schema.String),
   sheet: Schema.optionalKey(Sheet)
 })
 const RecordFile = Schema.fromJsonString(Record)
@@ -111,9 +114,13 @@ export const reelFrameAt = Effect.fnUntraced(function*(dir: string, made: string
   return yield* builtFileAt(dir, frameOf(made, index))
 })
 
-export const builtSound = Effect.fnUntraced(function*(dir: string) {
-  const record = (yield* publishedReel(dir))?.record
-  return record === undefined ? undefined : { seconds: secondsOf(record.parts), levelling: record.levelling }
+const fileChecks = (record: typeof Record.Type) =>
+  record.buildChecks === undefined ? undefined : { ...record.buildChecks, loudness: loudnessCheck(record.levelling, record.loudnessPart) }
+
+export const reelDownloadAt = Effect.fnUntraced(function*(dir: string, made: string) {
+  const reel = yield* publishedReel(dir)
+  if (reel === undefined || reel.record.made !== made) return { state: "missing" } as const
+  return opensDownload(fileChecks(reel.record)) ? { state: "ready", target: reel.target } as const : { state: "closed" } as const
 })
 
 const sweepReel = Effect.fnUntraced(function*(dir: string) {
@@ -257,7 +264,7 @@ const freshWork = Effect.fnUntraced(function*(dir: string) {
   yield* sweepReel(dir)
 })
 
-const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onAll: (share: number) => Effect.Effect<void>) {
+const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, buildChecks: BuildChecks, onAll: (share: number) => Effect.Effect<void>) {
   const onDone = (share: number): Effect.Effect<void> => onAll(share * (1 - SHEET_SHARE))
   const settings = yield* Settings
   const place = reelPlaces(dir)
@@ -289,6 +296,7 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onAll: (sh
     }), { discard: true })
   const sheet = yield* layFrames(place.work, `${place.work}/reel.mp4`, total, (share) => onAll(1 - SHEET_SHARE + SHEET_SHARE * share))
   const made = DateTime.formatIso(yield* DateTime.now)
+  const loudnessPart = loudnessPartOf(levelling, total, onFrames(cut.clips))
   const record = {
     made,
     video: videoOf(made),
@@ -299,6 +307,8 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onAll: (sh
     face,
     colour: { videos: colours, joins },
     levelling,
+    buildChecks,
+    ...loudnessPart === undefined ? {} : { loudnessPart },
     sheet
   }
   yield* publishPictures(dir, made, joins)
@@ -306,7 +316,7 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onAll: (sh
   yield* publish(dir, record)
 })
 
-export const buildReel = Effect.fn("Reel.build")(function*(dir: string, cut: Cut, onDone: (share: number) => Effect.Effect<void>) {
+export const buildReel = Effect.fn("Reel.build")(function*(dir: string, cut: Cut, buildChecks: BuildChecks, onDone: (share: number) => Effect.Effect<void>) {
   const fs = yield* FileSystem.FileSystem
   const cleanup = Effect.andThen(
     fs.remove(reelPlaces(dir).work, { recursive: true, force: true }).pipe(
@@ -316,7 +326,7 @@ export const buildReel = Effect.fn("Reel.build")(function*(dir: string, cut: Cut
       Effect.catch((error) => Effect.logError("the unpublished reel video was not removed", error))
     )
   )
-  yield* encodeReel(dir, cut, onDone).pipe(Effect.ensuring(cleanup))
+  yield* encodeReel(dir, cut, buildChecks, onDone).pipe(Effect.ensuring(cleanup))
 })
 
 const colourView = (colour: Colour): ColourView => ({
@@ -325,7 +335,7 @@ const colourView = (colour: Colour): ColourView => ({
   unmeasured: colour.videos.filter((video) => video.state === "unmeasured").length
 })
 
-export const readReel = Effect.fnUntraced(function*(dir: string, cut: Cut, job: ReelView["job"], checks: ReelChecks) {
+export const readReel = Effect.fnUntraced(function*(dir: string, cut: Cut, job: ReelView["job"], checks: BuildChecks) {
   const fs = yield* FileSystem.FileSystem
   const parts = partsOf(cut.clips)
   const seconds = secondsOf(parts)
@@ -335,6 +345,7 @@ export const readReel = Effect.fnUntraced(function*(dir: string, cut: Cut, job: 
   const size = Number((yield* fs.stat(published.target)).size)
   const { record } = published
   const crops = yield* readCrops(dir, parts)
+  const checked = fileChecks(record)
   const file = {
     made: record.made,
     seconds: secondsOf(record.parts),
@@ -343,6 +354,7 @@ export const readReel = Effect.fnUntraced(function*(dir: string, cut: Cut, job: 
     face: record.face,
     ...(record.colour === undefined ? {} : { colour: colourView(record.colour) }),
     ...(record.levelling === undefined ? {} : { levelling: record.levelling }),
+    ...(checked === undefined ? {} : { checks: checked }),
     ...(record.sheet === undefined ? {} : { sheet: record.sheet })
   }
   return { job, cut: seconds, face, checks, file } satisfies ReelView

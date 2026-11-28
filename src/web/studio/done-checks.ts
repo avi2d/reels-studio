@@ -33,23 +33,29 @@ const row = (projectId: string, check: ReelCheck): HTMLElement => {
     ...fix === undefined ? [] : [fix])
 }
 
-export interface CheckList {
+interface Painted<Checks> {
   readonly node: HTMLElement
-  readonly paint: (checks: ReelChecks) => void
+  readonly paint: (checks: Checks) => void
 }
 
-export const checkListView = (projectId: string): CheckList => {
-  const list = h("ul", { class: "done-checks__list" })
-  const node = h("section", { class: "done-checks", "aria-labelledby": "done-checks-title" },
-    h("h2", { id: "done-checks-title" }, "Проверка перед скачиванием"), list)
+export const checkRows = (projectId: string): Painted<ReadonlyArray<ReelCheck>> => {
+  const node = h("ul", { class: "done-checks__list", hidden: true })
   let painted = ""
   return {
     node,
     paint: (checks) => {
+      node.hidden = checks.length === 0
       const key = JSON.stringify(checks)
       if (key === painted) return
       painted = key
-      list.replaceChildren(...checkList(checks).map((check) => row(projectId, check)))
+      node.replaceChildren(...checks.map((check) => row(projectId, check)))
     }
   }
+}
+
+export const checkListView = (projectId: string): Painted<ReelChecks> => {
+  const rows = checkRows(projectId)
+  const node = h("section", { class: "done-checks", "aria-labelledby": "done-checks-title" },
+    h("h2", { id: "done-checks-title" }, "Проверка перед скачиванием"), rows.node)
+  return { node, paint: (checks) => { rows.paint(checkList(checks)) } }
 }
