@@ -1,3 +1,4 @@
+import { unsureIndexes } from "../shared/doubts.ts"
 import type { Transcript } from "../shared/plan.ts"
 import { SILENCE_LUFS } from "../shared/reel.ts"
 import { CLOSE_UP_FROM_SECONDS } from "../shared/retouch.ts"
@@ -231,9 +232,11 @@ export const transcriptText = (video: string, transcript: Transcript): string =>
   })
   const tail = transcript.duration - (transcript.words.at(-1)?.end ?? 0)
   if (tail >= NAMED_PAUSE) lines.push(`(pause ${tail.toFixed(1)} s)`)
+  const unsure = unsureIndexes(transcript)
   return [
     `Video ${video}, ${transcript.duration.toFixed(1)} s. Each line is one stretch of speech with its start and end in seconds.`,
     "Each word is written as number:word. A plan names the words to remove by these numbers.",
+    ...unsure.length === 0 ? [] : [`The studio is unsure it heard these words right: ${unsure.join(", ")}.`],
     "",
     ...lines
   ].join("\n") + "\n"

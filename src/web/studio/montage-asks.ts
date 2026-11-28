@@ -7,13 +7,15 @@ import { formatLength } from "../format.ts"
 import { canReplace, doneOf as insertDone, KEEP, KEEP_CLIP, pictureChooser, REMOVE, REPLACE, SOUND } from "../timeline-inserts.ts"
 import { alignNote, COVER, doneOf as joinDone, offered, type PlaceActions, trimNote } from "../timeline-places.ts"
 import { visualName } from "../timeline-row.ts"
-import { joinKey, type Numbered } from "./montage-model.ts"
+import { joinKey, wordKey, type Numbered, type WordPlace } from "./montage-model.ts"
 import { button, card, choice } from "./ui.ts"
 
 export interface AskActions extends PlaceActions {
   readonly showInsert: (span: Span) => void
   readonly answerInsert: (answer: InsertAnswer) => void
   readonly visualUrl: (visual: InsertPlace["visual"]) => string
+  readonly hearWord: (block: string, video: string, index: number) => void
+  readonly fixWord: (block: string, video: string, index: number, text: string) => void
 }
 
 export const joinAsk = ({ place, number }: Numbered<Place>, inside: boolean, pictures: ReadonlyArray<string>, actions: AskActions): HTMLElement => {
@@ -34,6 +36,34 @@ export const joinAsk = ({ place, number }: Numbered<Place>, inside: boolean, pic
       ...offered(place).map(([one, { label, does }]) => choice(label, does, place.answer === one, `answer-join:${one}:${key}`, () => { actions.answer(place.join, one) }))),
     ...pictures.length === 0 ? [] : [pictureChooser({ ...COVER, name: `${COVER.label}: склейка ${number}` }, `cover-join:${key}`, pictures,
       { picture: cover, chosen: cover !== undefined }, actions.pictureUrl, (picture) => { actions.cover(place.join, picture) })])
+}
+
+const wordDone = (place: WordPlace, shown: string): string | undefined => {
+  switch (place.answer) {
+    case undefined: return undefined
+    case "fix": return `взято «${shown}»`
+    case "heard": return "оставлено как услышано"
+    case "typed": return `исправлено на «${shown}»`
+  }
+}
+
+export const wordAsk = (block: string, { place, number }: Numbered<WordPlace>, shown: string, actions: AskActions): HTMLElement => {
+  const key = wordKey(place)
+  const done = wordDone(place, shown)
+  const { fix, heard } = place
+  const answer = (text: string) => (): void => { actions.fixWord(block, place.video, place.index, text) }
+  return card(place.answer === undefined, `word:${key}`,
+    h("p", { class: "ask__title" }, h("b", {}, `Слово ${number}`), ` «${heard}»`, ...done === undefined ? [] : [` · ${done}`]),
+    ...place.answer === undefined
+      ? [h("p", {}, fix === undefined
+        ? "Студия не уверена, что расслышала это слово. Послушайте его. Если оно неверное, нажмите на него в тексте ниже и исправьте."
+        : `Студия не уверена, что расслышала это слово. Похоже, здесь «${fix}».`)]
+      : [],
+    ...place.reason === "" ? [] : [h("p", { class: "hint" }, place.reason)],
+    h("div", { class: "ask__acts" },
+      button("quiet", "Послушать", { title: "Секунду до слова, само слово и секунду после, как в ролике", "data-key": `hear-word:${key}`, click: () => { actions.hearWord(block, place.video, place.index) } }, "play"),
+      ...fix === undefined ? [] : [choice(`Взять «${fix}»`, "Поставить это слово в субтитры", place.answer === "fix", `fix-word:${key}`, answer(fix))],
+      choice(`Оставить «${heard}»`, "Оставить слово, как студия его услышала", place.answer === "heard", `keep-word:${key}`, answer(heard))))
 }
 
 const KIND_NAMES = { picture: "Картинка", clip: "Видео", page: "Страница документа" } satisfies Record<InsertPlace["visual"]["kind"], string>

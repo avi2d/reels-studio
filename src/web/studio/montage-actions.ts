@@ -15,6 +15,19 @@ import type { State } from "./montage-screen.ts"
 import { button } from "./ui.ts"
 
 const PAUSE_AROUND_SECONDS = 1.5
+const WORD_AROUND_SECONDS = 1
+
+const wordWindow = (reel: ReadonlyArray<Clip>, block: string, video: string, word: Span): Span | undefined => {
+  let at = 0
+  for (const clip of reel) {
+    if (clip.block === block && clip.video === video && word.end > clip.start && word.start < clip.end) {
+      const start = at + Math.max(word.start, clip.start) - clip.start
+      return { start: Math.max(0, start - WORD_AROUND_SECONDS), end: start + Math.min(word.end, clip.end) - Math.max(word.start, clip.start) + WORD_AROUND_SECONDS }
+    }
+    at += clip.end - clip.start
+  }
+  return undefined
+}
 
 // The full order keeps a removed part between its neighbours, so a part brought back returns to its place.
 const movedOrder = (blocks: ReadonlyArray<Block>, edits: Edits, id: string, by: -1 | 1): ReadonlyArray<string> => {
@@ -99,6 +112,12 @@ export const partActions = (context: ActionsContext): PartActions => {
     },
     setPause: (video, after, removed) => { history.change(withManualPauses(state.edits, [{ video, after }], removed)) },
     fixWord: (block, video, index, text) => { history.change(correctSubtitle(state.edits, block, video, index, text)) },
+    hearWord: (block, video, index) => {
+      const reel = state.cut?.reel ?? []
+      const word = state.loaded?.transcripts.get(video)?.words[index]
+      const window = word === undefined ? undefined : wordWindow(reel, block, video, word)
+      if (window !== undefined) hear(reelWithin(reel, window), shiftedBy(state.shown, window.start))
+    },
     showInsert: showAround,
     answerInsert: (answer) => { history.change(withInsert(state.edits, answer)) },
     showText: showAround,
