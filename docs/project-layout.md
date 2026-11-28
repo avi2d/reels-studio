@@ -31,6 +31,8 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/server/captions.ts` | Reads `texts.json` for the page and the approved texts for the build, shrinks long subtitle words and the name plate, and measures the ink against the box before the build |
 | `src/server/looks.ts` | Reads and writes `looks.json` and reads `example.json` |
 | `src/server/looks-api.ts` | The routes that read and save the looks of a reel |
+| `src/server/noise.ts` | Cleans the original sound of each video in the cut at two strengths for the «Шум» step, keeps the result under `noise/` and reads the state of that cleaning for the page |
+| `src/server/noise-api.ts` | The routes that read the cleaning, start it, play a cleaned preview and save the «Шум» choice |
 | `src/server/approval.ts` | Reads the saved yes and checks it against the plan and the on-screen texts |
 | `src/shared/rules.ts` | The format of `rules.json` and of the rule change, the studio's own values, and the rules the page lists with the pauses and zooms a change moved, used by the server and the page |
 | `src/server/rules.ts` | Reads and writes the rules of a reel, the pinned rules and the last chat change, and undoes it |
