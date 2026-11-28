@@ -1,6 +1,8 @@
 import { Schema } from "effect"
+import { cutOf, facesByVideo } from "./joins.ts"
 import { lengthOf, type Transcript } from "./plan.ts"
-import { assemble, NO_EDITS, PAUSE_REST, PauseRest, playedPause, type Block, type Edits } from "./timeline.ts"
+import { assemble, clipsOf, NO_EDITS, PAUSE_REST, PauseRest, playedPause, type Block, type Edits, type VideoFaces } from "./timeline.ts"
+import { zoomedOf } from "./zooms.ts"
 import { ZoomLevel, type PlannedZoom } from "./zoom-plan.ts"
 
 const RULE_IDS = ["pause", "zoom"] as const
@@ -69,6 +71,7 @@ interface Cut {
   readonly edits: Edits
   readonly transcripts: ReadonlyMap<string, Transcript>
   readonly zooms: ReadonlyArray<PlannedZoom>
+  readonly faces: ReadonlyArray<VideoFaces>
 }
 
 const pauseChange = (cut: Cut, from: number, to: number): typeof PauseChange.Type => {
@@ -89,19 +92,23 @@ const pauseChange = (cut: Cut, from: number, to: number): typeof PauseChange.Typ
 }
 
 // A zoom the person set on the page keeps its own level, so only the others follow the rule.
-const zoomChange = (cut: Cut, from: ZoomLevel, to: ZoomLevel): typeof ZoomChange.Type => {
-  const placed = assemble(cut.blocks, cut.edits, cut.transcripts, PAUSE_REST)
-  const zooms = cut.zooms.flatMap((zoom): ReadonlyArray<FollowingZoom> => {
-    if (cut.edits.zooms.some((answer) => answer.id === zoom.id)) return []
-    const one = placed.find((candidate) => candidate.take.video === zoom.video && zoom.from >= candidate.take.from && zoom.to <= candidate.take.to)
+const zoomChange = (cut: Cut, from: ZoomLevel, to: ZoomLevel, rest: number): typeof ZoomChange.Type => {
+  const placed = assemble(cut.blocks, cut.edits, cut.transcripts, rest)
+  const faces = facesByVideo(cut.faces)
+  const clips = cutOf(clipsOf(placed), faces, cut.transcripts, cut.edits)
+  const places = zoomedOf(clips, cut.zooms, faces, cut.transcripts, cut.edits, to).places
+  const zooms = places.flatMap((place): ReadonlyArray<FollowingZoom> => {
+    if (place.given || place.state !== "zoomed") return []
+    const one = placed.find((candidate) => candidate.block.id === place.block)
     if (one === undefined) return []
+    const zoom = place.planned
     const words = (cut.transcripts.get(zoom.video)?.words ?? []).slice(zoom.from, zoom.to + 1).map((word) => word.text).join(" ").replace(/[\p{P}]+$/u, "")
     return [{ block: one.block.title, words }]
   })
   return { id: "zoom", from, to, zooms }
 }
 
-const NO_CUT: Cut = { blocks: [], edits: NO_EDITS, transcripts: new Map(), zooms: [] }
+const NO_CUT: Cut = { blocks: [], edits: NO_EDITS, transcripts: new Map(), zooms: [], faces: [] }
 
 // A change the person or a later reply already replaced no longer describes the rules, so it is not shown.
 export const rulesView = (rules: Rules, kept: RulesFile, change: RuleChange | undefined, cut: Cut | undefined): RulesView => {
@@ -109,7 +116,7 @@ export const rulesView = (rules: Rules, kept: RulesFile, change: RuleChange | un
   const current = change !== undefined && changedRules(change.after, rules).length === 0
   const changes = current ? changedRules(from, rules).map((id): RuleChangeView => id === "pause"
     ? pauseChange(cut ?? NO_CUT, from.pause, rules.pause)
-    : zoomChange(cut ?? NO_CUT, from.zoom, rules.zoom)) : []
+    : zoomChange(cut ?? NO_CUT, from.zoom, rules.zoom, rules.pause)) : []
   return {
     rules: [{ id: "pause", value: rules.pause, kept: kept.pause === rules.pause }, { id: "zoom", value: rules.zoom, kept: kept.zoom === rules.zoom }],
     changes
