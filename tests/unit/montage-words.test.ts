@@ -3,11 +3,14 @@ import { NO_EDITS, type Block, type TimelinePage } from "../../src/shared/timeli
 import { cutOfPage, isOpen } from "../../src/web/studio/montage-model.ts"
 
 const misheard = "Роспотребнацере"
-const words = Array.from({ length: 31 }, (_, index) =>
-  index === 6 || index === 26
-    ? { start: index, end: index + 1, text: misheard, sure: 0.1 }
-    : { start: index, end: index + 1, text: `слово${index}`, sure: 0.99 })
-const transcripts = new Map([["a.mov", { duration: 31, words }]])
+const transcriptsSaying = (heard: string) => new Map([["a.mov", {
+  duration: 31,
+  words: Array.from({ length: 31 }, (_, index) =>
+    index === 6 || index === 26
+      ? { start: index, end: index + 1, text: heard, sure: 0.1 }
+      : { start: index, end: index + 1, text: `слово${index}`, sure: 0.99 })
+}]])
+const transcripts = transcriptsSaying(misheard)
 const blocks: ReadonlyArray<Block> = [{
   id: "one",
   title: "Один",
@@ -45,14 +48,14 @@ test("a fix taken in one take answers the same word in the other take, not reope
   expect(cut.questions.filter(isOpen)).toEqual([])
 })
 
-test("a word left as heard in one take does not answer the same word in the other take", () => {
+test.each([misheard, `${misheard}.`])("a word %p left as heard in one take does not answer the same word in the other take, whatever punctuation it carries", (heard) => {
   const edits = {
     ...NO_EDITS,
     chosen: [{ block: "one", video: "a.mov", from: 20 }],
     subtitles: [{ block: "one", video: "a.mov", index: 6, text: misheard }]
   }
   const { view, timeline } = pageWith(edits)
-  const cut = cutOfPage(view, timeline, transcripts, edits)
+  const cut = cutOfPage(view, timeline, transcriptsSaying(heard), edits)
   const asked = cut.questions.flatMap((question) => question.kind === "word" ? [question.place.place] : [])
   expect(asked.map((place) => [place.index, place.answer])).toEqual([[26, undefined]])
 })
