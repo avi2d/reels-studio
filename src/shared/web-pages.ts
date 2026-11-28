@@ -52,12 +52,16 @@ const runOpenerAt = (tokens: ReadonlyArray<string>, at: number): number => {
 const runCloser = (tokens: ReadonlyArray<string>, at: number): string =>
   tokens.slice(at + 1).find((token) => !isInRun(token)) ?? ""
 
+// «2 части 159 статьи» puts the part number before its part word, while in «п. 1 ч. 2 ст. 159» the number before «ч.» belongs to «п.».
+const isSpokenPartNumber = (tokens: ReadonlyArray<string>, at: number): boolean =>
+  numberOf(tokens[at] ?? "") !== undefined && !PART_WORD.test(tokens[runOpenerAt(tokens, at)] ?? "")
+
 const isBeforeArticleWord = (tokens: ReadonlyArray<string>, at: number): boolean => {
   const token = tokens[at] ?? ""
   const next = tokens[at + 1] ?? ""
   if (numberOf(token) === undefined || !ARTICLE_WORD.test(next)) return false
   const opener = runOpenerAt(tokens, at)
-  if (PART_WORD.test(tokens[opener] ?? "") && numberOf(tokens[opener - 1] ?? "") === undefined) return false
+  if (PART_WORD.test(tokens[opener] ?? "") && !isSpokenPartNumber(tokens, opener - 1)) return false
   if (!BARE_NUMBER.test(token)) return true
   const lastTwo = Number(token.slice(-2))
   const last = lastTwo % 10

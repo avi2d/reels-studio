@@ -158,6 +158,15 @@ test("a second article word in a list keeps its own number, not read as a part",
   expect(articleMentions(["ч.", "2", "ст.", "158,", "ст.", "159"])).toEqual(["158", "159"])
 })
 
+test("a nested point and part citation names only the article, not the part", () => {
+  expect(articleMentions(["п.", "1", "ч.", "2", "ст.", "159"])).toEqual(["159"])
+  expect(articleMentions(["пункта", "3", "части", "5", "статьи", "159"])).toEqual(["159"])
+  expect(articleMentions(["пункта", "1", "части", "1", "статьи", "228", "УК"])).toEqual(["228"])
+  expect(articleMentions(["подпункта", "2", "пункта", "1", "статьи", "333.19"])).toEqual(["333.19"])
+  expect(articleMentions(["пп.", "2", "п.", "1", "ст.", "333"])).toEqual(["333"])
+  expect(articleMentions(["пункт", "2", "части", "1", "статьи", "333"])).toEqual(["333"])
+})
+
 test("a number with no article word next to it is not a mention", () => {
   expect(articleMentions(["Это", "стоит", "620", "рублей"])).toEqual([])
 })
