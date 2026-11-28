@@ -27,8 +27,7 @@ const addItem = (list: PlanItem[], path: PathEntry[], indent: number, text: stri
   path.push({ indent, item })
 }
 
-const continueItem = (path: PathEntry[], indent: number, text: string): void => {
-  popDeeper(path, indent, 1)
+const continueItem = (path: ReadonlyArray<PathEntry>, text: string): void => {
   const item = path.at(-1)?.item
   if (item !== undefined) item.text += ` ${text}`
 }
@@ -61,7 +60,7 @@ export const planBlocks = (text: string): ReadonlyArray<PlanBlock> => {
       continue
     }
     if (list !== undefined && indent > 0) {
-      continueItem(path, indent, trimmed)
+      continueItem(path, trimmed)
       continue
     }
     close()

@@ -14,7 +14,7 @@ import { sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
 import { buildReel, readReel, reelPictureAt, reelVideoAt, type ReelVersion } from "./reel.ts"
 import { writeFace } from "./face.ts"
-import { lastTrial, readTrial, runTrial, trialPicture } from "./retouch.ts"
+import { lastTrial, noFaceOf, readTrial, runTrial, trialPicture } from "./retouch.ts"
 import { checkSound, readSoundCheck, soundKeyOf } from "./sound-check.ts"
 import { readCut, readTimeline, type Cut } from "./timeline-files.ts"
 import { partsOf } from "./media-commands.ts"
@@ -90,7 +90,9 @@ const attempt = Effect.fnUntraced(function*<E, R>(work: Ref.Ref<Work>, job: Job,
     ))
   )
   if (Exit.isFailure(outcome)) {
-    yield* Effect.logError("the media job failed", job.name, outcome.cause)
+    yield* (Option.isSome(noFaceOf(outcome.cause))
+      ? Effect.logInfo("the retouch trial found no face", job.name)
+      : Effect.logError("the media job failed", job.name, outcome.cause))
     yield* record(outcome.cause)
   }
 })
@@ -130,6 +132,11 @@ const nextReel = Effect.fnUntraced(function*(reels: Reels, closed: ReadonlySet<s
 const startReel = (reels: Reels, dir: string): Effect.Effect<boolean> =>
   Ref.modify(reels, (map) => map.get(dir)?.state === "waiting" ? [true, new Map([...map, [dir, { state: "running", done: 0 }]])] : [false, map])
 
+const failedJob = (cause: Cause.Cause<unknown>): ReelJob => Option.match(noFaceOf(cause), {
+  onNone: () => ({ state: "failed" }),
+  onSome: (noFace) => ({ state: "failed", noFace })
+})
+
 type Build<E, R> = (dir: string, cut: Cut, onDone: (share: number) => Effect.Effect<void>) => Effect.Effect<void, E, R>
 
 const reelTask = <E, R>(reels: Reels, dir: string, build: Build<E, R>) =>
@@ -137,7 +144,7 @@ const reelTask = <E, R>(reels: Reels, dir: string, build: Build<E, R>) =>
     if (!(yield* startReel(reels, dir))) return
     const cut = yield* readCut(dir, yield* sourceNames(dir))
     yield* build(dir, cut, (done) => setReel(reels, dir, { state: "running", done }))
-  }).pipe(Effect.onExit((exit) => Exit.isFailure(exit) && !Exit.hasInterrupts(exit) ? setReel(reels, dir, { state: "failed" }) : forgetReel(reels, dir)))
+  }).pipe(Effect.onExit((exit) => Exit.isFailure(exit) && !Cause.hasInterrupts(exit.cause) ? setReel(reels, dir, failedJob(exit.cause)) : forgetReel(reels, dir)))
 
 type Tried = Ref.Ref<ReadonlyMap<string, string>>
 

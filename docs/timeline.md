@@ -171,8 +171,11 @@ The stage shows a close-up of the face before and after.
 It also shows a clip with the original on the left and the retouch on the right.
 It also shows how long the retouch of the 20 s took and how long a minute of video would take.
 The trial waits in the same queue as the other heavy jobs, and a new trial replaces the last one.
-The close-up comes from the first frame with a face from 3 s on.
+The close-up comes from the first frame with a face from 3 s on, the `CLOSE_UP_FROM_SECONDS` constant that the studio passes to `retouch.py` as `--close-up-from`.
 Without such a frame the trial fails, and the last trial stays.
+When the trial part of the cut is 3 s or shorter, the studio fails the trial before it renders anything and names the short cut as the cause.
+When the cut is longer and `retouch.py` exits with 66 because no face shows after 3 s, the studio names that as the cause.
+Both causes are logged as info, not as an error, and the «Оформление» step shows each as its own text.
 
 ## The face in the reel
 

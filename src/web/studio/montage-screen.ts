@@ -96,10 +96,10 @@ export const montageScreen = (projectId: string): Screen => {
   return { ...parts, frame, work, body }
 }
 
-const shownTexts = (cut: Cut | undefined): ReadonlyArray<ShownText> =>
+export const shownTexts = (cut: Cut | undefined): ReadonlyArray<ShownText> =>
   cut === undefined ? [] : [...cut.parts.flatMap((part) => part.texts), ...cut.outside.texts].flatMap(({ place }) => place.state === "shown" ? [place.shown] : [])
 
-const paintThought = (node: HTMLElement, text: ShownText | undefined): void => {
+export const paintThought = (node: HTMLElement, text: ShownText | undefined): void => {
   const id = text?.id ?? ""
   if (node.dataset.id === id) return
   node.dataset.id = id

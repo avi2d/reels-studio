@@ -15,8 +15,8 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/shared/timeline.ts` | The formats of the gaze samples, the blocks, the takes and the person's choices, and the spans the montage plays |
 | `src/shared/framing.ts` | The zoom that keeps the eyes on one line across a join, used by the page and the reel build |
 | `src/shared/joins.ts` | The places to check at joins and the cuts at answered places, used by the page |
-| `src/shared/face.ts` | The face setting of the reel, off or light, used by the server and the page |
-| `src/shared/retouch.ts` | The state of the skin and eye trial and the time a minute of video takes, used by the server and the page |
+| `src/shared/face.ts` | The face setting of the reel, off or light, and the two causes of a trial that finds no face, used by the server and the page |
+| `src/shared/retouch.ts` | The state of the skin and eye trial, the time a minute of video takes and the second from which the trial looks for a face, used by the server and the page |
 | `src/shared/inserts.ts` | Where each insert stands in the cut, its shape, and what the page and the build show of it: a picture, a clip or a PDF page |
 | `src/shared/zones.ts` | The pixels of the frame each player covers and the box where text stays visible |
 | `src/shared/subtitles.ts` | When each spoken word of the cut shows as a one-word subtitle |
@@ -43,7 +43,7 @@ The studio keeps its code, skills and per-video folders in these places.
 | `deploy/reels-studio.service` | The systemd user unit that keeps the studio running |
 | `src/pi/` | The pi extension that keeps the chat model inside one video folder |
 | `src/web/` | The page, its styles and its script |
-| `src/web/studio/` | The new screens at `/new`: the reel list, the top bar and the five steps, beside the old page until they replace it. The reel list shows reels and uploaded takes five to a page and uploads takes, and step 1, «Записи», adds any number of ticked uploaded takes to the reel at once, lists its recordings and plays a recording. Step 2, «План», takes the task, the apps and the task files and shows the plan, and the chat opens from every step with replies that stream and a stop button. Step 3, «Монтаж», edits the parts of the reel, walks through the open questions, doubtful words among them, and undoes changes. `rules.ts` lists the rules on the step they belong to, with a pin and the undo of a chat change |
+| `src/web/studio/` | The new screens at `/new`: the reel list, the top bar and the five steps, beside the old page until they replace it. The reel list shows reels and uploaded takes five to a page and uploads takes, and step 1, «Записи», adds any number of ticked uploaded takes to the reel at once, lists its recordings and plays a recording. Step 2, «План», takes the task, the apps and the task files and shows the plan, and the chat opens from every step with replies that stream and a stop button. Step 3, «Монтаж», edits the parts of the reel, walks through the open questions, doubtful words among them, and undoes changes. Step 4, «Оформление», sets the face to «Как есть» or «Мягче», which opens after a trial, and shows the colour line and the margins of an app under the preview. The margins choice stays in the browser's `localStorage` per reel and changes only the preview. `rules.ts` lists the rules on the step they belong to, with a pin and the undo of a chat change |
 | `skills/` | The four skills the chat model reads: plan, style, player zones and inserts |
 | `brands/` | One folder per style profile with its colours, fonts and templates, and the font files under `fonts/` |
 | `prompts/studio.md` | The system prompt of the chat model |
