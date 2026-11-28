@@ -8,6 +8,7 @@ import { ProjectView, type Effort } from "../shared/project.ts"
 import { ReelView, SoundCheck } from "../shared/reel.ts"
 import type { Face } from "../shared/face.ts"
 import { RetouchView } from "../shared/retouch.ts"
+import { LooksView, type NewLooks } from "../shared/looks.ts"
 import { Edits, TimelinePage } from "../shared/timeline.ts"
 import { RulesView, type RuleId } from "../shared/rules.ts"
 
@@ -138,6 +139,12 @@ export const startRetouch = (id: string): Effect.Effect<RetouchView, Failed> =>
 
 export const setFace = (id: string, face: Face): Effect.Effect<RetouchView, Failed> =>
   call(RetouchView, `/api/projects/${id}/retouch/face`, { ...post({ face }), method: "PUT" })
+
+export const getLooks = (id: string): Effect.Effect<LooksView, Failed> =>
+  call(LooksView, `/api/projects/${id}/looks`)
+
+export const setLooks = (id: string, change: NewLooks): Effect.Effect<LooksView, Failed> =>
+  call(LooksView, `/api/projects/${id}/looks`, { ...post(change), method: "PUT" })
 
 export const removeProject = (id: string): Effect.Effect<{ readonly removed: string }, Failed> =>
   call(Schema.Struct({ removed: Schema.String }), `/api/projects/${id}`, { method: "DELETE" })

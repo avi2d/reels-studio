@@ -187,6 +187,7 @@ export class Attachments extends Context.Service<Attachments, {
   readonly examine: (dir: string, names: ReadonlyArray<string>) => Effect.Effect<void>
   readonly allSeen: (dir: string, names: ReadonlyArray<string>) => Effect.Effect<boolean>
   readonly listed: (dir: string, current: ReadonlyArray<Shown>) => Effect.Effect<string>
+  readonly describe: (dir: string, name: string) => Effect.Effect<string>
   readonly cover: (id: string, name: string) => Effect.Effect<string, ApiError>
   readonly clip: (id: string, name: string) => Effect.Effect<string, ApiError>
   readonly page: (id: string, name: string, page: number, quote: string) => Effect.Effect<string, ApiError>
@@ -236,6 +237,12 @@ export class Attachments extends Context.Service<Attachments, {
         return attachedLines(seen)
       }, Effect.orElseSucceed(() => ""), Effect.provideContext(context))
 
+      const describe = Effect.fn("Attachments.describe")(function*(dir: string, name: string) {
+        const place = placeOf(dir, name)
+        const look = yield* lookAt(dir, name)
+        return look.shown.length === 0 ? look.summary : `${look.summary} Views: ${look.shown.map((file) => `${place.shared}/${file}`).join(", ")}.`
+      }, Effect.provideContext(context))
+
       const cover = Effect.fn("Attachments.cover")(function*(id: string, name: string) {
         const dir = yield* projects.folder(id)
         if (!(yield* readAttached(dir)).includes(name)) return yield* notFound("Такого файла в ролике нет")
@@ -262,7 +269,7 @@ export class Attachments extends Context.Service<Attachments, {
         )
       }, orUnavailable("the page view failed", UNAVAILABLE), Effect.provideContext(context))
 
-      return Attachments.of({ show, examine, allSeen, listed, cover, clip, page })
+      return Attachments.of({ show, examine, allSeen, listed, describe, cover, clip, page })
     })
   )
 }

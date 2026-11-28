@@ -101,8 +101,8 @@ One more constant gain over the whole reel hits -14 LUFS, and a limiter keeps th
 When the cut shows inserts or approved on-screen text, one more pass lays them over the levelled file.
 That pass copies the sound as it is.
 The studio draws each spoken word as a single word subtitle and the titles and key thoughts of texts.json in that pass.
-The subtitles carry the person's corrections.
-The studio draws a long subtitle word smaller to fit the Instagram box.
+The subtitles carry the person's corrections, and they take the look the person picked, as «The subtitle look» below says.
+The studio draws a long subtitle word or a name plate smaller to fit the Instagram box.
 A key thought that leaves the box stops the build.
 The joined file before levelling stays beside the reel as `before-<stamp>.mp4`.
 The download always serves the levelled file.
@@ -177,6 +177,29 @@ It runs before the inserts and the text go on, so they stay as they are.
 That retouch changes pixels only inside the face, the same way the trial does.
 After a new choice, the step «Ролики» reads «Ролики устарели».
 
+## The subtitle look
+
+The «Оформление» step sets how the subtitles look, in `looks.json`.
+The person picks one of three look cards and one of two sizes, «Обычные» or «Крупные».
+
+| Look | What the subtitles are |
+| --- | --- |
+| «Ваш стиль» | The serif words with a black outline of the style profile, the default |
+| «Жёлтая плашка» | Dark sans words on a yellow plate |
+| «Как в примере» | The font, colour, outline, plate and capitals the chat model took from an example reel in `example.json` |
+
+«Как в примере» opens only while `example.json` exists, and the server refuses to save it before.
+When the example is removed later, the build falls back to the style profile.
+The card lists the lines the chat model took from the example, and the plan quotes the same lines.
+The title place of the example, `top` or `middle`, moves the titles and key thoughts: `middle` centres them in the clear zone of the Instagram box, not on the face.
+The preview on the step draws the same look the build burns.
+
+The name plate is a line such as a name and a job, up to 40 characters.
+When it is switched on and has text, the build shows it for the first 4 s of the second part, or of the cut when it has one part.
+It stands low in the clear zone, above the subtitles.
+The studio measures the ink of every look and of the plate before the render, and draws a word or the plate smaller when it leaves the clear zone.
+The sans look uses Onest Bold, which `tools/fonts/onest_bold.py` makes from the page fonts.
+
 ## Keys
 
 The step «Монтаж» answers two keys.
@@ -245,8 +268,9 @@ It shows the chosen picture from 1 s before the join to 1.5 s after it, and take
 ## Inserts
 
 An insert shows a file the person attached in the chat or to the task over the video while a phrase is said: a picture or a screenshot, a video clip, or one page of a PDF.
+The text of a law counts as a PDF: when the brief names a page on the internet, the chat model saves it by its address, the studio prints it as a PDF to `attached/` and lists it in `web-pages.json`, and the model places it as it places any PDF.
 The chat model chooses the phrase by its meaning and writes it to `inserts.json`, as the reels-inserts skill says.
-The studio leaves out an insert with a repeated id, a file that is not in `attached/`, that the person removed from the task and no chat message names, or that is not of its kind, a quote that the text of its PDF page does not hold, or word numbers the transcript does not hold, and the page says how many it left out.
+The studio leaves out an insert with a repeated id, a file that is not in `attached/`, that the person removed from the task and no chat message or saved web page names, or that is not of its kind, a quote that the text of its PDF page does not hold, or word numbers the transcript does not hold, and the page says how many it left out.
 The quote is matched without regard to case, ё, line breaks and hyphens.
 An insert covers the words of its phrase that the cut plays, and at least 2 s.
 Two inserts never stand at once: the later one starts where the earlier one ends, and one left shorter than 1 s is dropped.
@@ -260,6 +284,9 @@ A clip plays from its `start` for as long as its phrase, and holds its last fram
 A clip is silent until the person turns its sound on, and it does not grow.
 A PDF page is rendered 1800 px wide, its quoted lines are marked in yellow, and it is cropped around the marked lines as wide as the text of the page, at most square and no taller than the text, so it stands as a card.
 The marked page and the clip preview the page plays are kept in `attached-views/<file>/`.
+The studio opens a page from the internet only on the computer it runs on and refuses an address on the home network.
+The insert card of a saved page names the site with a link, and the licence the page states or that it states none.
+The card, the part title, the subtitle words, each key thought and each removed part warn when they name an article that the saved law pages do not hold.
 
 The step «Монтаж» lists every insert as a place to check, with its number, its kind and its words.
 «Посмотреть» plays 1 s before the insert, the insert and 1 s after it, with the insert over the player as the reel shows it.
@@ -363,6 +390,7 @@ Each video folder holds these next to `plan.json`:
 | `inserts.json` | The pictures, clips and PDF pages to show over phrases, written by the chat model |
 | `doubts.json` | The proposed right words for the doubtful words, written by the chat model |
 | `texts.json` | The titles and key thoughts to show over phrases, written by the chat model |
+| `web-pages.json` | The file, address, licence and time of each page saved from the internet. Only the studio writes it |
 | `zooms.json` | The key words to zoom on, each with an id, its video and its word numbers, written by the chat model |
 | `rules.json` | The rules of the reel, `pause` and `zoom`. A new reel starts with the pinned rules, and the chat model may write it |
 | `rules-change.json` | The last rule change made from the chat, with the value before it, so one press can undo it. Only the studio writes it |
@@ -370,10 +398,11 @@ Each video folder holds these next to `plan.json`:
 | `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
 | `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |
-| `reel/reel.json` | The build time, the video file it published, the parts with their pushes, the crop window of each video, the inserts, a hash of the subtitles and key thoughts as the person answered them, the face setting, the skin colour and gain of each video, and the measured loudness it holds, so the step «Ролики» can tell whether the cut changed since |
+| `reel/reel.json` | The build time, the video file it published, the parts with their pushes, the crop window of each video, the inserts, a hash of the subtitles, key thoughts, subtitle look, title place and name plate as the person answered them, the face setting, the skin colour and gain of each video, and the measured loudness it holds, so the step «Ролики» can tell whether the cut changed since |
 | `reel/sound.json` | The parts of the last checked cut with the heard clip inserts, its measured loudness before and after levelling, and the gain of each part over its source time, which the montage plays |
 | `reel/sound-work/` | The sound of each clip and the levelled sound while a check runs, removed when it ends |
-| `looks.json` | The face setting of the reel, `off` or `light`, written when the person picks it |
+| `looks.json` | The face setting of the reel, `off` or `light`, the subtitle look, `brand`, `plate` or `example`, with its size, `normal` or `large`, and the name plate, shown or not, with its text, written when the person picks them |
+| `example.json` | What the chat model took from an example reel the person attached: up to three lines for the person, the subtitle font, colour, outline, plate and capitals, and the title place, `top` or `middle` |
 | `retouch/trial.json` | The time of the last skin and eye trial, the seconds it retouched and the seconds that took |
 | `retouch/before.jpg`, `retouch/after.jpg` | The face close-up of the trial before and after |
 | `retouch/compare.mp4` | The 20 s of the trial with the original on the left and the retouch on the right |

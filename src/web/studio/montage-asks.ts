@@ -2,12 +2,19 @@ import type { InsertPlace } from "../../shared/inserts.ts"
 import type { Place } from "../../shared/joins.ts"
 import type { Span } from "../../shared/plan.ts"
 import type { InsertAnswer } from "../../shared/timeline.ts"
+import type { PageSource } from "../../shared/web-pages.ts"
 import { h } from "../dom.ts"
 import { formatLength } from "../format.ts"
 import { canReplace, doneOf as insertDone, KEEP, KEEP_CLIP, pictureChooser, REMOVE, REPLACE, SOUND, visualName } from "../timeline-inserts.ts"
 import { alignNote, COVER, doneOf as joinDone, offered, type PlaceActions, trimNote } from "../timeline-places.ts"
 import { joinKey, wordKey, type Numbered, type WordPlace } from "./montage-model.ts"
+import { articleWarnings, sourceKind, sourceLines, sourceOf } from "./page-source.ts"
 import { button, card, choice } from "./ui.ts"
+
+export interface InsertData {
+  readonly pictures: ReadonlyArray<string>
+  readonly sources: ReadonlyArray<PageSource>
+}
 
 export interface AskActions extends PlaceActions {
   readonly showInsert: (span: Span) => void
@@ -67,20 +74,28 @@ export const wordAsk = (block: string, { place, number }: Numbered<WordPlace>, s
 
 const KIND_NAMES = { picture: "Картинка", clip: "Видео", page: "Страница документа" } satisfies Record<InsertPlace["visual"]["kind"], string>
 
-export const insertAsk = ({ place, number }: Numbered<InsertPlace>, phrase: string, pictures: ReadonlyArray<string>, actions: AskActions): HTMLElement => {
-  const { planned, span, visual } = place
-  const id = planned.id
+const insertFacts = (place: InsertPlace, phrase: string): string => {
+  const { span } = place
   const done = insertDone(place)
+  return [`на словах «${phrase}»`, ...span === undefined ? [] : [formatLength(span.start)], ...done === undefined ? [] : [done]].join(" · ")
+}
+
+export const insertAsk = ({ place, number }: Numbered<InsertPlace>, phrase: string, data: InsertData, actions: AskActions): HTMLElement => {
+  const { planned, span, visual } = place
+  const { pictures } = data
+  const source = sourceOf(visual, data.sources)
+  const id = planned.id
   const answer = (one: InsertAnswer): void => { actions.answerInsert(one) }
-  const facts = [`на словах «${phrase}»`, ...span === undefined ? [] : [formatLength(span.start)], ...done === undefined ? [] : [done]]
   return card(place.answer === undefined && span !== undefined, `insert:${id}`,
     h("div", { class: "insert" },
       h("img", { class: place.answer === "remove" ? "insert__art insert__art--off" : "insert__art", src: actions.visualUrl(visual), alt: "" }),
       h("p", { class: "insert__text" },
-        h("b", {}, `Вставка ${number}. ${KIND_NAMES[visual.kind]}`),
-        h("span", {}, visualName(visual)),
-        h("span", { class: "hint" }, facts.join(" · ")),
+        h("b", {}, `Вставка ${number}. ${source === undefined ? KIND_NAMES[visual.kind] : sourceKind(source)}`),
+        h("span", {}, source === undefined || visual.kind !== "page" ? visualName(visual) : `Страница ${visual.page}`),
+        ...source === undefined ? [] : sourceLines(source),
+        h("span", { class: "hint" }, insertFacts(place, phrase)),
         ...planned.reason === "" ? [] : [h("span", { class: "hint" }, planned.reason)],
+        ...articleWarnings(source === undefined ? [] : [source], phrase),
         ...span === undefined ? [h("span", { class: "hint" }, "Этой фразы сейчас нет в ролике, поэтому вставку не видно.")] : [])),
     h("div", { class: "ask__acts" },
       button("quiet", "Посмотреть", {

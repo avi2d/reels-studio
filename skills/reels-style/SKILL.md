@@ -1,6 +1,6 @@
 ---
 name: reels-style
-description: How to pick the look of text on a Reels video from a style profile, its colours, fonts and templates, and the format of texts.json. Use when choosing how a title, a subtitle or a key thought looks, when the person asks about colours or fonts, before naming a template in plan.md and before writing texts.json.
+description: How to pick the look of text on a Reels video from a style profile, its colours, fonts and templates, the formats of texts.json and example.json. Use when choosing how a title, a subtitle or a key thought looks, when the person asks about colours or fonts, when the person attaches or links an example reel to look like, before naming a template in plan.md and before writing texts.json or example.json.
 ---
 
 # Style of text on the video
@@ -25,6 +25,29 @@ Each style is a profile, one folder under [../../brands/](../../brands/), and it
 
 The studio draws the subtitles by itself from the words the reel keeps, one word at a time.
 Never write them to a file.
+
+The person picks the subtitle look on the Оформление step: «Ваш стиль» from the profile, «Жёлтая плашка», or «Как в примере» from `example.json`, each in two sizes, with an optional name plate.
+Never write `looks.json`: when the person asks for a look, a size or a name plate, point them to that step.
+
+## The look of an example
+
+When the person attaches a reel to look like, read its frames and write `example.json`.
+When the person sends a link instead, you cannot open it: say so in one sentence and ask for the video file as an attachment.
+
+```json
+{
+  "took": ["Белые крупные буквы на красной плашке", "Все слова заглавными", "Заголовок по центру кадра"],
+  "subtitles": { "font": "sans", "colour": "#ffffff", "outline": null, "box": "#e63b5b", "capitals": true },
+  "title": "middle"
+}
+```
+
+- `took` is one to three short Russian lines that tell the person what you took from the example, without a full stop at the end.
+- `font` is `serif` for letters with serifs and `sans` for letters without.
+- `colour`, `outline` and `box` are `#rrggbb` colours read from the frames: the letters, the line around them or `null`, and the plate behind them or `null`.
+- `capitals` is `true` when the example writes its subtitles in capitals.
+- `title` is `middle` when the example's title stands in the middle of the frame, and `top` otherwise.
+- Then tell the person the same lines from `took`, and that they can pick «Как в примере» on the Оформление step.
 
 ## texts.json
 
