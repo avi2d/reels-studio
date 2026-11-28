@@ -84,6 +84,8 @@ export const lookNoise = (projectId: string, onSource: (urlOf: UrlOf) => void): 
   const start = (): void => {
     requests.stop()
     if (!node.isConnected) return
+    source = ""
+    onSource((video) => Api.previewUrl(projectId, video))
     problem.textContent = ""
     again.hidden = true
     requests.ask(Api.startCleaning(projectId))

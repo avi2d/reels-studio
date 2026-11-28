@@ -131,6 +131,7 @@ export const lookStep = (projectId: string): LookStep => {
     const drawn = JSON.stringify([loaded.view, [...loaded.transcripts.keys()]])
     if (drawn === state.drawn) return
     state.drawn = drawn
+    noise.refresh()
     draw()
   }
 
@@ -147,7 +148,6 @@ export const lookStep = (projectId: string): LookStep => {
     refresh()
     sound.refresh()
     face.refresh()
-    noise.refresh()
     subtitles.refresh()
   })
   return {

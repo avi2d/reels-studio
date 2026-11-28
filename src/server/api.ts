@@ -319,7 +319,18 @@ const noise = Layer.mergeAll(
   HttpRouter.add("GET", "/api/projects/:id/noise/:noise/:name", (request) => reply(Effect.gen(function*() {
     const media = yield* Media
     const strength = yield* Schema.decodeUnknownEffect(Cleaned)(yield* param("noise")).pipe(Effect.mapError(() => notFound("Такой очистки звука нет")))
-    const target = yield* media.cleanedFile(yield* param("id"), strength, yield* param("name"))
+    const id = yield* param("id")
+    const name = yield* param("name")
+    const target = yield* media.cleanedFile(id, strength, name).pipe(
+      Effect.catchTag("ApiError", (error) => error.status === 404 ? Effect.succeed(undefined) : Effect.fail(error))
+    )
+    if (target === undefined) {
+      yield* media.preview(id, name)
+      return HttpServerResponse.empty({ status: 307, headers: {
+        location: `/api/projects/${encodeURIComponent(id)}/videos/${encodeURIComponent(name)}/preview`,
+        "cache-control": "no-store"
+      } })
+    }
     return yield* sendFile(target, "video/mp4", request.headers["range"])
   })))
 )
