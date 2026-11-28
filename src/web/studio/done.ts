@@ -59,7 +59,7 @@ export const doneStep = (projectId: string): DoneStep => {
   const sheet = sheetView(projectId)
   const build = button("main", "Собрать ролик")
   const blocked = h("p", { class: "hint", hidden: true }, BLOCKED)
-  const actions = h("div", { class: "done-actions" }, build, blocked)
+  const actions = h("div", { class: "done-actions" }, file.downloadAll, build, blocked)
   const body = h("div", { class: "body body--done" },
     h("div", { class: "head" }, title), progress.node, problem, empty, stale, checks.node, file.node, sheet.node, rebuildFailures.node, actions)
 
@@ -81,6 +81,7 @@ export const doneStep = (projectId: string): DoneStep => {
     state.blocked = failures.length > 0
     build.disabled = state.blocked
     blocked.hidden = !state.blocked
+    if (phase.kind !== "built") file.downloadAll.hidden = true
     if (phase.kind === "building") {
       progress.paint(phase.job, phase.kept)
       problem.textContent = ""
@@ -134,7 +135,7 @@ export const doneStep = (projectId: string): DoneStep => {
     body,
     dispose: () => {
       globalThis.clearTimeout(state.timer)
-      file.pause()
+      file.dispose()
     }
   }
 }

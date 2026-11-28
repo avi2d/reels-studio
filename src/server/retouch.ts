@@ -6,7 +6,8 @@ import type { Clip } from "../shared/timeline.ts"
 import { readFace, retouchVideo } from "./face.ts"
 import { compareArgs, firstSeconds, partsOf, REEL_RATE, secondsOf } from "./media-commands.ts"
 import { tool, ToolFailed } from "./media-jobs.ts"
-import { builtFace, renderParts } from "./reel.ts"
+import { renderParts } from "./reel.ts"
+import { builtFace } from "./reel-record.ts"
 import { Settings } from "./settings.ts"
 
 const Measured = Schema.fromJsonString(Schema.Struct({ seconds: Schema.Finite, took: Schema.Finite }))

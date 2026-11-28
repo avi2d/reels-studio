@@ -211,7 +211,7 @@ const show = (pane: Pane, view: ReelView): void => {
       ui.save.setAttribute("href", Api.reelDownloadUrl(pane.projectId, view.file.made))
       showLevelling(pane, view.file.levelling, view.file.seconds)
     }
-    ui.facts.textContent = `Длина ${formatLength(view.file.seconds)} · ${formatSize(view.file.size)} · собран ${madeAt(view.file.made)} · ${faceFact(view.file.face)}`
+    ui.facts.textContent = `Длина ${formatLength(view.file.seconds)} · ${formatSize(view.file.apps[0].size)} · собран ${madeAt(view.file.made)} · ${faceFact(view.file.face)}`
     ui.stale.hidden = state.busy || (view.file.fresh && !state.dirty)
     ui.stale.textContent = staleText(view, state.dirty)
   }
@@ -267,6 +267,17 @@ const mutate = (pane: Pane, run: () => Effect.Effect<ReelView, Api.Failed>, fail
   ))
 }
 
+const bindPlayback = (pane: Pane): void => {
+  const { state, ui: { player } } = pane
+  player.addEventListener("play", pane.hooks.playing)
+  player.addEventListener("timeupdate", () => {
+    if (state.stopAt === undefined || player.currentTime < state.stopAt) return
+    player.pause()
+    state.stopAt = undefined
+    if (state.made !== undefined) playAfter(pane, state.made)
+  })
+}
+
 export const reelPane = (projectId: string, hooks: ReelHooks): {
   readonly node: HTMLElement
   readonly colour: HTMLElement
@@ -299,14 +310,7 @@ export const reelPane = (projectId: string, hooks: ReelHooks): {
   const colour = h("section", { class: "card colour-card", hidden: true })
   const node = h("div", { class: "pane" }, h("section", { class: "card reel-card" }, h("h2", {}, "Готовый ролик"), h("p", { class: "muted" }, ABOUT), face, h("div", { class: "row" }, make, cancel), status, bar, stale, problem), file)
   const pane: Pane = { projectId, hooks, state, ui: { status, bar, problem, player, facts, loudness, verdict, chart, measured, numbers, passages, unlevelled, stale, face, save, saveHint, file, make, cancel, colour, node } }
-  player.addEventListener("play", hooks.playing)
-  player.addEventListener("timeupdate", () => {
-    if (state.stopAt !== undefined && player.currentTime >= state.stopAt) {
-      player.pause()
-      state.stopAt = undefined
-      if (state.made !== undefined) playAfter(pane, state.made)
-    }
-  })
+  bindPlayback(pane)
 
   const edited = (): void => {
     invalidate(pane)

@@ -2,7 +2,7 @@ import { Array as Arr, Context, Crypto, DateTime, Effect, FileSystem, Layer, Pat
 import { Project, ProjectId, type Effort, type ProjectView } from "../shared/project.ts"
 import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
 import { places } from "./media-jobs.ts"
-import { hasPublishedReel } from "./reel.ts"
+import { hasPublishedReel } from "./reel-record.ts"
 import { startRules } from "./rules.ts"
 import { Settings } from "./settings.ts"
 

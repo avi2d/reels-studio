@@ -19,11 +19,12 @@ test("new heads stale a centred reel even when its parts and zooms have not chan
   try {
     await mkdir(`${dir}/reel`)
     await mkdir(`${dir}/gaze`)
-    await writeFile(`${dir}/reel/file.mp4`, "published")
     const base = {
-      made: "2026-11-24T00:00:00.000Z", video: "file.mp4",
+      made: "2026-11-24T00:00:00.000Z",
+      files: [{ app: "Instagram", video: "file-instagram.mp4" }, { app: "YouTube Shorts", video: "file-youtube.mp4" }, { app: "TikTok", video: "file-tiktok.mp4" }],
       parts: [{ video: "a.mov", start: 0, frames: 30 }, { video: "b.mov", start: 0, frames: 30 }]
     }
+    await Promise.all(base.files.map((file) => writeFile(`${dir}/reel/${file.video}`, "published")))
     const writeRecord = async (crops: ReadonlyArray<{ readonly video: string; readonly left: number | null }>) => {
       await writeFile(`${dir}/reel/reel.json`, JSON.stringify({ ...base, crops }))
     }
@@ -36,6 +37,29 @@ test("new heads stale a centred reel even when its parts and zooms have not chan
     expect(await fresh()).toBe(true)
     await writeFile(`${dir}/gaze/b.mov.json`, JSON.stringify({ step: 0.2, samples: ["camera"], aspect: 16 / 9 }))
     expect(await fresh()).toBe(false)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("a one-file record from before the three apps stays playable as Instagram's file but is stale while three apps are chosen", async () => {
+  await mkdir("node_modules/.cache", { recursive: true })
+  const dir = await mkdtemp("node_modules/.cache/reel-one-file-")
+  try {
+    await mkdir(`${dir}/reel`)
+    await mkdir(`${dir}/gaze`)
+    await writeFile(`${dir}/reel/file.mp4`, "published")
+    await writeFile(`${dir}/reel/reel.json`, JSON.stringify({
+      made: "2026-11-24T00:00:00.000Z", video: "file.mp4",
+      parts: [{ video: "a.mov", start: 0, frames: 30 }, { video: "b.mov", start: 0, frames: 30 }],
+      crops: [{ video: "a.mov", left: null }, { video: "b.mov", left: null }]
+    }))
+    const view = await Effect.runPromise(readReel(dir, cut, { state: "idle" }, PASSING).pipe(Effect.provide(BunServices.layer)))
+    expect(view.file?.apps).toEqual([{ app: "Instagram", size: "published".length }])
+    expect(view.file?.fresh).toBe(false)
+    await writeFile(`${dir}/task.json`, JSON.stringify({ apps: ["Instagram"], files: [] }))
+    const chosen = await Effect.runPromise(readReel(dir, cut, { state: "idle" }, PASSING).pipe(Effect.provide(BunServices.layer)))
+    expect(chosen.file?.fresh).toBe(true)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

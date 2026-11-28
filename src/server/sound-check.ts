@@ -3,7 +3,7 @@ import { Levelling, PartGains, type ReelJob, type SoundCheck } from "../shared/r
 import { partsOf, secondsOf, type Part } from "./media-commands.ts"
 import { soundPartArgs } from "./sound-commands.ts"
 import { places, tool } from "./media-jobs.ts"
-import { PartRecord } from "./reel.ts"
+import { PartRecord } from "./reel-record.ts"
 import { levelSound, partFileOf, renderedOf, SOUND_STEPS, type Rendered } from "./reel-sound.ts"
 import { Settings } from "./settings.ts"
 import type { Cut } from "./timeline-files.ts"
