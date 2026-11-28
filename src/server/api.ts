@@ -25,7 +25,7 @@ import { KeptInput, RuleId } from "../shared/rules.ts"
 import { Settings } from "./settings.ts"
 import { sendFile } from "./send-file.ts"
 import * as Tus from "./tus.ts"
-import { appOf, madeOf, pageOf, pictureOf, versionOf } from "./api-request.ts"
+import { appOf, frameOf, madeOf, pageOf, pictureOf, versionOf } from "./api-request.ts"
 import { WebPages } from "./web-pages.ts"
 import { body, json, param, reply } from "./api-reply.ts"
 import { looksRoutes } from "./looks-api.ts"
@@ -247,12 +247,17 @@ const reel = Layer.mergeAll(
     const target = yield* media.reelPicture(yield* param("id"), yield* pictureOf(request))
     return yield* sendFile(target, "image/jpeg", request.headers["range"])
   }))),
+  HttpRouter.add("GET", "/api/projects/:id/reel/frame", (request) => reply(Effect.gen(function*() {
+    const media = yield* Media
+    const target = yield* media.reelFrame(yield* param("id"), yield* frameOf(request))
+    return yield* sendFile(target, "image/jpeg", request.headers["range"])
+  }))),
   HttpRouter.add("GET", "/api/projects/:id/reel/download", (request) => reply(Effect.gen(function*() {
     const media = yield* Media
     const store = yield* Projects
     const id = yield* param("id")
     const app = yield* appOf(request)
-    const target = yield* media.reelFile(id, madeOf(request), "after", app)
+    const target = yield* media.reelDownload(id, madeOf(request), app)
     const { title } = yield* store.get(id)
     return yield* sendFile(target, "video/mp4", request.headers["range"], { "content-disposition": attachment(title, app) })
   })))
@@ -366,4 +371,3 @@ const homeOnly = HttpRouter.middleware(
 )
 
 export const apiRoutes = Layer.mergeAll(projects, brief, rules, chat, uploads, videos, reel, posts, retouch, looksRoutes, homeOnly)
-

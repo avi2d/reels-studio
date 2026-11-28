@@ -135,3 +135,10 @@ export const makeShelves = (projects: Projects["Service"], failures: Failures, w
 
   return { uploaded, retryUploaded, uploadedPreview, removeUploaded, library, reuse }
 }
+
+export const queueWaiting = (reels: Reels, dir: string): Effect.Effect<boolean> =>
+  Ref.modify(reels, (map) => {
+    const job = map.get(dir)
+    if (job?.state === "waiting" || job?.state === "running") return [false, map]
+    return [true, new Map([...map, [dir, { state: "waiting" }]])]
+  })

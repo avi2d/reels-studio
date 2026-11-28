@@ -20,6 +20,7 @@ import { reelRules } from "./rules.ts"
 import { pageSources } from "./web-page-files.ts"
 import { ZoomsFile, type PlannedZooms } from "../shared/zoom-plan.ts"
 import { zoomedOf } from "../shared/zooms.ts"
+import { cutOfPage } from "../shared/montage-cut.ts"
 
 const decodeBlocks = Schema.decodeUnknownOption(Schema.fromJsonString(Blocks))
 const decodeGathered = Schema.decodeUnknownOption(Schema.fromJsonString(Gathered))
@@ -161,8 +162,14 @@ const readHeard = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<
   return { transcripts, gazes, gazeWritten, faces }
 })
 
-export const readTimeline = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>, unseen: ReadonlyMap<string, GazeFailure>) {
-  const { transcripts, gazes, gazeWritten, faces } = yield* readHeard(dir, names)
+type Heard = Effect.Success<ReturnType<typeof readHeard>>
+
+export const readTimeline = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>, unseen: ReadonlyMap<string, GazeFailure>, edits?: Edits) {
+  return yield* timelineOf(dir, yield* readHeard(dir, names), unseen, edits)
+})
+
+const timelineOf = Effect.fnUntraced(function*(dir: string, heard: Heard, unseen: ReadonlyMap<string, GazeFailure>, edits?: Edits) {
+  const { transcripts, gazes, gazeWritten, faces } = heard
   const looks: ReadonlyArray<Look> = [...transcripts.keys()].map((name) =>
     lookOf(name, gazes.get(name), gazeWritten.has(name), unseen.get(places({ dir, name }).source)))
   const attached = yield* readReachable(dir)
@@ -175,7 +182,7 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
   const written = yield* readBlocks(dir)
   if (written === "none" || written === "unreadable") return { looks, faces, pictures, inserts, texts, sources, zooms, doubts, timeline: { state: written } } satisfies TimelineView
   const rules = yield* reelRules(dir)
-  return { looks, faces, pictures, inserts, texts, sources, zooms, doubts, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir), rest: rules.pause, zoom: rules.zoom } } satisfies TimelineView
+  return { looks, faces, pictures, inserts, texts, sources, zooms, doubts, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: edits ?? (yield* readEdits(dir)), rest: rules.pause, zoom: rules.zoom } } satisfies TimelineView
 })
 
 export interface Cut {
@@ -185,11 +192,15 @@ export interface Cut {
 }
 
 export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>) {
-  const { transcripts, faces } = yield* readHeard(dir, names)
+  return yield* cutOfHeard(dir, yield* readHeard(dir, names))
+})
+
+const cutOfHeard = Effect.fnUntraced(function*(dir: string, heard: Heard, saved?: Edits) {
+  const { transcripts, faces } = heard
   const written = yield* readBlocks(dir)
   if (written === "none" || written === "unreadable") return { clips: [], inserts: [], captions: NO_CAPTIONS } satisfies Cut
   const { blocks } = soundBlocks(written, transcripts, new Map())
-  const edits = yield* readEdits(dir)
+  const edits = saved ?? (yield* readEdits(dir))
   const attached = yield* readReachable(dir)
   const pictures = picturesOf(attached)
   const rules = yield* reelRules(dir)
@@ -201,3 +212,12 @@ export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyA
   const placesNow = insertPlaces(planned.state === "ready" ? planned.planned : [], clips, transcripts, edits, pictures)
   return { clips, inserts: shownInserts(placesNow, clips, edits, pictures, resolved), captions: yield* readCaptions(dir, clips, transcripts, blocks, edits) } satisfies Cut
 })
+
+// The montage cut is the one the Монтаж step draws, so the final check counts the questions the step shows.
+export const readCutAndMontage = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>, edits: Edits) {
+  const heard = yield* readHeard(dir, names)
+  const view = yield* timelineOf(dir, heard, new Map(), edits)
+  const montage = view.timeline.state === "ready" ? cutOfPage(view, view.timeline, heard.transcripts, view.timeline.edits) : undefined
+  return { cut: yield* cutOfHeard(dir, heard, edits), montage }
+})
+

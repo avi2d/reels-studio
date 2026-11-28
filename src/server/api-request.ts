@@ -3,12 +3,23 @@ import type { HttpServerRequest } from "effect/http"
 import { APPS, type App } from "../shared/brief.ts"
 import { APP_FILE_NAME, PictureSide } from "../shared/reel.ts"
 import { badRequest, type ApiError } from "./api-error.ts"
-import type { Picture, ReelVersion } from "./reel-record.ts"
+import type { Picture, ReelVersion, SheetFrame } from "./reel-record.ts"
 
 const queryOf = (request: HttpServerRequest.HttpServerRequest, name: string): string =>
   new URL(request.url, "http://localhost").searchParams.get(name) ?? ""
 
 export const madeOf = (request: HttpServerRequest.HttpServerRequest): string => queryOf(request, "made")
+
+const appNamed = (name: string): App | undefined => APPS.find((one) => APP_FILE_NAME[one] === name)
+
+export const frameOf = (request: HttpServerRequest.HttpServerRequest): Effect.Effect<SheetFrame, ApiError> => {
+  const raw = queryOf(request, "index")
+  const index = Number(raw)
+  const app = appNamed(queryOf(request, "app"))
+  return raw !== "" && Number.isSafeInteger(index) && index >= 0 && app !== undefined
+    ? Effect.succeed({ made: madeOf(request), app, index })
+    : badRequest("Такого кадра нет")
+}
 
 const decodeSide = Schema.decodeUnknownOption(PictureSide)
 
@@ -29,7 +40,7 @@ export const pageOf = (request: HttpServerRequest.HttpServerRequest): Effect.Eff
 export const appOf = (request: HttpServerRequest.HttpServerRequest): Effect.Effect<App | undefined, ApiError> => {
   const name = queryOf(request, "app")
   if (name === "") return Effect.undefined
-  const app = APPS.find((one) => APP_FILE_NAME[one] === name)
+  const app = appNamed(name)
   return app === undefined ? badRequest("Такого приложения нет") : Effect.succeed(app)
 }
 

@@ -1,11 +1,12 @@
+import { PASSING } from "./reel-check-fixtures.ts"
 import { expect, test } from "bun:test"
 import type { ReelView } from "../../src/shared/reel.ts"
 import { headingOf, phaseOf, progressOf } from "../../src/web/studio/done-model.ts"
 
 const levelling = { before: -14.3, after: { lufs: -14, lra: 1.5, truePeak: -2.5 }, series: { before: [], after: [] }, passages: [] }
-const file = (fresh: boolean) => ({ made: "2026-11-28T08:07:30.203Z", seconds: 7.7, apps: [{ app: "Instagram" as const, size: 8_541_601 }] as const, fresh, face: "off" as const, levelling })
+const file = (fresh: boolean) => ({ made: "2026-11-28T08:07:30.203Z", seconds: 7.7, apps: [{ app: "Instagram" as const, size: 8_541_601 }] as const, fresh, face: "off" as const, levelling, sheets: [] })
 const view = (job: ReelView["job"], fresh: boolean | undefined, cut = 7.7): ReelView =>
-  fresh === undefined ? { job, cut, face: "off" } : { job, cut, face: "off", file: file(fresh) }
+  fresh === undefined ? { job, cut, face: "off", checks: PASSING } : { job, cut, face: "off", checks: PASSING, file: file(fresh) }
 
 test("a file built before the montage changed reads «Ролики устарели», not «Ролики готовы»", () => {
   expect(headingOf(phaseOf(view({ state: "idle" }, false)))).toBe("Ролики устарели")

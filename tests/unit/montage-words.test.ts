@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { NO_EDITS, type Block, type TimelinePage } from "../../src/shared/timeline.ts"
-import { cutOfPage, isOpen } from "../../src/web/studio/montage-model.ts"
+import { cutOfPage, isOpen } from "../../src/shared/montage-cut.ts"
 
 const misheard = "Роспотребнацере"
 const transcriptsSaying = (heard: string) => new Map([["a.mov", {

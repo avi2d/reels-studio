@@ -3,7 +3,10 @@ import { App } from "../shared/brief.ts"
 import { hasCaptions, type Captions } from "../shared/captions.ts"
 import { Face } from "../shared/face.ts"
 import { visualKey, type Shown } from "../shared/inserts.ts"
-import { APP_FILE_NAME, Levelling, VideoColour, type PictureSide } from "../shared/reel.ts"
+import { APP_FILE_NAME, Levelling, Sheet, VideoColour, type PictureSide } from "../shared/reel.ts"
+import { BuildChecks, opensDownload, type ReelChecks } from "../shared/reel-checks.ts"
+import { loudnessCheck } from "./reel-checks.ts"
+import { frameName } from "./reel-sheet.ts"
 import { Frame, Push } from "../shared/timeline.ts"
 
 export const Colour = Schema.Struct({ videos: Schema.Array(VideoColour), joins: Schema.Int })
@@ -28,7 +31,10 @@ const recordFields = {
   inserts: Schema.Array(ShownInsert).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   captions: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed(""))),
   face: Face.pipe(Schema.withDecodingDefaultKey(Effect.succeed("off" as const))),
-  levelling: Schema.optionalKey(Levelling)
+  levelling: Schema.optionalKey(Levelling),
+  buildChecks: Schema.optionalKey(BuildChecks).pipe(Schema.catchDecoding(() => Effect.succeedNone)),
+  loudnessPart: Schema.optionalKey(Schema.String),
+  sheets: Schema.Array(Sheet).pipe(Schema.withDecodingDefaultKey(Effect.succeed([])))
 }
 export const Record = Schema.Struct({ ...recordFields, files: Schema.NonEmptyArray(AppFile) })
 export type Record = typeof Record.Type
@@ -74,6 +80,8 @@ export const pictureName = (join: number, side: PictureSide): string => `join-${
 
 export const pictureOf = (made: string, join: number, side: PictureSide): string => `${stemOf(made)}-${pictureName(join, side)}`
 
+export const frameOf = (made: string, app: App, index: number): string => `${stemOf(made)}-${frameName(app, index)}`
+
 export const recordOf = Effect.fnUntraced(function*(dir: string) {
   const fs = yield* FileSystem.FileSystem
   const place = reelPlaces(dir)
@@ -112,6 +120,26 @@ export const reelVideoAt = Effect.fnUntraced(function*(dir: string, made: string
   const file = app === undefined ? record.files[0] : record.files.find((one) => one.app === app)
   return file === undefined ? undefined : yield* builtFileAt(dir, file.video)
 })
+
+export const fileChecks = (record: Record): ReelChecks | undefined =>
+  record.buildChecks === undefined ? undefined : { ...record.buildChecks, loudness: loudnessCheck(record.levelling, record.loudnessPart) }
+
+export const reelDownloadAt = Effect.fnUntraced(function*(dir: string, made: string, app: App | undefined) {
+  const reel = yield* publishedReel(dir)
+  if (reel === undefined || reel.record.made !== made) return { state: "missing" } as const
+  const file = app === undefined ? reel.targets[0] : reel.targets.find((one) => one.app === app)
+  if (file === undefined) return { state: "missing" } as const
+  return opensDownload(fileChecks(reel.record)) ? { state: "ready", target: file.target } as const : { state: "closed" } as const
+})
+
+export interface SheetFrame {
+  readonly made: string
+  readonly app: App
+  readonly index: number
+}
+
+export const reelFrameAt = (dir: string, frame: SheetFrame): ReturnType<typeof builtFileAt> =>
+  builtFileAt(dir, frameOf(frame.made, frame.app, frame.index))
 
 export interface Picture {
   readonly made: string

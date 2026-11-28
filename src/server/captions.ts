@@ -1,6 +1,8 @@
 import { Data, Effect, FileSystem, Option, Path, Schema } from "effect"
 import { assOf, fitPlate, fitWord, hasCaptions, NO_CAPTIONS, plateOf, shownTexts, wordLookOf, type CaptionPart, type Captions } from "../shared/captions.ts"
+import type { App } from "../shared/brief.ts"
 import type { Transcript } from "../shared/plan.ts"
+import { APP_FILE_NAME } from "../shared/reel.ts"
 import { correctedWord, subtitleWords } from "../shared/subtitles.ts"
 import { TextsFile, type PlannedTexts } from "../shared/texts.ts"
 import type { Block, Clip, Edits } from "../shared/timeline.ts"
@@ -78,6 +80,26 @@ const fontsDir = Effect.fnUntraced(function*() {
   return path.join(settings.root, "brands", "azalia", "fonts")
 })
 
+const outsideInk = Effect.fnUntraced(function*(work: string, captions: Captions, part: CaptionPart, seconds: number, platform: Platform, name: string) {
+  const fs = yield* FileSystem.FileSystem
+  const fonts = yield* fontsDir()
+  const { heavy } = yield* Settings
+  const file = `${work}/ink-${name}-${part}.ass`
+  yield* fs.writeFileString(file, assOf(captions, platform, [part]))
+  const { stderr } = yield* run("ffmpeg", inkArgs(file, fonts, seconds), heavy)
+  const area = textAreaOf(platform)
+  return inkOf(stderr).filter((ink) => !fitsArea(ink.rect, area))
+})
+
+const shownAt = (span: { readonly start: number; readonly end: number }, at: number): boolean =>
+  at >= Math.round(span.start * 100) / 100 && at < Math.round(span.end * 100) / 100
+
+export const firstTextOutside = Effect.fnUntraced(function*(work: string, captions: Captions, seconds: number, app: App) {
+  const ink = (yield* outsideInk(work, captions, "texts", seconds, app, APP_FILE_NAME[app]))[0]
+  if (ink === undefined) return "inside" as const
+  return { id: captions.texts.find((text) => shownAt(text, ink.at))?.id }
+})
+
 // The next try after the ink of a part left the area, or undefined when shrinking cannot help.
 const refit = (part: CaptionPart, placed: Captions, outside: ReadonlyArray<Ink>, platform: Platform): Captions | undefined => {
   const first = outside[0]
@@ -87,7 +109,7 @@ const refit = (part: CaptionPart, placed: Captions, outside: ReadonlyArray<Ink>,
     return plate === undefined || plate.size === placed.plate?.size ? undefined : { ...placed, plate }
   }
   const words = placed.words.map((word) => {
-    const ink = outside.find((one) => one.at >= Math.round(word.start * 100) / 100 && one.at < Math.round(word.end * 100) / 100)
+    const ink = outside.find((one) => shownAt(word, one.at))
     return ink === undefined ? word : fitWord(word, ink.rect, placed.look.size, platform)
   })
   return words.every((word, index) => word.size === placed.words[index]?.size) ? undefined : { ...placed, words }
@@ -101,17 +123,12 @@ export const placeCaptions = Effect.fnUntraced(function*(work: string, captions:
   if (!hasCaptions(captions)) return undefined
   const fs = yield* FileSystem.FileSystem
   const fonts = yield* fontsDir()
-  const area = textAreaOf(platform)
-  const { heavy } = yield* Settings
   const parts = present(captions)
   let placed = captions
   for (const part of ["words", "texts", "plate"] as const) {
     if (!parts[part]) continue
-    const file = `${work}/ink-${name}-${part}.ass`
     for (;;) {
-      yield* fs.writeFileString(file, assOf(placed, platform, [part]))
-      const { stderr } = yield* run("ffmpeg", inkArgs(file, fonts, seconds), heavy)
-      const outside = inkOf(stderr).filter((ink) => !fitsArea(ink.rect, area))
+      const outside = yield* outsideInk(work, placed, part, seconds, platform, name)
       const first = outside[0]
       if (first === undefined) break
       const next = refit(part, placed, outside, platform)

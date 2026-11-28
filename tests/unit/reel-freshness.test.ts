@@ -1,8 +1,10 @@
+import { PASSING } from "./reel-check-fixtures.ts"
 import { expect, test } from "bun:test"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { BunServices } from "@effect/platform-bun"
 import { Effect } from "effect"
 import { readReel } from "../../src/server/reel.ts"
+import { APPS } from "../../src/shared/brief.ts"
 import { NO_CAPTIONS } from "../../src/shared/captions.ts"
 import type { Cut } from "../../src/server/timeline-files.ts"
 
@@ -27,7 +29,7 @@ test("new heads stale a centred reel even when its parts and zooms have not chan
     const writeRecord = async (crops: ReadonlyArray<{ readonly video: string; readonly left: number | null }>) => {
       await writeFile(`${dir}/reel/reel.json`, JSON.stringify({ ...base, crops }))
     }
-    const fresh = async () => (await Effect.runPromise(readReel(dir, cut, { state: "idle" }).pipe(Effect.provide(BunServices.layer)))).file?.fresh
+    const fresh = async () => (await Effect.runPromise(readReel(dir, cut, APPS, { state: "idle" }, PASSING).pipe(Effect.provide(BunServices.layer)))).file?.fresh
     await writeRecord([{ video: "a.mov", left: null }, { video: "b.mov", left: null }])
     expect(await fresh()).toBe(true)
     await writeFile(`${dir}/gaze/b.mov.json`, JSON.stringify({ step: 0.2, samples: ["camera"], aspect: 16 / 9, heads: [{ x: 1.4, y: 0.4, size: 0.2 }] }))
@@ -53,11 +55,10 @@ test("a one-file record from before the three apps stays playable as Instagram's
       parts: [{ video: "a.mov", start: 0, frames: 30 }, { video: "b.mov", start: 0, frames: 30 }],
       crops: [{ video: "a.mov", left: null }, { video: "b.mov", left: null }]
     }))
-    const view = await Effect.runPromise(readReel(dir, cut, { state: "idle" }).pipe(Effect.provide(BunServices.layer)))
+    const view = await Effect.runPromise(readReel(dir, cut, APPS, { state: "idle" }, PASSING).pipe(Effect.provide(BunServices.layer)))
     expect(view.file?.apps).toEqual([{ app: "Instagram", size: "published".length }])
     expect(view.file?.fresh).toBe(false)
-    await writeFile(`${dir}/task.json`, JSON.stringify({ apps: ["Instagram"], files: [] }))
-    const chosen = await Effect.runPromise(readReel(dir, cut, { state: "idle" }).pipe(Effect.provide(BunServices.layer)))
+    const chosen = await Effect.runPromise(readReel(dir, cut, ["Instagram"], { state: "idle" }, PASSING).pipe(Effect.provide(BunServices.layer)))
     expect(chosen.file?.fresh).toBe(true)
   } finally {
     await rm(dir, { recursive: true, force: true })
@@ -74,7 +75,7 @@ test("a legacy record without crop windows stays playable but never counts as fr
       made: "2026-11-24T00:00:00.000Z", video: "file.mp4",
       parts: [{ video: "a.mov", start: 0, frames: 30 }, { video: "b.mov", start: 0, frames: 30 }]
     }))
-    const view = await Effect.runPromise(readReel(dir, cut, { state: "idle" }).pipe(Effect.provide(BunServices.layer)))
+    const view = await Effect.runPromise(readReel(dir, cut, APPS, { state: "idle" }, PASSING).pipe(Effect.provide(BunServices.layer)))
     expect(view.file).toBeDefined()
     expect(view.file?.fresh).toBe(false)
   } finally {

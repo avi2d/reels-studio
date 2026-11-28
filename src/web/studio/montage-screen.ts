@@ -12,7 +12,7 @@ import type { Loaded } from "../timeline-draw.ts"
 import type { Ticket } from "../timeline-save.ts"
 import { paintSubtitle } from "../timeline-subtitles.ts"
 import { icon } from "./icons.ts"
-import type { Cut } from "./montage-model.ts"
+import type { Cut } from "../../shared/montage-cut.ts"
 import { button } from "./ui.ts"
 
 const WATCH = "Смотреть с этой части"

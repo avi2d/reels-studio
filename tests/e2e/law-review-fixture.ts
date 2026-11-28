@@ -1,6 +1,6 @@
 import { NO_EDITS, type Take } from "../../src/shared/timeline.ts"
-import type { NamedText } from "../../src/web/text-names.ts"
-import type { Part } from "../../src/web/studio/montage-model.ts"
+import type { NamedText } from "../../src/shared/text-names.ts"
+import type { Part } from "../../src/shared/montage-cut.ts"
 import { goneDetail, partDetail, screenGroup, type PartActions, type PartData } from "../../src/web/studio/montage-part.ts"
 
 const take: Take = { video: "voice", from: 0, to: 11, reason: "" }

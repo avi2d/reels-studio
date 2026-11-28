@@ -8,7 +8,7 @@ import { formatLength } from "../format.ts"
 import { canReplace, doneOf as insertDone, KEEP, KEEP_CLIP, pictureChooser, REMOVE, REPLACE, SOUND } from "../timeline-inserts.ts"
 import { alignNote, COVER, doneOf as joinDone, offered, type PlaceActions, trimNote } from "../timeline-places.ts"
 import { visualName } from "../timeline-row.ts"
-import { joinKey, wordKey, type Numbered, type WordPlace } from "./montage-model.ts"
+import { joinKey, wordKey, type Numbered, type WordPlace } from "../../shared/montage-cut.ts"
 import { articleWarnings, sourceKind, sourceLines, sourceOf } from "./page-source.ts"
 import { button, card, choice } from "./ui.ts"
 

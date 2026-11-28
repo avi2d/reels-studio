@@ -1,6 +1,8 @@
 import { Schema } from "effect"
 import { App } from "./brief.ts"
 import { Face, NoFace } from "./face.ts"
+import { Covered } from "./face-cover.ts"
+import { BuildChecks, ReelChecks } from "./reel-checks.ts"
 
 export const APP_FILE_NAME = { Instagram: "instagram", "YouTube Shorts": "youtube", TikTok: "tiktok" } as const satisfies Record<App, string>
 
@@ -128,6 +130,10 @@ export const previewDb = (parts: ReadonlyArray<PartGains>, video: string, time: 
   return nearest === undefined ? 0 : gainAt(nearest.gains, time)
 }
 
+// The covered stretches are missing when the studio could not look for the face in the file.
+export const Sheet = Schema.Struct({ app: App, frames: Schema.Array(Schema.Finite), covered: Schema.optionalKey(Schema.Array(Covered)) })
+export type Sheet = typeof Sheet.Type
+
 export const AppSize = Schema.Struct({ app: App, size: Schema.Finite })
 export type AppSize = typeof AppSize.Type
 
@@ -135,6 +141,7 @@ export const ReelView = Schema.Struct({
   job: ReelJob,
   cut: Schema.Finite,
   face: Face,
+  checks: BuildChecks,
   file: Schema.optionalKey(Schema.Struct({
     made: Schema.String,
     seconds: Schema.Finite,
@@ -142,7 +149,9 @@ export const ReelView = Schema.Struct({
     fresh: Schema.Boolean,
     face: Face,
     colour: Schema.optionalKey(ColourView),
-    levelling: Schema.optionalKey(Levelling)
+    levelling: Schema.optionalKey(Levelling),
+    checks: Schema.optionalKey(ReelChecks),
+    sheets: Schema.Array(Sheet)
   }))
 })
 export type ReelView = typeof ReelView.Type

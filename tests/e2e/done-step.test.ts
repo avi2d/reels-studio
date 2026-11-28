@@ -1,3 +1,4 @@
+import { PASSING } from "../unit/reel-check-fixtures.ts"
 import { afterAll, beforeAll, expect, test } from "bun:test"
 import { chromium, type Browser, type Locator, type Page } from "playwright-core"
 import type { ReelView } from "../../src/shared/reel.ts"
@@ -5,9 +6,9 @@ import type { ReelView } from "../../src/shared/reel.ts"
 let browser: Browser
 let server: ReturnType<typeof Bun.serve>
 
-const file = { made: "2026-01-01T00:00:00.000Z", seconds: 7, apps: [{ app: "Instagram", size: 1000 }], fresh: true, face: "off" } satisfies NonNullable<ReelView["file"]>
-const unbuilt = { job: { state: "idle" }, cut: 7, face: "off" } satisfies ReelView
-const ready = { ...unbuilt, file } satisfies ReelView
+const file = { made: "2026-01-01T00:00:00.000Z", seconds: 7, apps: [{ app: "Instagram", size: 1000 }], fresh: true, face: "off", sheets: [] } satisfies NonNullable<ReelView["file"]>
+const unbuilt = { job: { state: "idle" }, cut: 7, face: "off", checks: PASSING } satisfies ReelView
+const ready = { ...unbuilt, file: { ...file, checks: PASSING } } satisfies ReelView
 const offline = "Нет связи со студией. Проверьте Wi-Fi."
 
 beforeAll(async () => {
@@ -48,12 +49,82 @@ const open = async (page: Page): Promise<unknown> => {
 
 const stepAlert = (page: Page): Locator => page.locator(".body--done > [role=alert]")
 
+test("a 3:10 edit blocks rebuild but does not hide the checked 2:50 download", () => withPage(async (page) => {
+  const checked = { ...PASSING, length: { id: "length", seconds: 170 } } as const
+  const view = {
+    ...ready, cut: 190, checks: { ...checked, length: { id: "length", seconds: 190 } },
+    file: { ...file, fresh: false, seconds: 170, checks: checked }
+  } satisfies ReelView
+  await page.route("**/api/projects/review/reel", (route) => route.fulfill({ json: view }))
+  await open(page)
+  await page.getByRole("link", { name: "Скачать", exact: true }).waitFor()
+  const rebuild = page.getByRole("button", { name: "Собрать заново", exact: true })
+  expect(await rebuild.isDisabled()).toBe(true)
+  const list = page.getByRole("region", { name: "Проверка перед скачиванием" })
+  expect(await list.getByText("Ролик идёт 2:50.", { exact: true }).count()).toBe(1)
+  expect(await page.getByText(/Ролик идёт 3:10/).count()).toBe(1)
+}))
+
+test("a valid cut leaves the unchecked 3:30 file playable but does not offer its download", () => withPage(async (page) => {
+  const view = {
+    ...ready, cut: 170, checks: { ...PASSING, length: { id: "length", seconds: 170 } },
+    file: { ...file, seconds: 210, fresh: false }
+  } satisfies ReelView
+  await page.route("**/api/projects/review/reel", (route) => route.fulfill({ json: view }))
+  await open(page)
+  const rebuild = page.getByRole("button", { name: "Собрать заново", exact: true })
+  await rebuild.waitFor()
+  expect(await rebuild.isEnabled()).toBe(true)
+  expect(await page.locator("video").isVisible()).toBe(true)
+  expect(await page.getByRole("link", { name: "Скачать", exact: true }).count()).toBe(0)
+}))
+
+test("a fresh file built before build checks asks for a rebuild instead of showing the current cut's passing checks", () => withPage(async (page) => {
+  const view = { ...ready, file } satisfies ReelView
+  await page.route("**/api/projects/review/reel", (route) => route.fulfill({ json: view }))
+  await open(page)
+  await page.getByText("Для скачивания соберите ролик заново.", { exact: true }).waitFor()
+  expect(await page.locator("video").isVisible()).toBe(true)
+  expect(await page.getByRole("link", { name: "Скачать", exact: true }).count()).toBe(0)
+  expect(await page.getByRole("button", { name: "Собрать заново", exact: true }).isEnabled()).toBe(true)
+  expect(await page.getByRole("region", { name: "Проверка перед скачиванием" }).isVisible()).toBe(false)
+  expect(await page.getByText("Скачать ролик можно, когда пройдены все проверки выше.", { exact: true }).count()).toBe(0)
+}))
+
+test("switching to TikTok does not keep Instagram's frames, button mask, or face warning", () => withPage(async (page) => {
+  const checks = { ...PASSING, texts: { ...PASSING.texts, apps: ["Instagram", "TikTok"] } } satisfies ReelView["checks"]
+  const view = {
+    ...ready,
+    checks,
+    file: {
+      ...ready.file,
+      checks,
+      apps: [{ app: "Instagram", size: 1000 }, { app: "TikTok", size: 1100 }],
+      sheets: [
+        { app: "Instagram", frames: [1], covered: [] },
+        { app: "TikTok", frames: [3], covered: [{ from: 2, to: 4 }] }
+      ]
+    }
+  } satisfies ReelView
+  await page.route("**/api/projects/review/reel", (route) => route.fulfill({ json: view }))
+  await open(page)
+  const sheet = page.locator(".done-sheet")
+  await sheet.getByText("Кнопки Instagram нигде не закрывают лицо.", { exact: true }).waitFor()
+  await page.getByRole("tab", { name: "TikTok" }).click()
+  await sheet.getByText("Кнопки TikTok закрывают лицо: 0:02–0:04.", { exact: true }).waitFor()
+  const image = sheet.getByRole("img", { name: "Кадр на 0:03", exact: true })
+  const source = await image.evaluate((node) => node.getAttribute("src") ?? "")
+  expect(new URL(source, server.url).searchParams.get("app")).toBe("tiktok")
+  expect(await sheet.locator(".done-frame--covered").count()).toBe(1)
+  expect(await sheet.locator(".done-zones").evaluate((node) => node.style.getPropertyValue("--buttons-top"))).toBe("41.15%")
+}))
+
 test("an offline idle poll does not leave an alert after the built reel reconnects", () => withPage(async (page) => {
   let polls = 0
   await page.route("**/api/projects/review/reel", async (route) => {
     polls += 1
     if (polls === 2) await route.abort("internetdisconnected")
-    else await route.fulfill({ json: polls < 3 ? ready : { ...ready, file: { ...file, fresh: false } } })
+    else await route.fulfill({ json: polls < 3 ? ready : { ...ready, file: { ...ready.file, fresh: false } } })
   })
   await open(page)
   await page.getByRole("heading", { name: "Ролики готовы", exact: true }).waitFor()

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import type { TextPlace } from "../../src/shared/captions.ts"
 import type { Placed } from "../../src/shared/timeline.ts"
 import { whyDropped } from "../../src/web/text-drops.ts"
-import { namedTexts, nameIn } from "../../src/web/text-names.ts"
+import { namedTexts, nameIn } from "../../src/shared/text-names.ts"
 
 const partOf = (id: string, from: number, to: number): Placed => {
   const take = { video: "a.mov", from, to, reason: "clean" }

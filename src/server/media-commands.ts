@@ -219,6 +219,13 @@ export const pictureArgs = (left: Shot, right: Shot, output: string): ReadonlyAr
   "-frames:v", "1", "-q:v", "3", output
 ]
 
+export const frameArgs = (video: string, time: number, output: string): ReadonlyArray<string> => [
+  "-hide_banner", "-loglevel", "error", "-y", "-ss", time.toFixed(4), "-i", video, "-frames:v", "1", "-vf", "scale=360:640", "-q:v", "3", output
+]
+
+export const gazeArgs = (looker: string, video: string, output: string): ReadonlyArray<string> =>
+  ["run", "--project", looker, "python", `${looker}/gaze.py`, video, output]
+
 export const joinList = (names: ReadonlyArray<string>): string =>
   ["ffconcat version 1.0", ...names.map((name) => `file '${name}'`)].join("\n") + "\n"
 

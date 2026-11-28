@@ -3,7 +3,7 @@ import type { PlannedText, PlannedTexts } from "../shared/texts.ts"
 import { h } from "./dom.ts"
 import { formatLength } from "./format.ts"
 import { whyDropped } from "./text-drops.ts"
-import { nameIn, type NamedText } from "./text-names.ts"
+import { nameIn, type NamedText } from "../shared/text-names.ts"
 
 export interface TextData {
   readonly planned: PlannedTexts

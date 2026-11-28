@@ -5,7 +5,7 @@ import type { PageSource } from "../../shared/web-pages.ts"
 import { h } from "../dom.ts"
 import { formatLength } from "../format.ts"
 import { whyDropped, type DroppedText } from "../text-drops.ts"
-import type { NamedText } from "../text-names.ts"
+import type { NamedText } from "../../shared/text-names.ts"
 import { articleWarnings } from "./page-source.ts"
 import { button, card, choice } from "./ui.ts"
 

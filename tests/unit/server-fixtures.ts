@@ -24,9 +24,9 @@ export const mediaWith = (videos: () => ReadonlyArray<VideoView>, timeline: Time
     preview: unavailable, retry: unavailable, library: unavailable, reuse: unavailable,
     uploaded: Effect.die("unexpected service call"), retryUploaded: unavailable,
     uploadedPreview: unavailable, removeUploaded: unavailable, mergeEdits: unavailable,
-    reel: unavailable, buildReel: unavailable, cancelReel: unavailable, reelFile: unavailable,
+    reel: unavailable, buildReel: unavailable, cancelReel: unavailable, reelFile: unavailable, reelDownload: unavailable,
     trial: unavailable, startTrial: unavailable, trialFile: unavailable, setFace: unavailable,
-    reelPicture: unavailable, sound: unavailable,
+    reelPicture: unavailable, reelFrame: unavailable, sound: unavailable,
     withoutWork: (_dir, use) => use
   })
   return { service, edits: (): Edits => edits }
