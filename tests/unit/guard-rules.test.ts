@@ -28,6 +28,11 @@ test("a write to the skills is blocked, although reading them is allowed", () =>
   expect(judge(scope, "write", "/app/skills/reels-plan/SKILL.md").allowed).toBe(false)
 })
 
+test("saving a web page is allowed, while writing the saved-pages list by hand is blocked", () => {
+  expect(judge(scope, "save_web_page", undefined).allowed).toBe(true)
+  expect(judge(scope, "write", "web-pages.json").allowed).toBe(false)
+})
+
 test("a tool that is neither a read nor a write is blocked, not waved through", () => {
   expect(judge(scope, "bash", undefined).allowed).toBe(false)
 })

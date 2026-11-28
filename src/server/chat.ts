@@ -4,7 +4,7 @@ import { approves } from "../shared/brief.ts"
 import { type ChatEvent, Message, MAX_FILES } from "../shared/chat.ts"
 import { ApiError, badRequest, orUnavailable } from "./api-error.ts"
 import { Attachments } from "./attachments.ts"
-import { piCommand } from "./pi-command.ts"
+import { piCommand, studioUrl } from "./pi-command.ts"
 import { Brief } from "./brief.ts"
 import { Media } from "./media.ts"
 import { videoLines } from "./chat-videos.ts"
@@ -302,7 +302,7 @@ export class Chat extends Context.Service<Chat, {
             yield* attachments.examine(dir, saved.files)
             const task = taskNote(saved) + (approving ? YES_NOTE : "")
             const known = `${yield* heardVideos(id)}\n${task}${attachedNote(yield* attachments.listed(dir, files))}`
-            const launched = yield* piCommand(settings.pi, settings.root, (...parts: Array<string>) => path.join(...parts), systemPrompt, dir, text, files, model, effort, known, asker.kind, asker.kind === "person" ? rulesLine(rules) : "").pipe(
+            const launched = yield* piCommand(settings.pi, settings.root, (...parts: Array<string>) => path.join(...parts), systemPrompt, dir, text, files, model, effort, known, asker.kind, asker.kind === "person" ? rulesLine(rules) : "", { studio: studioUrl(settings.host, settings.port), project: id }).pipe(
               Effect.tapError((error) => Effect.logError("pi did not start", error)),
               Effect.option
             )

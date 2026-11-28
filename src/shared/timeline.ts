@@ -2,6 +2,7 @@ import { Effect, Schema } from "effect"
 import type { Span, Transcript } from "./plan.ts"
 import { PlannedDoubts } from "./doubts-file.ts"
 import { PlannedTexts, TextAnswer, textKey } from "./texts.ts"
+import { PageSource } from "./web-pages.ts"
 import { PlannedZooms, ZoomAnswer, ZoomLevel, type Push } from "./zoom-plan.ts"
 
 export { Push } from "./zoom-plan.ts"
@@ -142,6 +143,7 @@ export const TimelineView = Schema.Struct({
   pictures: Schema.Array(Schema.String),
   inserts: PlannedInserts,
   texts: PlannedTexts,
+  sources: Schema.Array(PageSource).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   zooms: PlannedZooms,
   doubts: PlannedDoubts.pipe(Schema.withDecodingDefaultKey(Effect.succeed({ state: "none" as const }))),
   timeline: Schema.Union([

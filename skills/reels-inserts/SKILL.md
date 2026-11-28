@@ -1,6 +1,6 @@
 ---
 name: reels-inserts
-description: How to place the person's pictures, screenshots, video clips and PDF pages over the phrases of the reel, and the format of inserts.json. Use when the person attaches a picture, a screenshot, a video clip or a PDF, asks to show one of them over a phrase, or asks to move, replace or remove an insert, and before writing inserts.json.
+description: How to place the person's pictures, screenshots, video clips, PDF pages and the text of a law over the phrases of the reel, and the format of inserts.json. Use when the person attaches a picture, a screenshot, a video clip or a PDF, when the brief names a law or a page on the internet, when the person asks to show one of them over a phrase, or asks to move, replace or remove an insert, and before writing inserts.json.
 ---
 
 # Inserts from the person's files
@@ -29,6 +29,21 @@ The studio decides the shape, the fade, the movement and the crop, so never ask 
 5. Tell the person in the chat, for each file, the words it stands over and why, and that the stage «Паузы и склейки» lists every insert to check.
    For a PDF, also say which line is marked. For a clip, say it plays without sound and that the page can turn the sound on.
    When a file fits no phrase, say so and leave it out.
+
+## The text of a law
+
+When the brief or the person names a law or a page on the internet to show, save that page and show it as a PDF insert.
+
+1. Take the address from the brief or the chat. Never guess one. When the brief names a law without an address, ask the person for the address of the page with its text.
+2. Call `save_web_page` with that address. It sends only the address, and the studio saves the page to `attached/` as a PDF named `web-<site>-<code>.pdf`.
+   Its answer names the file, the address and the licence the page states.
+3. Read `attached-views/<file name>/text.txt` and find the article the speaker names and the line of it that the phrase is about.
+4. Write it to `inserts.json` as a `document` insert, with `page` and `quote` as for any PDF.
+5. Tell the person the site the text comes from and the licence the page states, or that it states none.
+   When the speaker names an article the text does not hold, say so, and never mark another article in its place.
+
+The page shows the site and the licence on the insert, and warns when the phrase names an article the text does not hold.
+Never search the internet for a page: the studio opens only the address you pass.
 
 ## inserts.json
 

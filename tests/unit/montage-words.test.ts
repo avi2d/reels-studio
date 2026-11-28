@@ -26,6 +26,7 @@ const pageWith = (edits: typeof NO_EDITS): { readonly view: TimelinePage; readon
     pictures: [],
     inserts: { state: "none" },
     texts: { state: "none" },
+    sources: [],
     zooms: { state: "none" },
     doubts: { state: "ready", planned: [{ video: "a.mov", index: 6, fix, reason: "" }, { video: "a.mov", index: 26, fix, reason: "" }], dropped: 0 },
     timeline,

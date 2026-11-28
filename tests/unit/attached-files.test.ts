@@ -45,6 +45,16 @@ test("a file a chat message still carries stays reachable after it leaves the ta
   expect(timeline.pictures).toEqual(["chat.png"])
 })
 
+test("a saved web page stays reachable and shows as a source, though no chat message names it", async () => {
+  const page = { file: "web-example.com-0123456789.pdf", address: "https://example.com/law", licence: "CC BY 4.0", saved: "2026-11-28T08:00:00.000Z" }
+  const { reachable, timeline } = await inReel({
+    "attached/web-example.com-0123456789.pdf": "%PDF",
+    "web-pages.json": JSON.stringify({ pages: [page, { ...page, file: "web-gone.example-0123456789.pdf" }] })
+  })
+  expect(reachable).toEqual(["web-example.com-0123456789.pdf"])
+  expect(timeline.sources).toEqual([{ file: page.file, address: page.address, licence: "CC BY 4.0", articles: [] }])
+})
+
 test("a file in attached that neither the task nor a chat message names is not reachable", async () => {
   const { reachable, timeline } = await inReel({})
   expect(reachable).toEqual([])

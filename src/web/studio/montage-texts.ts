@@ -1,10 +1,12 @@
 import { linesOfPlace } from "../../shared/captions.ts"
 import type { Span } from "../../shared/plan.ts"
 import { lineLength, lineLimit, linesProblem, type TextAnswer, type TextLine } from "../../shared/texts.ts"
+import type { PageSource } from "../../shared/web-pages.ts"
 import { h } from "../dom.ts"
 import { formatLength } from "../format.ts"
 import { whyDropped, type DroppedText } from "../text-drops.ts"
 import type { NamedText } from "../text-names.ts"
+import { articleWarnings } from "./page-source.ts"
 import { button, card, choice } from "./ui.ts"
 
 export interface TextActions {
@@ -84,7 +86,7 @@ const editor = (name: string, id: string, lines: ReadonlyArray<TextLine>, save: 
   return form
 }
 
-export const textAsk = ({ place, name }: NamedText, phrase: string, actions: TextActions): HTMLElement => {
+export const textAsk = ({ place, name }: NamedText, phrase: string, sources: ReadonlyArray<PageSource>, actions: TextActions): HTMLElement => {
   const id = place.planned.id
   const lines = linesOfPlace(place)
   const removed = place.state === "dropped" && place.reason === "removed"
@@ -113,12 +115,14 @@ export const textAsk = ({ place, name }: NamedText, phrase: string, actions: Tex
   return card(place.answer === undefined, `text:${id}`,
     h("p", { class: "ask__title" }, h("b", {}, name), ` · ${facts.join(" · ")}`),
     shown,
+    ...articleWarnings(sources, lines.map((line) => line.text).join(" ")),
     ...place.answer?.answer === "retyped" ? [h("p", { class: "hint" }, `Предложено: «${place.planned.lines.map((line) => line.text).join(" ")}»`)] : [],
     acts)
 }
 
-export const droppedText = (name: string, place: DroppedText, nameOf: (id: string) => string): HTMLElement =>
+export const droppedText = (name: string, place: DroppedText, nameOf: (id: string) => string, sources: ReadonlyArray<PageSource>): HTMLElement =>
   h("li", { class: "thought thought--off" },
     h("b", {}, name),
     linesView(linesOfPlace(place), false),
-    h("span", { class: "hint" }, whyDropped(place, nameOf)))
+    h("span", { class: "hint thought__why" }, whyDropped(place, nameOf)),
+    ...articleWarnings(sources, linesOfPlace(place).map((line) => line.text).join(" ")))
