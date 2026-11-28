@@ -90,7 +90,7 @@ const wordsOf = (one: Placed, transcripts: ReadonlyMap<string, Transcript>, edit
     const corrections = edits.subtitles ?? []
     const direct = corrections.find((fix) => fix.block === one.block.id && fix.video === video && fix.index === doubt.index)
     const shown = correctedWord([one.block], transcripts, corrections, one.block.id, video, doubt.index)
-    const corrected = direct?.text ?? (shown === word.text ? undefined : shown)
+    const corrected = direct?.text ?? (bareWord(shown) === heard ? undefined : shown)
     return [{ ...doubt, video, heard, answer: doubtAnswer(heard, doubt.fix, corrected) }]
   })
 }
