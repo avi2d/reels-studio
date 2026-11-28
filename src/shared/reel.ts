@@ -1,5 +1,7 @@
 import { Schema } from "effect"
 import { Face, NoFace } from "./face.ts"
+import { Covered } from "./face-cover.ts"
+import { ReelChecks } from "./reel-checks.ts"
 
 export const ReelJob = Schema.Union([
   Schema.Struct({ state: Schema.Literals(["idle", "waiting"]) }),
@@ -125,10 +127,15 @@ export const previewDb = (parts: ReadonlyArray<PartGains>, video: string, time: 
   return nearest === undefined ? 0 : gainAt(nearest.gains, time)
 }
 
+// The covered stretches are missing when the studio could not look for the face in the file.
+export const Sheet = Schema.Struct({ frames: Schema.Array(Schema.Finite), covered: Schema.optionalKey(Schema.Array(Covered)) })
+export type Sheet = typeof Sheet.Type
+
 export const ReelView = Schema.Struct({
   job: ReelJob,
   cut: Schema.Finite,
   face: Face,
+  checks: ReelChecks,
   file: Schema.optionalKey(Schema.Struct({
     made: Schema.String,
     seconds: Schema.Finite,
@@ -136,7 +143,8 @@ export const ReelView = Schema.Struct({
     fresh: Schema.Boolean,
     face: Face,
     colour: Schema.optionalKey(ColourView),
-    levelling: Schema.optionalKey(Levelling)
+    levelling: Schema.optionalKey(Levelling),
+    sheet: Schema.optionalKey(Sheet)
   }))
 })
 export type ReelView = typeof ReelView.Type

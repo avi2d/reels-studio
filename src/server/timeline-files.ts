@@ -19,6 +19,7 @@ import { readReachable } from "./attached-files.ts"
 import { reelRules } from "./rules.ts"
 import { ZoomsFile, type PlannedZooms } from "../shared/zoom-plan.ts"
 import { zoomedOf } from "../shared/zooms.ts"
+import { cutOfPage } from "../shared/montage-cut.ts"
 
 const decodeBlocks = Schema.decodeUnknownOption(Schema.fromJsonString(Blocks))
 const decodeGathered = Schema.decodeUnknownOption(Schema.fromJsonString(Gathered))
@@ -199,3 +200,12 @@ export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyA
   const placesNow = insertPlaces(planned.state === "ready" ? planned.planned : [], clips, transcripts, edits, pictures)
   return { clips, inserts: shownInserts(placesNow, clips, edits, pictures, resolved), captions: yield* readCaptions(dir, clips, transcripts, blocks, edits) } satisfies Cut
 })
+
+// The same cut the Монтаж step draws, so the final check counts the questions the step shows.
+export const readMontageCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>) {
+  const view = yield* readTimeline(dir, names, new Map())
+  if (view.timeline.state !== "ready") return undefined
+  const { transcripts } = yield* readHeard(dir, names)
+  return cutOfPage(view, view.timeline, transcripts, view.timeline.edits)
+})
+

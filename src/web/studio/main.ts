@@ -96,7 +96,7 @@ const reelPage = (id: string, step: Step): Effect.Effect<void, Api.Failed> =>
       body = view.body
       leaveStep = view.dispose
     } else if (step === "montage") {
-      const view = montageStep(id, chat)
+      const view = montageStep(id, chat, new URLSearchParams(location.search).get("part") ?? undefined)
       refreshRules = view.refresh
       body = view.body
       leaveStep = view.dispose
@@ -160,7 +160,7 @@ const studioLink = (event: MouseEvent): string | undefined => {
   const link = event.composedPath().find((node) => node instanceof HTMLAnchorElement)
   if (link === undefined || !link.hasAttribute("href") || (link.target !== "" && link.target !== "_self")) return
   const url = new URL(link.href)
-  if (url.origin === location.origin && url.hash === "" && pageAt(url.pathname) !== undefined) return url.pathname
+  if (url.origin === location.origin && url.hash === "" && pageAt(url.pathname) !== undefined) return url.pathname + url.search
 }
 
 document.addEventListener("click", (event) => {

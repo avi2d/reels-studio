@@ -1,5 +1,5 @@
 import type { TextPlace } from "../shared/captions.ts"
-import { TITLE } from "./text-names.ts"
+import { TITLE } from "../shared/text-names.ts"
 
 export type DroppedText = Extract<TextPlace, { readonly state: "dropped" }>
 

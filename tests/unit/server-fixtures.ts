@@ -26,7 +26,7 @@ export const mediaWith = (videos: () => ReadonlyArray<VideoView>, timeline: Time
     uploadedPreview: unavailable, removeUploaded: unavailable, mergeEdits: unavailable,
     reel: unavailable, buildReel: unavailable, cancelReel: unavailable, reelFile: unavailable,
     trial: unavailable, startTrial: unavailable, trialFile: unavailable, setFace: unavailable,
-    reelPicture: unavailable, sound: unavailable,
+    reelPicture: unavailable, reelFrame: unavailable, sound: unavailable,
     withoutWork: (_dir, use) => use
   })
   return { service, edits: (): Edits => edits }

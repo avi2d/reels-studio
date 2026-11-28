@@ -9,7 +9,7 @@ import type { StudioChat } from "./chat.ts"
 import { partActions } from "./montage-actions.ts"
 import { drawMontage, drawUndo, type Drawing } from "./montage-draw.ts"
 import { onMontageKeys } from "./montage-keys.ts"
-import { nextAsking, questionKey } from "./montage-model.ts"
+import { nextAsking, questionKey } from "../../shared/montage-cut.ts"
 import { freshState, montageScreen, paintPlaying, type Screen, type State } from "./montage-screen.ts"
 
 const GATHER = "Собери блоки из всех видео и расставь дубли от лучшего к худшему."
@@ -70,8 +70,8 @@ const refreshAfterChat = (chat: StudioChat, refresh: () => void): (() => void) =
   })
 }
 
-export const montageStep = (projectId: string, chat: StudioChat): MontageStep => {
-  const state = freshState()
+export const montageStep = (projectId: string, chat: StudioChat, opened: string | undefined): MontageStep => {
+  const state = { ...freshState(), selected: opened }
   const screen = montageScreen(projectId)
   const player = montage(projectId, (playing) => { paintPlaying(screen, state, playing) }, screen.sound.dbAt,
     (video) => state.loaded?.view.faces.find((faces) => faces.video === video))

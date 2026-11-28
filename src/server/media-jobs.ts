@@ -3,7 +3,7 @@ import { ChildProcess } from "effect/process"
 import { Plan, Transcript } from "../shared/plan.ts"
 import { Gaze, type GazeFailure } from "../shared/timeline.ts"
 import { envelopeArgs, measureArgs, momentsOf, readingOf, repeatsFor } from "./loudness-meter.ts"
-import { gazeText, isHdr, KEY_FRAME_EVERY, prepareArgs, probeArgs, recognizerArgs, refreshArgs, transcriptText } from "./media-commands.ts"
+import { gazeArgs, gazeText, isHdr, KEY_FRAME_EVERY, prepareArgs, probeArgs, recognizerArgs, refreshArgs, transcriptText } from "./media-commands.ts"
 import { Settings } from "./settings.ts"
 
 export class ToolFailed extends Data.TaggedError("ToolFailed")<{ readonly command: string; readonly code: number; readonly output: string; readonly message: string }> {}
@@ -201,7 +201,7 @@ export const look = Effect.fn("Media.look")(function*(job: Job) {
   yield* Effect.forEach([place.work, `${job.dir}/gaze`], (folder) => fs.makeDirectory(folder, { recursive: true }))
   const measured = `${place.work}/gaze.json`
   const looker = `${settings.root}/tools/gaze`
-  yield* tool("uv", ["run", "--project", looker, "python", `${looker}/gaze.py`, place.preview, measured], settings.heavy).pipe(Effect.mapError(gazeFailure(settings.heavy)))
+  yield* tool("uv", gazeArgs(looker, place.preview, measured), settings.heavy).pipe(Effect.mapError(gazeFailure(settings.heavy)))
   const gaze = yield* fs.readFileString(measured).pipe(
     Effect.flatMap(decodeGaze),
     Effect.mapError(() => new GazeFailed({ reason: "tool-failed", detail: measured }))
@@ -212,4 +212,12 @@ export const look = Effect.fn("Media.look")(function*(job: Job) {
   yield* fs.writeFileString(measured, kept)
   yield* fs.rename(measured, place.gaze)
   yield* fs.remove(place.work, { recursive: true })
+})
+
+export const measureHeads = Effect.fnUntraced(function*(video: string, output: string) {
+  const fs = yield* FileSystem.FileSystem
+  const settings = yield* Settings
+  const looker = `${settings.root}/tools/gaze`
+  yield* tool("uv", gazeArgs(looker, video, output), settings.heavy)
+  return yield* decodeGaze(yield* fs.readFileString(output))
 })

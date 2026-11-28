@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Layer, Option, Schema, Stream } from "effect"
+import { Effect, Layer, Option, Schema, Stream } from "effect"
 import { NewTask } from "../shared/brief.ts"
 import { CHAT_TURN_HEADER } from "../shared/chat.ts"
 import { Pick } from "../shared/library.ts"
@@ -18,11 +18,11 @@ import { allowedHosts, isAllowedHost, isHomeAddress, isSameOrigin } from "./home
 import { Media } from "./media.ts"
 import type { ReelVersion } from "./reel.ts"
 import { Projects } from "./projects.ts"
-import { parseRange } from "./range.ts"
 import { keepRule, undoChange } from "./rules.ts"
 import { orRules, rulesPage } from "./rules-page.ts"
 import { KeptInput, RuleId } from "../shared/rules.ts"
 import { Settings } from "./settings.ts"
+import { sendFile } from "./send-file.ts"
 import * as Tus from "./tus.ts"
 import { body, json, param, reply } from "./api-reply.ts"
 import { looksRoutes } from "./looks-api.ts"
@@ -229,26 +229,6 @@ const uploads = Layer.mergeAll(
   })))
 )
 
-const UNREADABLE = new ApiError({ status: 500, message: "Видео недоступно. Попробуйте открыть страницу ещё раз." })
-
-const sendFile = Effect.fnUntraced(function*(target: string, contentType: string, rangeHeader: string | undefined, extra: Readonly<Record<string, string>> = {}) {
-  const fs = yield* FileSystem.FileSystem
-  const size = Number((yield* fs.stat(target)).size)
-  const range = parseRange(rangeHeader, size)
-  const headers = { "accept-ranges": "bytes", "cache-control": "no-store", ...extra }
-  if (range.kind === "outside") {
-    return HttpServerResponse.empty({ status: 416, headers: { ...headers, "content-range": `bytes */${size}` } })
-  }
-  if (range.kind === "whole") return yield* HttpServerResponse.file(target, { contentType, headers })
-  return yield* HttpServerResponse.file(target, {
-    status: 206,
-    contentType,
-    offset: range.start,
-    bytesToRead: range.end - range.start + 1,
-    headers: { ...headers, "content-range": `bytes ${range.start}-${range.end}/${size}` }
-  })
-}, Effect.mapError((cause) => cause instanceof ApiError ? cause : UNREADABLE))
-
 // The ASCII name serves a browser that ignores filename*, which alone carries the Russian title.
 export const attachment = (title: string): string => {
   const name = `${title.trim() || "reel"}.mp4`
@@ -280,6 +260,13 @@ const reel = Layer.mergeAll(
   HttpRouter.add("GET", "/api/projects/:id/reel/picture", (request) => reply(Effect.gen(function*() {
     const media = yield* Media
     const target = yield* media.reelPicture(yield* param("id"), yield* pictureOf(request))
+    return yield* sendFile(target, "image/jpeg", request.headers["range"])
+  }))),
+  HttpRouter.add("GET", "/api/projects/:id/reel/frame", (request) => reply(Effect.gen(function*() {
+    const media = yield* Media
+    const index = Number(queryOf(request, "index"))
+    if (!Number.isInteger(index) || index < 0) return yield* badRequest("Такого кадра нет")
+    const target = yield* media.reelFrame(yield* param("id"), madeOf(request), index)
     return yield* sendFile(target, "image/jpeg", request.headers["range"])
   }))),
   HttpRouter.add("GET", "/api/projects/:id/reel/download", (request) => reply(Effect.gen(function*() {

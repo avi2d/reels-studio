@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import type { TextPlace } from "../../src/shared/captions.ts"
-import { namedTexts } from "../../src/web/text-names.ts"
+import { namedTexts } from "../../src/shared/text-names.ts"
 import { textList } from "../../src/web/timeline-texts.ts"
 
 interface Drawn {

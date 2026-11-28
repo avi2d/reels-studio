@@ -1,5 +1,5 @@
-import type { TextPlace } from "../shared/captions.ts"
-import type { Clip, Placed } from "../shared/timeline.ts"
+import type { TextPlace } from "./captions.ts"
+import type { Clip, Placed } from "./timeline.ts"
 
 export const TITLE = "Заголовок"
 
@@ -9,7 +9,7 @@ export interface NamedText {
   readonly part: string | undefined
 }
 
-const blockAt = (reel: ReadonlyArray<Clip>, time: number): string | undefined => {
+export const blockAt = (reel: ReadonlyArray<Clip>, time: number): string | undefined => {
   let start = 0
   for (const clip of reel) {
     const end = start + clip.end - clip.start

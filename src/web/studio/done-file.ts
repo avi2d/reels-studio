@@ -6,12 +6,13 @@ import { button } from "./ui.ts"
 
 const SAVE_HINT = "На айфоне откройте скачанный файл и выберите «Сохранить видео»: ролик появится в «Фото», и Instagram его найдёт."
 const LISTEN = "Послушать до и после"
+const CLOSED = "Скачать ролик можно, когда пройдены все проверки выше."
 
 type Version = "before" | "after"
 
 export interface ReelFile {
   readonly node: HTMLElement
-  readonly paint: (file: File, stale: boolean) => void
+  readonly paint: (file: File, stale: boolean, downloadOpen: boolean) => void
   readonly pause: () => void
 }
 
@@ -25,9 +26,11 @@ export const reelFile = (projectId: string): ReelFile => {
   const sound = h("p", { class: "done-sound" })
   const facts = h("p", { class: "hint" })
   const download = h("a", { class: "btn btn--main btn--start", download: "" }, icon("download"), "Скачать")
+  const closed = h("p", { class: "done-closed", hidden: true }, CLOSED)
+  const save = h("p", { class: "hint" }, SAVE_HINT)
   const node = h("div", { class: "done-file", hidden: true },
     h("div", { class: "done-viewer" }, player, listen),
-    h("div", { class: "done-about" }, sound, facts, download, h("p", { class: "hint" }, SAVE_HINT)))
+    h("div", { class: "done-about" }, sound, facts, closed, download, save))
 
   const mark = (version: Version): void => {
     for (const [name, control] of [["before", versions.before], ["after", versions.after]] as const) {
@@ -58,7 +61,10 @@ export const reelFile = (projectId: string): ReelFile => {
 
   return {
     node,
-    paint: (file, stale) => {
+    paint: (file, stale, downloadOpen) => {
+      download.hidden = !downloadOpen
+      save.hidden = !downloadOpen
+      closed.hidden = downloadOpen
       if (state.made !== file.made) {
         load(file.made, "after")
         download.setAttribute("href", Api.reelDownloadUrl(projectId, file.made))

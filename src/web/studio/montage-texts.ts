@@ -4,7 +4,7 @@ import { lineLength, lineLimit, linesProblem, type TextAnswer, type TextLine } f
 import { h } from "../dom.ts"
 import { formatLength } from "../format.ts"
 import { whyDropped, type DroppedText } from "../text-drops.ts"
-import type { NamedText } from "../text-names.ts"
+import type { NamedText } from "../../shared/text-names.ts"
 import { button, card, choice } from "./ui.ts"
 
 export interface TextActions {

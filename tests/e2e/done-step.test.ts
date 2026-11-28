@@ -1,3 +1,4 @@
+import { PASSING } from "../unit/reel-check-fixtures.ts"
 import { afterAll, beforeAll, expect, test } from "bun:test"
 import { chromium, type Browser, type Page } from "playwright-core"
 import type { ReelView } from "../../src/shared/reel.ts"
@@ -6,7 +7,7 @@ let browser: Browser
 let server: ReturnType<typeof Bun.serve>
 
 const file = { made: "2026-01-01T00:00:00.000Z", seconds: 7, size: 1000, fresh: true, face: "off" } satisfies NonNullable<ReelView["file"]>
-const unbuilt = { job: { state: "idle" }, cut: 7, face: "off" } satisfies ReelView
+const unbuilt = { job: { state: "idle" }, cut: 7, face: "off", checks: PASSING } satisfies ReelView
 const ready = { ...unbuilt, file } satisfies ReelView
 const offline = "Нет связи со студией. Проверьте Wi-Fi."
 

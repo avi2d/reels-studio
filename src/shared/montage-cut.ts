@@ -1,12 +1,12 @@
-import { textPlaces } from "../../shared/captions.ts"
-import { doubtAnswer, doubtsOf, type DoubtAnswer, type WordDoubt } from "../../shared/doubts.ts"
-import { insertPlaces, shownInserts, type InsertPlace, type Shown } from "../../shared/inserts.ts"
-import { cutOf, facesByVideo, placesOf, type Join, type Place } from "../../shared/joins.ts"
-import { lengthOf, type Transcript } from "../../shared/plan.ts"
-import { bareWord, correctedWord } from "../../shared/subtitles.ts"
-import { arrange, assemble, clipsOf, type Block, type Clip, type Edits, type Placed, type TimelinePage } from "../../shared/timeline.ts"
-import { isAsked, namedTexts, partAt, type NamedText } from "../text-names.ts"
-import { zoomedOf, type ZoomPlace } from "../../shared/zooms.ts"
+import { textPlaces } from "./captions.ts"
+import { doubtAnswer, doubtsOf, type DoubtAnswer, type WordDoubt } from "./doubts.ts"
+import { insertPlaces, shownInserts, type InsertPlace, type Shown } from "./inserts.ts"
+import { cutOf, facesByVideo, placesOf, type Join, type Place } from "./joins.ts"
+import { lengthOf, type Transcript } from "./plan.ts"
+import { bareWord, correctedWord } from "./subtitles.ts"
+import { arrange, assemble, clipsOf, type Block, type Clip, type Edits, type Placed, type TimelineView } from "./timeline.ts"
+import { isAsked, namedTexts, partAt, type NamedText } from "./text-names.ts"
+import { zoomedOf, type ZoomPlace } from "./zooms.ts"
 
 export interface Numbered<T> {
   readonly place: T
@@ -51,7 +51,7 @@ export interface Cut {
   }
 }
 
-type Ready = Extract<TimelinePage["timeline"], { readonly state: "ready" }>
+type Ready = Extract<TimelineView["timeline"], { readonly state: "ready" }>
 
 const numbered = <T>(places: ReadonlyArray<T>): ReadonlyArray<Numbered<T>> => places.map((place, index) => ({ place, number: index + 1 }))
 
@@ -70,7 +70,7 @@ export const questionKey = (question: Question): string => {
 
 export const isOpen = (question: Question): boolean => question.place.place.answer === undefined
 
-const wordsOf = (one: Placed, transcripts: ReadonlyMap<string, Transcript>, edits: Edits, view: TimelinePage): ReadonlyArray<WordPlace> => {
+const wordsOf = (one: Placed, transcripts: ReadonlyMap<string, Transcript>, edits: Edits, view: TimelineView): ReadonlyArray<WordPlace> => {
   const { video, from, to } = one.take
   const transcript = transcripts.get(video)
   if (transcript === undefined) return []
@@ -87,13 +87,13 @@ const wordsOf = (one: Placed, transcripts: ReadonlyMap<string, Transcript>, edit
   })
 }
 
-export const zoomedReel = (view: TimelinePage, timeline: Ready, transcripts: ReadonlyMap<string, Transcript>, edits: Edits): ReturnType<typeof zoomedOf> & { readonly placed: ReadonlyArray<Placed> } => {
+export const zoomedReel = (view: TimelineView, timeline: Ready, transcripts: ReadonlyMap<string, Transcript>, edits: Edits): ReturnType<typeof zoomedOf> & { readonly placed: ReadonlyArray<Placed> } => {
   const placed = assemble(timeline.blocks, edits, transcripts, timeline.rest)
   const faces = facesByVideo(view.faces)
   return { ...zoomedOf(cutOf(clipsOf(placed), faces, transcripts, edits), view.zooms.state === "ready" ? view.zooms.planned : [], faces, transcripts, edits, timeline.zoom), placed }
 }
 
-export const cutOfPage = (view: TimelinePage, timeline: Ready, transcripts: ReadonlyMap<string, Transcript>, edits: Edits): Cut => {
+export const cutOfPage = (view: TimelineView, timeline: Ready, transcripts: ReadonlyMap<string, Transcript>, edits: Edits): Cut => {
   const zoomed = zoomedReel(view, timeline, transcripts, edits)
   const { placed } = zoomed
   const faces = facesByVideo(view.faces)

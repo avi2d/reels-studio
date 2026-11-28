@@ -2,7 +2,7 @@ import type { ZoomLevel } from "../../shared/zoom-plan.ts"
 import type { ZoomPlace } from "../../shared/zooms.ts"
 import { h } from "../dom.ts"
 import { formatLength } from "../format.ts"
-import type { Numbered } from "./montage-model.ts"
+import type { Numbered } from "../../shared/montage-cut.ts"
 import { button } from "./ui.ts"
 
 export interface ZoomActions {

@@ -50,7 +50,7 @@ export const textAreaOf = (platform: Platform): TextArea => {
   return { box, buttons: buttons === undefined ? undefined : { left: buttons.left, top: buttons.top, right: box.right, bottom: box.bottom } }
 }
 
-const overlaps = (one: Rect, other: Rect): boolean =>
+export const overlaps = (one: Rect, other: Rect): boolean =>
   one.left < other.right && other.left < one.right && one.top < other.bottom && other.top < one.bottom
 
 export const fitsArea = (ink: Rect, area: TextArea): boolean =>
