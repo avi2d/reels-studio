@@ -9,7 +9,7 @@ import { Effort, ProjectTitleInput } from "../shared/project.ts"
 import { APP_FILE_NAME } from "../shared/reel.ts"
 import { Edits, type TimelinePage } from "../shared/timeline.ts"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
-import { ApiError, badRequest, notFound, orUnavailable } from "./api-error.ts"
+import { ApiError, notFound, orUnavailable } from "./api-error.ts"
 import { Attachments } from "./attachments.ts"
 import { Brief } from "./brief.ts"
 import { Chat } from "./chat.ts"
@@ -26,24 +26,10 @@ import { KeptInput, RuleId } from "../shared/rules.ts"
 import { Settings } from "./settings.ts"
 import * as Tus from "./tus.ts"
 import { appOf, madeOf, pageOf, pictureOf, versionOf } from "./api-request.ts"
-
-const reply = <R>(
-  effect: Effect.Effect<HttpServerResponse.HttpServerResponse, ApiError, R>
-): Effect.Effect<HttpServerResponse.HttpServerResponse, never, R> =>
-  effect.pipe(
-    Effect.catchTag("ApiError", (error) =>
-      Effect.succeed(HttpServerResponse.jsonUnsafe({ error: error.message }, { status: error.status })))
-  )
-
-const json = (body: unknown, status = 200) => HttpServerResponse.jsonUnsafe(body, { status })
-
-const param = (name: string) =>
-  Effect.map(HttpRouter.params, (params) => params[name] ?? "")
+import { body, json, param, reply } from "./api-reply.ts"
+import { looksRoutes } from "./looks-api.ts"
 
 const decodeRuleId = Schema.decodeUnknownOption(RuleId)
-
-const body = <A>(schema: Schema.ConstraintDecoder<A>) =>
-  HttpServerRequest.schemaBodyJson(schema).pipe(Effect.mapError(() => badRequest("Запрос не разобран")))
 
 const SaveEdits = Schema.Struct({ base: Edits, edits: Edits })
 
@@ -305,6 +291,7 @@ const posts = Layer.mergeAll(
 
 const NewFace = Schema.Struct({ face: Face })
 
+
 const retouch = Layer.mergeAll(
   HttpRouter.add("GET", "/api/projects/:id/retouch", reply(Effect.gen(function*() {
     const media = yield* Media
@@ -393,4 +380,5 @@ const homeOnly = HttpRouter.middleware(
   { global: true }
 )
 
-export const apiRoutes = Layer.mergeAll(projects, brief, rules, chat, uploads, videos, reel, posts, retouch, homeOnly)
+export const apiRoutes = Layer.mergeAll(projects, brief, rules, chat, uploads, videos, reel, posts, retouch, looksRoutes, homeOnly)
+

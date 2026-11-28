@@ -2,6 +2,7 @@ import { lookAt, type Shown } from "../../shared/inserts.ts"
 import { stepPath } from "../../shared/page.ts"
 import type { ShownWord } from "../../shared/subtitles.ts"
 import { NO_EDITS, type Edits } from "../../shared/timeline.ts"
+import { FRAME, textAreaOf } from "../../shared/zones.ts"
 import * as Api from "../api.ts"
 import { h } from "../dom.ts"
 import { formatLength } from "../format.ts"
@@ -10,10 +11,11 @@ import { montage, type Playing } from "../montage.ts"
 import { montageSound } from "../montage-sound.ts"
 import type { Loaded } from "../timeline-draw.ts"
 import { loader } from "../timeline-load.ts"
-import { paintSubtitle, playback } from "../timeline-subtitles.ts"
+import { playback } from "../timeline-subtitles.ts"
 import { icon } from "./icons.ts"
 import { lookFace } from "./look-face.ts"
 import { lookMargins } from "./look-margins.ts"
+import { lookSubtitles } from "./look-subtitles.ts"
 import { cutOfPage, type Cut } from "./montage-model.ts"
 import { paintThought, shownTexts } from "./montage-screen.ts"
 import { button } from "./ui.ts"
@@ -52,20 +54,29 @@ export const lookStep = (projectId: string): LookStep => {
   const state: State = { loaded: undefined, cut: undefined, drawn: "", edits: NO_EDITS, base: undefined, shown: [], overlay: [], words: [], playing: undefined }
   const sound = montageSound(projectId)
   const overlay = insertView(Api.insertUrls(projectId))
-  const subtitle = h("div", { class: "subtitle-preview", "aria-hidden": "true" })
   const thought = h("div", { class: "thought-preview", "aria-hidden": "true" })
   const margins = lookMargins(projectId)
   const go = button("main", WATCH, { disabled: true }, "play")
   const clock = h("span", { class: "clock" })
-  const frame = h("div", { class: "frame" }, overlay.node, thought, subtitle, margins.overlay)
+  const frame = h("div", { class: "frame" }, overlay.node, thought)
   const face = lookFace(projectId)
+  const subtitles = lookSubtitles(projectId, (view) => {
+    const middle = view.subtitles.style === "example" && view.example?.title === "middle"
+    const { box } = textAreaOf("Instagram")
+    thought.style.top = middle ? `${(box.top + box.bottom) / 2 / FRAME.height * 100}%` : ""
+    thought.style.transform = middle ? "translateY(-50%)" : ""
+    paint(state.playing)
+  })
+  frame.append(subtitles.plate, subtitles.subtitle, margins.overlay)
   const empty = h("p", { class: "hint", hidden: true }, EMPTY)
   const work = h("div", { class: "look", hidden: true },
     h("div", { class: "look-viewer" }, frame, h("div", { class: "montage-viewer__bar" }, go, clock), margins.controls),
+    h("div", { class: "look-groups" },
+    subtitles.node,
     h("section", { class: "group look-settings", "aria-labelledby": "look-picture" },
       h("h2", { class: "group__title", id: "look-picture" }, "Картинка"),
       face.node,
-      row("Цвет", h("p", { class: "look-row__text" }, COLOUR))))
+      row("Цвет", h("p", { class: "look-row__text" }, COLOUR)))))
   const next = h("div", { class: "next", hidden: true }, h("a", { class: "btn btn--main", href: stepPath(projectId, "done") }, "Дальше: ролики", icon("right")))
   const body = h("div", { class: "body body--look" },
     h("div", { class: "head" }, h("h1", { tabindex: "-1" }, "Оформление")),
@@ -81,8 +92,8 @@ export const lookStep = (projectId: string): LookStep => {
     const was = state.playing
     state.playing = playing
     overlay.paint(playing === undefined ? undefined : lookAt(state.overlay, playing.elapsed))
-    paintSubtitle(subtitle, playing === undefined ? "" : state.words.find((word) => playing.elapsed >= word.start && playing.elapsed < word.end)?.text ?? "")
     const at = playing === undefined ? undefined : (state.base ?? 0) + playing.elapsed
+    subtitles.paintFrame(playing === undefined ? "" : state.words.find((one) => playing.elapsed >= one.start && playing.elapsed < one.end)?.text ?? "", at, state.cut?.reel ?? [])
     paintThought(thought, at === undefined ? undefined : shownTexts(state.cut).find((text) => at >= text.start && at < text.end))
     paintClock()
     if ((was === undefined) !== (playing === undefined)) go.replaceChildren(icon(playing === undefined ? "play" : "stop"), playing === undefined ? WATCH : STOP)
@@ -102,7 +113,7 @@ export const lookStep = (projectId: string): LookStep => {
     empty.hidden = state.loaded === undefined || first !== undefined
     go.disabled = first === undefined
     if (first !== undefined && state.playing === undefined) player.show(first)
-    paintClock()
+    paint(state.playing)
   }
 
   const show = (loaded: Loaded): void => {
@@ -128,12 +139,14 @@ export const lookStep = (projectId: string): LookStep => {
     refresh()
     sound.refresh()
     face.refresh()
+    subtitles.refresh()
   })
   return {
     body,
     dispose: () => {
       player.stop()
       face.dispose()
+      subtitles.dispose()
     }
   }
 }

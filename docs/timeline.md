@@ -109,9 +109,9 @@ The build makes one file for each app chosen in the brief.
 When the cut shows inserts or approved on-screen text, one more pass per app lays them over the levelled file.
 That pass copies the sound as it is.
 The studio draws each spoken word as a single word subtitle and the titles and key thoughts of texts.json in that pass.
-The subtitles carry the person's corrections.
+The subtitles carry the person's corrections, and they take the look the person picked, as «The subtitle look» below says.
 Each pass places the texts in the box of its app, so a text never sits under that app's buttons.
-The studio draws a long subtitle word smaller to fit the box of the app.
+The studio draws a long subtitle word or a name plate smaller to fit the box of the app.
 A key thought that leaves the box stops the build.
 With nothing to lay over, every app gets the same levelled file.
 The joined file before levelling stays beside the reel as `before-<stamp>.mp4`.
@@ -196,6 +196,29 @@ It runs before the inserts and the text go on, so they stay as they are.
 That retouch changes pixels only inside the face, the same way the trial does.
 The «Готовый ролик» stage names the chosen face above its build button and the face of the built file in the file facts.
 After a new choice it says the file no longer matches.
+
+## The subtitle look
+
+The «Оформление» step sets how the subtitles look, in `looks.json`.
+The person picks one of three look cards and one of two sizes, «Обычные» or «Крупные».
+
+| Look | What the subtitles are |
+| --- | --- |
+| «Ваш стиль» | The serif words with a black outline of the style profile, the default |
+| «Жёлтая плашка» | Dark sans words on a yellow plate |
+| «Как в примере» | The font, colour, outline, plate and capitals the chat model took from an example reel in `example.json` |
+
+«Как в примере» opens only while `example.json` exists, and the server refuses to save it before.
+When the example is removed later, the build falls back to the style profile.
+The card lists the lines the chat model took from the example, and the plan quotes the same lines.
+The title place of the example, `top` or `middle`, moves the titles and key thoughts: `middle` centres them in the clear zone of the Instagram box, not on the face.
+The preview on the step draws the same look the build burns.
+
+The name plate is a line such as a name and a job, up to 40 characters.
+When it is switched on and has text, the build shows it for the first 4 s of the second part, or of the cut when it has one part.
+It stands low in the clear zone, above the subtitles.
+The studio measures the ink of every look and of the plate before the render, and draws a word or the plate smaller when it leaves the clear zone.
+The sans look uses Onest Bold, which `tools/fonts/onest_bold.py` makes from the page fonts.
 
 ## Keys
 
@@ -392,11 +415,12 @@ Each video folder holds these next to `plan.json`:
 | `reel/reel-<stamp>-<app>.mp4` | The published reel video of one app, `instagram`, `youtube` or `tiktok`, named by its build time |
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
 | `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |
-| `reel/reel.json` | The build time, the video file it published for each app, the parts with their pushes, the crop window of each video, the inserts, a hash of the subtitles and key thoughts as the person answered them, the face setting, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
+| `reel/reel.json` | The build time, the video file it published for each app, the parts with their pushes, the crop window of each video, the inserts, a hash of the subtitles, key thoughts, subtitle look, title place and name plate as the person answered them, the face setting, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
 | `reel/sound.json` | The parts of the last checked cut with the heard clip inserts, its measured loudness before and after levelling, and the gain of each part over its source time, which the montage plays |
 | `reel/sound-work/` | The sound of each clip and the levelled sound while a check runs, removed when it ends |
 | `posts.json` | The caption and hashtags the person wrote for each app on «Ролики», so choosing an app again brings its text back |
-| `looks.json` | The face setting of the reel, `off` or `light`, written when the person picks it |
+| `looks.json` | The face setting of the reel, `off` or `light`, the subtitle look, `brand`, `plate` or `example`, with its size, `normal` or `large`, and the name plate, shown or not, with its text, written when the person picks them |
+| `example.json` | What the chat model took from an example reel the person attached: up to three lines for the person, the subtitle font, colour, outline, plate and capitals, and the title place, `top` or `middle` |
 | `retouch/trial.json` | The time of the last skin and eye trial, the seconds it retouched and the seconds that took |
 | `retouch/before.jpg`, `retouch/after.jpg` | The face close-up of the trial before and after |
 | `retouch/compare.mp4` | The 20 s of the trial with the original on the left and the retouch on the right |
