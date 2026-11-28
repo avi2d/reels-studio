@@ -2,7 +2,7 @@ import { DateTime, Effect, FileSystem, Option, Schema, type PlatformError } from
 import { Face } from "../shared/face.ts"
 import { faceLeft } from "../shared/framing.ts"
 import { visualKey, type Shown } from "../shared/inserts.ts"
-import { Frame } from "../shared/timeline.ts"
+import { Frame, Push } from "../shared/timeline.ts"
 import { Levelling, LOUDNESS_TARGET, SERIES_STEP, VideoColour, type ColourView, type PictureSide, type ReelView } from "../shared/reel.ts"
 import { curveOf, gainsOf, levelArgs, partGainsOf, type PartLevel } from "./level-curve.ts"
 import {
@@ -28,7 +28,7 @@ type Colour = typeof Colour.Type
 const ShownInsert = Schema.Struct({ picture: Schema.String, start: Schema.Finite, end: Schema.Finite })
 type ShownInsert = typeof ShownInsert.Type
 
-export const PartRecord = Schema.Struct({ video: Schema.String, start: Schema.Finite, frames: Schema.Int, frame: Schema.optionalKey(Frame) })
+export const PartRecord = Schema.Struct({ video: Schema.String, start: Schema.Finite, frames: Schema.Int, frame: Schema.optionalKey(Frame), pushes: Schema.optionalKey(Schema.Array(Push)) })
 
 const CropWindow = Schema.Struct({ video: Schema.String, left: Schema.NullOr(Schema.Finite) })
 type CropWindow = typeof CropWindow.Type
