@@ -1,11 +1,12 @@
 import { Data, Effect, Option, Schema } from "effect"
-import { BriefView, type NewTask } from "../shared/brief.ts"
+import { type App, BriefView, type NewTask } from "../shared/brief.ts"
 import type { Visual } from "../shared/inserts.ts"
 import { Message } from "../shared/chat.ts"
 import { Offer, type Pick, UploadedVideo } from "../shared/library.ts"
 import { VideoView } from "../shared/plan.ts"
 import { ProjectView, type Effort } from "../shared/project.ts"
-import { ReelView, SoundCheck, type PictureSide } from "../shared/reel.ts"
+import { APP_FILE_NAME, ReelView, SoundCheck, type PictureSide } from "../shared/reel.ts"
+import { type Post, Posts } from "../shared/posts.ts"
 import type { Face } from "../shared/face.ts"
 import { RetouchView, type RetouchPicture } from "../shared/retouch.ts"
 import { Edits, TimelinePage } from "../shared/timeline.ts"
@@ -126,14 +127,22 @@ export const cancelReel = (id: string): Effect.Effect<ReelView, Failed> =>
 export const getSound = (id: string): Effect.Effect<SoundCheck, Failed> =>
   call(SoundCheck, `/api/projects/${id}/sound`)
 
-export const reelUrl = (id: string, made: string, version: "after" | "before"): string =>
-  `/api/projects/${id}/reel/file?made=${encodeURIComponent(made)}&version=${version}`
+const appQuery = (app: App | undefined): string => app === undefined ? "" : `&app=${APP_FILE_NAME[app]}`
+
+export const reelUrl = (id: string, made: string, version: "after" | "before", app?: App): string =>
+  `/api/projects/${id}/reel/file?made=${encodeURIComponent(made)}&version=${version}${appQuery(app)}`
 
 export const reelPictureUrl = (id: string, made: string, join: number, side: PictureSide): string =>
   `/api/projects/${id}/reel/picture?made=${encodeURIComponent(made)}&join=${join}&side=${side}`
 
-export const reelDownloadUrl = (id: string, made: string): string =>
-  `/api/projects/${id}/reel/download?made=${encodeURIComponent(made)}`
+export const reelDownloadUrl = (id: string, made: string, app?: App): string =>
+  `/api/projects/${id}/reel/download?made=${encodeURIComponent(made)}${appQuery(app)}`
+
+export const getPosts = (id: string): Effect.Effect<Posts, Failed> =>
+  call(Posts, `/api/projects/${id}/posts`)
+
+export const savePost = (id: string, one: Post): Effect.Effect<Posts, Failed> =>
+  call(Posts, `/api/projects/${id}/posts`, { ...post(one), method: "PUT" })
 
 export const getRetouch = (id: string): Effect.Effect<RetouchView, Failed> =>
   call(RetouchView, `/api/projects/${id}/retouch`)

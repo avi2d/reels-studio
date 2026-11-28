@@ -1,5 +1,8 @@
 import { Schema } from "effect"
+import { App } from "./brief.ts"
 import { Face, NoFace } from "./face.ts"
+
+export const APP_FILE_NAME = { Instagram: "instagram", "YouTube Shorts": "youtube", TikTok: "tiktok" } as const satisfies Record<App, string>
 
 export const ReelJob = Schema.Union([
   Schema.Struct({ state: Schema.Literals(["idle", "waiting"]) }),
@@ -125,14 +128,18 @@ export const previewDb = (parts: ReadonlyArray<PartGains>, video: string, time: 
   return nearest === undefined ? 0 : gainAt(nearest.gains, time)
 }
 
+export const AppSize = Schema.Struct({ app: App, size: Schema.Finite })
+export type AppSize = typeof AppSize.Type
+
 export const ReelView = Schema.Struct({
   job: ReelJob,
   cut: Schema.Finite,
   face: Face,
+  apps: Schema.NonEmptyArray(App),
   file: Schema.optionalKey(Schema.Struct({
     made: Schema.String,
     seconds: Schema.Finite,
-    size: Schema.Finite,
+    apps: Schema.NonEmptyArray(AppSize),
     fresh: Schema.Boolean,
     face: Face,
     colour: Schema.optionalKey(ColourView),

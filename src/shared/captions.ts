@@ -3,7 +3,7 @@ import type { Span, Transcript } from "./plan.ts"
 import type { ShownWord } from "./subtitles.ts"
 import { answeredLines, answerOfText, MOST_LINES, type PlannedText, type TextAnswer, type TextLine } from "./texts.ts"
 import type { Clip, Edits } from "./timeline.ts"
-import { fitsArea, textAreaOf, type Rect } from "./zones.ts"
+import { fitsArea, textAreaOf, type Platform, type Rect } from "./zones.ts"
 
 export interface ShownText extends Span {
   readonly id: string
@@ -135,8 +135,8 @@ const header = [
 const event = (span: Span, role: keyof typeof FACES, tags: string, text: string): string =>
   `Dialogue: 0,${clock(span.start)},${clock(span.end)},${role},,0,0,0,,{${tags}}${plain(text)}`
 
-export const fitWord = (word: CaptionWord, ink: Rect): CaptionWord => {
-  const area = textAreaOf("Instagram")
+export const fitWord = (word: CaptionWord, ink: Rect, platform: Platform): CaptionWord => {
+  const area = textAreaOf(platform)
   if (fitsArea(ink, area)) return word
   const right = area.buttons !== undefined && ink.bottom > area.buttons.top ? area.buttons.left : area.box.right
   const ratio = Math.min(1, (540 - area.box.left) / (540 - ink.left), (right - 540) / (ink.right - 540))
@@ -167,8 +167,8 @@ const textEvents = (text: ShownText, box: Rect): ReadonlyArray<string> => {
 
 export type CaptionPart = "words" | "texts"
 
-export const assOf = (captions: Captions, parts: ReadonlyArray<CaptionPart> = ["words", "texts"]): string => {
-  const { box } = textAreaOf("Instagram")
+export const assOf = (captions: Captions, platform: Platform, parts: ReadonlyArray<CaptionPart> = ["words", "texts"]): string => {
+  const { box } = textAreaOf(platform)
   return [
     ...header,
     ...(parts.includes("texts") ? captions.texts.flatMap((text) => textEvents(text, box)) : []),

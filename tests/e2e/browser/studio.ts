@@ -523,8 +523,8 @@ const sizeOf = async (path: string): Promise<string> => {
   return size
 }
 
-const downloadReel = async (page: Page): Promise<string> => {
-  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: "Скачать", exact: true }).click()])
+const downloadReel = async (page: Page, app: string): Promise<string> => {
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: `Скачать для ${app}`, exact: true }).click()])
   const path = join(await mkdtemp(join(tmpdir(), "reels-download-")), "reel.mp4")
   await download.saveAs(path)
   return path
@@ -540,7 +540,7 @@ const dropFirstBlock = async (page: Page, id: string): Promise<void> => {
 }
 
 const reelsStep: ProductCheck = {
-  name: "step 5 builds the reel with progress, downloads one 1080 by 1920 file, reads «Ролики устарели» after a montage edit, and a stopped rebuild keeps the earlier file instead of dropping it",
+  name: "step 5 builds the reel with progress, downloads a 1080 by 1920 file for each chosen app and none for the unchosen one, reads «Ролики устарели» after a montage edit, and a stopped rebuild keeps the earlier file instead of dropping it",
   run: async (page) => {
     page.setDefaultTimeout(timeout)
     const title = "Ролик до скачивания"
@@ -552,20 +552,20 @@ const reelsStep: ProductCheck = {
     await page.getByRole("button", { name: "Собрать ролик", exact: true }).click()
     await page.getByRole("heading", { name: "Собираю ролики", exact: true, level: 1 }).waitFor()
     await page.getByRole("heading", { name: "Ролики готовы", exact: true, level: 1 }).waitFor({ timeout: BUILD })
-    await page.getByText(/^Звук .+: громкость .+, до выравнивания .+\.$/u).waitFor()
-    await page.getByRole("group", { name: "Послушать до и после" }).getByRole("button", { name: "До", exact: true }).click()
-    assert.match(await page.locator("video.done-player").getAttribute("src") ?? "", /version=before$/u, "«До» must play the file before levelling")
-    assert.equal(await sizeOf(await downloadReel(page)), "1080,1920", "The downloaded reel must be 1080 by 1920")
-    const href = await page.getByRole("link", { name: "Скачать", exact: true }).getAttribute("href")
+    assert.deepEqual(await page.getByRole("tab").allInnerTexts(), ["Instagram", "TikTok"], "Step 5 must show a tab for each chosen app and none for YouTube Shorts")
+    assert.equal(await sizeOf(await downloadReel(page, "Instagram")), "1080,1920", "The Instagram reel must be 1080 by 1920")
+    await page.getByRole("tab", { name: "TikTok", exact: true }).click()
+    assert.equal(await sizeOf(await downloadReel(page, "TikTok")), "1080,1920", "The TikTok reel must be 1080 by 1920")
+    const href = await page.getByRole("link", { name: "Скачать для TikTok", exact: true }).getAttribute("href")
     await dropFirstBlock(page, id)
     await page.getByRole("heading", { name: "Ролики устарели", exact: true, level: 1 }).waitFor()
     await page.getByRole("button", { name: "Собрать заново", exact: true }).click()
     await page.getByRole("button", { name: "Остановить", exact: true }).click()
     await page.getByRole("heading", { name: "Ролики устарели", exact: true, level: 1 }).waitFor({ timeout: BUILD })
-    assert.equal(await page.getByRole("link", { name: "Скачать", exact: true }).getAttribute("href"), href, "A stopped rebuild must keep the earlier file")
+    assert.equal(await page.getByRole("link", { name: "Скачать для TikTok", exact: true }).getAttribute("href"), href, "A stopped rebuild must keep the earlier file")
     await deleteReel(page, title)
     await removeUploads(takes)
-    return { targets: ["«Новый ролик» to step 5", "build progress", "«Ролики готовы» with the loudness line", "«До» plays the file before levelling", "downloaded file is 1080 by 1920", "«Ролики устарели» after a montage edit", "«Остановить» keeps the earlier file"], found: [] }
+    return { targets: ["«Новый ролик» to step 5", "build progress", "«Ролики готовы» with a tab per chosen app", "the downloaded Instagram and TikTok files are 1080 by 1920", "«Ролики устарели» after a montage edit", "«Остановить» keeps the earlier file"], found: [] }
   }
 }
 

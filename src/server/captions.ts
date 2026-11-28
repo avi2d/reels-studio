@@ -4,7 +4,7 @@ import type { Transcript } from "../shared/plan.ts"
 import { correctedWord, subtitleWords } from "../shared/subtitles.ts"
 import { TextsFile, type PlannedTexts } from "../shared/texts.ts"
 import type { Block, Clip, Edits } from "../shared/timeline.ts"
-import { fitsArea, textAreaOf } from "../shared/zones.ts"
+import { fitsArea, textAreaOf, type Platform } from "../shared/zones.ts"
 import { REEL_RATE } from "./media-commands.ts"
 import { run } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
@@ -74,17 +74,17 @@ const fontsDir = Effect.fnUntraced(function*() {
 })
 
 // Words and key thoughts are measured apart, because the box around both at once can reach the button column neither touches.
-export const placeCaptions = Effect.fnUntraced(function*(work: string, captions: Captions, seconds: number) {
+export const placeCaptions = Effect.fnUntraced(function*(work: string, captions: Captions, seconds: number, platform: Platform, name: string) {
   if (!hasCaptions(captions)) return undefined
   const fs = yield* FileSystem.FileSystem
   const fonts = yield* fontsDir()
-  const area = textAreaOf("Instagram")
+  const area = textAreaOf(platform)
   const { heavy } = yield* Settings
   let placed = captions
   for (const part of ["words", "texts"] as const) {
-    const file = `${work}/ink-${part}.ass`
+    const file = `${work}/ink-${name}-${part}.ass`
     for (;;) {
-      yield* fs.writeFileString(file, assOf(placed, [part]))
+      yield* fs.writeFileString(file, assOf(placed, platform, [part]))
       const { stderr } = yield* run("ffmpeg", inkArgs(file, fonts, seconds), heavy)
       const outside = inkOf(stderr).filter((ink) => !fitsArea(ink.rect, area))
       const first = outside[0]
@@ -92,13 +92,13 @@ export const placeCaptions = Effect.fnUntraced(function*(work: string, captions:
       if (part === "texts") return yield* new TextOutside({ part, ink: first })
       const words = placed.words.map((word) => {
         const ink = outside.find((one) => one.at >= Math.round(word.start * 100) / 100 && one.at < Math.round(word.end * 100) / 100)
-        return ink === undefined ? word : fitWord(word, ink.rect)
+        return ink === undefined ? word : fitWord(word, ink.rect, platform)
       })
       if (words.every((word, index) => word.size === placed.words[index]?.size)) return yield* new TextOutside({ part, ink: first })
       placed = { ...placed, words }
     }
   }
-  const file = `${work}/captions.ass`
-  yield* fs.writeFileString(file, assOf(placed))
+  const file = `${work}/captions-${name}.ass`
+  yield* fs.writeFileString(file, assOf(placed, platform))
   return captionFilter(file, fonts)
 })

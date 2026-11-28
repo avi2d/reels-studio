@@ -3,13 +3,13 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { BunFileSystem } from "@effect/platform-bun"
 import { Effect } from "effect"
 import { filterPath, inkOf, readCaptions, readTexts } from "../../src/server/captions.ts"
-import { fitWord, NO_CAPTIONS, shownTexts, textPlaces } from "../../src/shared/captions.ts"
+import { assOf, fitWord, NO_CAPTIONS, shownTexts, textPlaces } from "../../src/shared/captions.ts"
 import { readApproval } from "../../src/server/approval.ts"
 import { NO_EDITS, type Block } from "../../src/shared/timeline.ts"
 
 test("a long subtitle word shrinks instead of reaching under the Instagram button column", () => {
   const word = { text: "высокопрофессиональный", start: 0, end: 1 }
-  const fitted = fitWord(word, { left: 148, right: 932, top: 1412, bottom: 1486 })
+  const fitted = fitWord(word, { left: 148, right: 932, top: 1412, bottom: 1486 }, "Instagram")
   const size = fitted.size ?? 78
   expect(size).toBeGreaterThan(0)
   expect(size).toBeLessThan(78)
@@ -21,7 +21,28 @@ test("a long subtitle word shrinks instead of reaching under the Instagram butto
 
 test("a subtitle word whose ink fits comes back unchanged instead of shrinking", () => {
   const word = { text: "слово", start: 0, end: 1 }
-  expect(fitWord(word, { left: 400, right: 680, top: 1412, bottom: 1486 })).toBe(word)
+  expect(fitWord(word, { left: 400, right: 680, top: 1412, bottom: 1486 }, "Instagram")).toBe(word)
+})
+
+test("a word that clears the Instagram buttons shrinks in the TikTok file, whose button column starts higher", () => {
+  const word = { text: "слово", start: 0, end: 1 }
+  const ink = { left: 200, right: 870, top: 900, bottom: 960 }
+  expect(fitWord(word, ink, "Instagram")).toBe(word)
+  expect(fitWord(word, ink, "TikTok").size ?? 78).toBeLessThan(78)
+})
+
+const positionsOf = (ass: string): ReadonlyArray<{ readonly x: number; readonly y: number }> =>
+  [...ass.matchAll(/\\pos\((\d+),(\d+)\)/gu)].map((match) => ({ x: Number(match[1]), y: Number(match[2]) }))
+
+test("each app's file puts its subtitle and key thought by that app's bands, not all by Instagram's", () => {
+  const captions = { words: [{ text: "аванс", start: 0, end: 1 }], texts: [{ id: "a", start: 0, end: 1, lines: [{ text: "Аванс", accent: false }] }] }
+  const [instagramText, instagramWord] = positionsOf(assOf(captions, "Instagram"))
+  const [youtubeText, youtubeWord] = positionsOf(assOf(captions, "YouTube Shorts"))
+  const [tiktokText, tiktokWord] = positionsOf(assOf(captions, "TikTok"))
+  expect((youtubeWord?.y ?? 0) - (instagramWord?.y ?? 0)).toBe(410 - 200)
+  expect((tiktokWord?.y ?? 0) - (instagramWord?.y ?? 0)).toBe(410 - 260)
+  expect((instagramText?.x ?? 0) - (tiktokText?.x ?? 0)).toBe(100 - 45)
+  expect((instagramText?.y ?? 0) - (youtubeText?.y ?? 0)).toBe(200 - 185)
 })
 
 test("changed or newly added text cannot reach captions under an older approval", async () => {
