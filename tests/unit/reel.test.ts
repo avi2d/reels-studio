@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { attachment } from "../../src/server/api.ts"
-import { videoChain, videoOf } from "../../src/server/reel.ts"
+import { videoChain } from "../../src/server/reel.ts"
+import { videoOf } from "../../src/server/reel-record.ts"
 import { joinList, partArgs, partsOf, progressSeconds, sameParts, secondsOf } from "../../src/server/media-commands.ts"
 import { faceFact, faceSetting, staleText, statusOf } from "../../src/web/reel.ts"
 
@@ -61,8 +62,10 @@ test("only the out_time_us line of ffmpeg progress counts, read in microseconds"
   expect(progressSeconds("out_time_us=N/A")).toBeUndefined()
 })
 
-test("a build video file name carries its build time without colons", () => {
-  expect(videoOf("2026-11-21T14:01:52.123Z")).toBe("reel-2026-11-21T14-01-52.123Z.mp4")
+test("each app's file name carries its build time without colons and its app, so three files never share a name", () => {
+  expect(videoOf("2026-11-21T14:01:52.123Z", "Instagram")).toBe("reel-2026-11-21T14-01-52.123Z-instagram.mp4")
+  expect(videoOf("2026-11-21T14:01:52.123Z", "YouTube Shorts")).toBe("reel-2026-11-21T14-01-52.123Z-youtube.mp4")
+  expect(videoOf("2026-11-21T14:01:52.123Z", "TikTok")).toBe("reel-2026-11-21T14-01-52.123Z-tiktok.mp4")
 })
 
 test("the download carries the Russian title encoded for filename* and a plain ASCII fallback", () => {
@@ -70,27 +73,46 @@ test("the download carries the Russian title encoded for filename* and a plain A
   expect(attachment("  ")).toBe("attachment; filename=\"reel.mp4\"; filename*=UTF-8''reel.mp4")
 })
 
+test("an app's download names its app, so three downloads of one reel do not overwrite each other", () => {
+  expect(attachment("Аванс", "TikTok")).toBe("attachment; filename=\"reel-tiktok.mp4\"; filename*=UTF-8''%D0%90%D0%B2%D0%B0%D0%BD%D1%81%20TikTok.mp4")
+  expect(attachment("", "YouTube Shorts")).toBe("attachment; filename=\"reel-youtube.mp4\"; filename*=UTF-8''reel%20YouTube%20Shorts.mp4")
+})
+
 test("the status shows whole percent while building, not a fraction", () => {
   expect(statusOf({ job: { state: "running", done: 0.426 }, cut: 30, face: "off" })).toBe("Студия собирает ролик: 42%")
   expect(statusOf({ job: { state: "idle" }, cut: 0, face: "off" })).toBe("В монтаже нет ни одного блока. Соберите блоки, и ролик можно будет собрать.")
 })
 
-test("with her face off and no inserts the levelled reel is the file itself, with no step that re-encodes her frames", () => {
-  expect(videoChain("/w", "off", false)).toEqual({ levelled: "/w/reel.mp4", steps: [] })
-})
-
-test("with her face off the inserts go on the levelled reel and no retouch step runs", () => {
-  expect(videoChain("/w", "off", true)).toEqual({ levelled: "/w/levelled.mp4", steps: [{ kind: "inserts", from: "/w/levelled.mp4", to: "/w/reel.mp4" }] })
-})
-
-test("with her face light the retouch writes the file itself, not a side file the build forgets", () => {
-  expect(videoChain("/w", "light", false)).toEqual({ levelled: "/w/levelled.mp4", steps: [{ kind: "face", from: "/w/levelled.mp4", to: "/w/reel.mp4" }] })
-})
-
-test("with her face light and inserts the face is retouched before the pictures go on, so no picture is retouched", () => {
-  expect(videoChain("/w", "light", true)).toEqual({
+test("with her face off and nothing drawn every app's file is the levelled reel itself, with no step that re-encodes her frames", () => {
+  expect(videoChain("/w", "off", false, ["Instagram", "TikTok"])).toEqual({
     levelled: "/w/levelled.mp4",
-    steps: [{ kind: "face", from: "/w/levelled.mp4", to: "/w/retouched.mp4" }, { kind: "inserts", from: "/w/retouched.mp4", to: "/w/reel.mp4" }]
+    face: undefined,
+    apps: [
+      { kind: "same", app: "Instagram", from: "/w/levelled.mp4", to: "/w/reel-instagram.mp4" },
+      { kind: "same", app: "TikTok", from: "/w/levelled.mp4", to: "/w/reel-tiktok.mp4" }
+    ]
+  })
+})
+
+test("with her face off the texts and inserts go on the levelled reel once per app and no retouch step runs", () => {
+  expect(videoChain("/w", "off", true, ["Instagram", "YouTube Shorts"])).toEqual({
+    levelled: "/w/levelled.mp4",
+    face: undefined,
+    apps: [
+      { kind: "finish", app: "Instagram", from: "/w/levelled.mp4", to: "/w/reel-instagram.mp4" },
+      { kind: "finish", app: "YouTube Shorts", from: "/w/levelled.mp4", to: "/w/reel-youtube.mp4" }
+    ]
+  })
+})
+
+test("with her face light the face is retouched once before the texts go on, so no picture is retouched and no app retouches again", () => {
+  expect(videoChain("/w", "light", true, ["Instagram", "TikTok"])).toEqual({
+    levelled: "/w/levelled.mp4",
+    face: { from: "/w/levelled.mp4", to: "/w/retouched.mp4" },
+    apps: [
+      { kind: "finish", app: "Instagram", from: "/w/retouched.mp4", to: "/w/reel-instagram.mp4" },
+      { kind: "finish", app: "TikTok", from: "/w/retouched.mp4", to: "/w/reel-tiktok.mp4" }
+    ]
   })
 })
 
@@ -100,7 +122,7 @@ test("the reel facts say which face setting the file was built with, not the one
 })
 
 test("a file built with another face setting says the face differs, not that the cut changed", () => {
-  const file = { made: "m", seconds: 30, size: 1, fresh: false, face: "off" as const }
+  const file = { made: "m", seconds: 30, apps: [{ app: "Instagram" as const, size: 1 }] as const, fresh: false, face: "off" as const }
   expect(staleText({ job: { state: "idle" }, cut: 30, face: "light", file }, false)).toBe("На вкладке «Внешность» выбрано другое лицо, чем в файле. Соберите ролик заново, чтобы файл совпал с выбором.")
   expect(staleText({ job: { state: "idle" }, cut: 30, face: "off", file }, false)).toBe("Монтаж изменился после сборки. Соберите ролик заново, чтобы файл совпал с монтажом.")
   expect(staleText({ job: { state: "idle" }, cut: 30, face: "light", file }, true)).toBe("Монтаж изменился после сборки. Соберите ролик заново, чтобы файл совпал с монтажом.")

@@ -4,7 +4,7 @@ import type { Span, Transcript } from "./plan.ts"
 import type { ShownWord } from "./subtitles.ts"
 import { answeredLines, answerOfText, MOST_LINES, type PlannedText, type TextAnswer, type TextLine } from "./texts.ts"
 import type { Clip, Edits } from "./timeline.ts"
-import { fitsArea, textAreaOf, type Rect, type TextArea } from "./zones.ts"
+import { fitsArea, textAreaOf, type Platform, type Rect, type TextArea } from "./zones.ts"
 
 export interface ShownText extends Span {
   readonly id: string
@@ -231,15 +231,15 @@ const shrunk = (size: number, ratio: number): number => Math.max(1, Math.floor(s
 const rightLimit = (area: TextArea, ink: Rect): number =>
   area.buttons !== undefined && ink.bottom > area.buttons.top ? area.buttons.left : area.box.right
 
-export const fitWord = (word: CaptionWord, ink: Rect, base: number): CaptionWord => {
-  const area = textAreaOf("Instagram")
+export const fitWord = (word: CaptionWord, ink: Rect, base: number, platform: Platform): CaptionWord => {
+  const area = textAreaOf(platform)
   if (fitsArea(ink, area)) return word
   const ratio = Math.min((540 - area.box.left) / (540 - ink.left), (rightLimit(area, ink) - 540) / (ink.right - 540))
   return { ...word, size: shrunk(word.size ?? base, ratio) }
 }
 
-export const fitPlate = (plate: ShownPlate, ink: Rect): ShownPlate => {
-  const area = textAreaOf("Instagram")
+export const fitPlate = (plate: ShownPlate, ink: Rect, platform: Platform): ShownPlate => {
+  const area = textAreaOf(platform)
   if (fitsArea(ink, area)) return plate
   const ratio = (rightLimit(area, ink) - area.box.left) / (ink.right - area.box.left)
   return { ...plate, size: shrunk(plate.size ?? PLATE.size, ratio) }
@@ -293,8 +293,8 @@ const plateEvents = (plate: ShownPlate, box: Rect): ReadonlyArray<string> => {
 
 export type CaptionPart = "words" | "texts" | "plate"
 
-export const assOf = (captions: Captions, parts: ReadonlyArray<CaptionPart> = ["words", "texts", "plate"]): string => {
-  const { box } = textAreaOf("Instagram")
+export const assOf = (captions: Captions, platform: Platform, parts: ReadonlyArray<CaptionPart> = ["words", "texts", "plate"]): string => {
+  const { box } = textAreaOf(platform)
   return [
     ...header(captions.look),
     ...(parts.includes("texts") ? captions.texts.flatMap((text) => textEvents(text, box, captions.title)) : []),

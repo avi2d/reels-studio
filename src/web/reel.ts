@@ -207,7 +207,7 @@ const show = (pane: Pane, view: ReelView): void => {
       ui.save.setAttribute("href", Api.reelDownloadUrl(pane.projectId, view.file.made))
       showLevelling(pane, view.file.levelling, view.file.seconds)
     }
-    ui.facts.textContent = `Длина ${formatLength(view.file.seconds)} · ${formatSize(view.file.size)} · собран ${madeAt(view.file.made)} · ${faceFact(view.file.face)}`
+    ui.facts.textContent = `Длина ${formatLength(view.file.seconds)} · ${formatSize(view.file.apps[0].size)} · собран ${madeAt(view.file.made)} · ${faceFact(view.file.face)}`
     ui.stale.hidden = state.busy || (view.file.fresh && !state.dirty)
     ui.stale.textContent = staleText(view, state.dirty)
   }
