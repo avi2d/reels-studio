@@ -26,7 +26,7 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/shared/captions.ts` | The key thoughts of `texts.json` in the cut, the reason each dropped one is not shown, and the subtitle file libass draws |
 | `src/server/captions.ts` | Reads `texts.json` for the page and the approved texts for the build, shrinks long subtitle words, and measures the ink against the box before the build |
 | `src/server/approval.ts` | Reads the saved yes and checks it against the plan and the on-screen texts |
-| `src/shared/rules.ts` | The format of `rules.json` and of the rule change, the studio's own values, and the rules the page lists with the pauses a change moved, used by the server and the page |
+| `src/shared/rules.ts` | The format of `rules.json` and of the rule change, the studio's own values, and the rules the page lists with the pauses and zooms a change moved, used by the server and the page |
 | `src/server/rules.ts` | Reads and writes the rules of a reel, the pinned rules and the last chat change, and undoes it |
 | `src/shared/reel.ts` | The state of a reel build and of the built file, used by the server and the page |
 | `src/shared/gather.ts` | When the studio asks the chat model to gather the blocks by itself |
