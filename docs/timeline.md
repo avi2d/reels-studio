@@ -148,7 +148,7 @@ The stage plays the built file and offers «Скачать».
 On «Ролики», the download requires four passing checks for the built file.
 The build records whether the texts fit Instagram's margins, no question remains in «Монтаж», and the cut runs no longer than 3:00.
 The studio checks loudness on the built file and finds the part in the cut it built.
-A file without recorded build checks stays playable but cannot be downloaded until rebuilt.
+A file without recorded build checks stays playable but cannot be downloaded until rebuilt, and «Ролики» says «Для скачивания соберите ролик заново.» next to it.
 Edits after a build affect «Собрать заново», not the download of the previous file.
 Each failed check names the fix, and «Исправить» opens «Монтаж» at the part when the check has one.
 If a text, question, or length check fails, the server refuses the build with the same sentence and HTTP 400.
@@ -429,7 +429,7 @@ Each video folder holds these next to `plan.json`:
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
 | `reel/reel-<stamp>-frame-<n>.jpg` | A frame of the built file for the sheet under the mask of the Instagram player |
 | `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |
-| `reel/reel.json` | The build time, the video file it published, the parts with their pushes, the crop window of each video, the inserts, a hash of the subtitles, key thoughts, subtitle look, title place and name plate as the person answered them, the face setting, the skin colour and gain of each video, the times of the sheet frames and the stretches where the buttons cover the face, and the measured loudness it holds, so the stage can tell whether the cut changed since |
+| `reel/reel.json` | The build time, the video file it published, the parts with their pushes, the crop window of each video, the inserts, a hash of the subtitles, key thoughts, subtitle look, title place and name plate as the person answered them, the face setting, the skin colour and gain of each video, the times of the sheet frames and the stretches where the buttons cover the face, `buildChecks` with the text, question and length checks at build time that decide the download, `loudnessPart` with the part named for a loudness jump in the built cut, and the measured loudness it holds, so the stage can tell whether the cut changed since |
 | `reel/sound.json` | The parts of the last checked cut with the heard clip inserts, its measured loudness before and after levelling, and the gain of each part over its source time, which the montage plays |
 | `reel/sound-work/` | The sound of each clip and the levelled sound while a check runs, removed when it ends |
 | `looks.json` | The face setting of the reel, `off` or `light`, the subtitle look, `brand`, `plate` or `example`, with its size, `normal` or `large`, and the name plate, shown or not, with its text, written when the person picks them |

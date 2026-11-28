@@ -7,6 +7,7 @@ import { button } from "./ui.ts"
 
 const SAVE_HINT = "На айфоне откройте скачанный файл и выберите «Сохранить видео»: ролик появится в «Фото», и Instagram его найдёт."
 const LISTEN = "Послушать до и после"
+const REBUILD_TO_DOWNLOAD = "Для скачивания соберите ролик заново."
 
 type Version = "before" | "after"
 
@@ -26,7 +27,7 @@ export const reelFile = (projectId: string): ReelFile => {
   const sound = h("p", { class: "done-sound" })
   const facts = h("p", { class: "hint" })
   const download = h("a", { class: "btn btn--main btn--start", download: "" }, icon("download"), "Скачать")
-  const closed = h("p", { class: "done-closed", hidden: true }, DOWNLOAD_CLOSED)
+  const closed = h("p", { class: "done-closed", hidden: true })
   const save = h("p", { class: "hint" }, SAVE_HINT)
   const node = h("div", { class: "done-file", hidden: true },
     h("div", { class: "done-viewer" }, player, listen),
@@ -65,7 +66,8 @@ export const reelFile = (projectId: string): ReelFile => {
       const downloadOpen = opensDownload(file.checks)
       download.hidden = !downloadOpen
       save.hidden = !downloadOpen
-      closed.hidden = downloadOpen || file.checks === undefined
+      closed.hidden = downloadOpen
+      closed.textContent = file.checks === undefined ? REBUILD_TO_DOWNLOAD : DOWNLOAD_CLOSED
       if (downloadOpen) download.href = Api.reelDownloadUrl(projectId, file.made)
       else download.removeAttribute("href")
       if (state.made !== file.made) load(file.made, "after")

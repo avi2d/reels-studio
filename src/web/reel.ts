@@ -116,6 +116,7 @@ interface ReelUi {
   readonly stale: HTMLParagraphElement
   readonly face: HTMLParagraphElement
   readonly save: ReturnType<typeof button>
+  readonly saveHint: HTMLParagraphElement
   readonly file: HTMLDivElement
   readonly make: ReturnType<typeof button>
   readonly cancel: ReturnType<typeof button>
@@ -203,6 +204,7 @@ const show = (pane: Pane, view: ReelView): void => {
   ui.file.hidden = view.file === undefined
   if (view.file !== undefined) {
     ui.save.hidden = !opensDownload(view.file.checks)
+    ui.saveHint.hidden = ui.save.hidden
     if (state.made !== view.file.made) {
       state.made = view.file.made
       playAfter(pane, view.file.made)
@@ -290,12 +292,13 @@ export const reelPane = (projectId: string, hooks: ReelHooks): {
   const stale = h("p", { class: "stale", hidden: true }, STALE)
   const face = h("p", { class: "face-setting" })
   const save = button("normal", { download: "" }, "Скачать")
-  const file = h("div", { class: "built", hidden: true }, player, h("div", { class: "built-facts" }, facts, unlevelled, chart, verdict, passages, numbers, save, h("p", { class: "muted" }, SAVE_HINT)))
+  const saveHint = h("p", { class: "muted" }, SAVE_HINT)
+  const file = h("div", { class: "built", hidden: true }, player, h("div", { class: "built-facts" }, facts, unlevelled, chart, verdict, passages, numbers, save, saveHint))
   const make = button("primary", {}, "Собрать ролик")
   const cancel = button("quiet", { hidden: true }, "Остановить сборку")
   const colour = h("section", { class: "card colour-card", hidden: true })
   const node = h("div", { class: "pane" }, h("section", { class: "card reel-card" }, h("h2", {}, "Готовый ролик"), h("p", { class: "muted" }, ABOUT), face, h("div", { class: "row" }, make, cancel), status, bar, stale, problem), file)
-  const pane: Pane = { projectId, hooks, state, ui: { status, bar, problem, player, facts, loudness, verdict, chart, measured, numbers, passages, unlevelled, stale, face, save, file, make, cancel, colour, node } }
+  const pane: Pane = { projectId, hooks, state, ui: { status, bar, problem, player, facts, loudness, verdict, chart, measured, numbers, passages, unlevelled, stale, face, save, saveHint, file, make, cancel, colour, node } }
   player.addEventListener("play", hooks.playing)
   player.addEventListener("timeupdate", () => {
     if (state.stopAt !== undefined && player.currentTime >= state.stopAt) {

@@ -74,6 +74,18 @@ test("a valid cut leaves the unchecked 3:30 file playable but does not offer its
   expect(await page.getByRole("link", { name: "Скачать", exact: true }).count()).toBe(0)
 }))
 
+test("a fresh file built before build checks asks for a rebuild instead of showing the current cut's passing checks", () => withPage(async (page) => {
+  const view = { ...ready, file } satisfies ReelView
+  await page.route("**/api/projects/review/reel", (route) => route.fulfill({ json: view }))
+  await open(page)
+  await page.getByText("Для скачивания соберите ролик заново.", { exact: true }).waitFor()
+  expect(await page.locator("video").isVisible()).toBe(true)
+  expect(await page.getByRole("link", { name: "Скачать", exact: true }).count()).toBe(0)
+  expect(await page.getByRole("button", { name: "Собрать заново", exact: true }).isEnabled()).toBe(true)
+  expect(await page.getByRole("region", { name: "Проверка перед скачиванием" }).isVisible()).toBe(false)
+  expect(await page.getByText("Скачать ролик можно, когда пройдены все проверки выше.", { exact: true }).count()).toBe(0)
+}))
+
 test("an offline idle poll does not leave an alert after the built reel reconnects", () => withPage(async (page) => {
   let polls = 0
   await page.route("**/api/projects/review/reel", async (route) => {
