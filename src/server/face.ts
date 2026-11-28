@@ -1,30 +1,18 @@
-import { Effect, FileSystem, Option, Schema } from "effect"
-import { Face } from "../shared/face.ts"
+import { Effect } from "effect"
+import type { Face } from "../shared/face.ts"
 import { retouchArgs, retouchedFrames } from "./media-commands.ts"
 import { tool } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
+import { looksOf, readLooks, updateLooks } from "./looks.ts"
 
-const FaceFile = Schema.fromJsonString(Schema.Struct({ face: Face }))
-const decodeFace = Schema.decodeUnknownOption(FaceFile)
-const encodeFace = Schema.encodeEffect(FaceFile)
-
-const faceFile = (dir: string): string => `${dir}/looks.json`
-
-// Only her own choice changes her face, so a missing or broken file reads as off.
-export const faceOf = (text: string | undefined): Face =>
-  text === undefined ? "off" : Option.match(decodeFace(text), { onNone: () => "off", onSome: (written) => written.face })
+export const faceOf = (text: string | undefined): Face => looksOf(text).face
 
 export const readFace = Effect.fnUntraced(function*(dir: string) {
-  const fs = yield* FileSystem.FileSystem
-  const file = faceFile(dir)
-  return faceOf((yield* fs.exists(file)) ? yield* fs.readFileString(file) : undefined)
+  return (yield* readLooks(dir)).face
 })
 
 export const writeFace = Effect.fnUntraced(function*(dir: string, face: Face) {
-  const fs = yield* FileSystem.FileSystem
-  const fresh = `${faceFile(dir)}.new`
-  yield* fs.writeFileString(fresh, yield* encodeFace({ face }))
-  yield* fs.rename(fresh, faceFile(dir))
+  yield* updateLooks(dir, (looks) => ({ ...looks, face }))
 })
 
 export interface Retouch {

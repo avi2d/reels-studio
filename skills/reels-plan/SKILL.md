@@ -18,7 +18,7 @@ A rule the person names in the chat, as «Rules» below says, changes at once an
 
 ## Order of work
 
-1. Look at what the project holds: list `source/` and `transcripts/`, and read `brief.md`, `plan.md` and `plan.json` when they exist.
+1. Look at what the project holds: list `source/` and `transcripts/`, and read `brief.md`, `plan.md`, `plan.json` and `example.json` when they exist.
    `brief.md` holds the brief the person wrote for this reel on the page. Never write it.
    The studio also tells you the apps the person chose for the reel and the files the person attached to the task.
 2. When `source/` is empty, ask the person to upload the video on the «Загруженные видео» page, which «Загрузить видео» on the main page opens, add it to this reel with «Выбрать видео», and stop.
@@ -215,6 +215,8 @@ The plan answers the brief and covers every stage the studio can do, in this ord
   Name only the chosen apps.
   Until the studio builds a file per player, the only difference it can name is where text may stand in each player.
 - Each file the person attached to the task, by its name: what it holds and where in the reel it goes.
+- When `example.json` exists, the example reel by its attachment name and its `took` lines quoted exactly, at most three.
+  Read those lines from `example.json`, including for an example attached in the chat.
 - Open questions for the person, only about the words on the screen, outside material and the face of the speaker.
 
 Write the plan as plain text with lines that start with a dash, since step «План» turns dash lines into a bulleted list.
