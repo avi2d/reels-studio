@@ -4,6 +4,7 @@ import * as Api from "../api.ts"
 import { h } from "../dom.ts"
 import { appOf, downloadLabel, factsOf, saveHintOf, type File } from "./done-model.ts"
 import { postPanel } from "./done-post.ts"
+import { sheetView } from "./done-sheet.ts"
 import { appTabs } from "./done-tabs.ts"
 import { icon } from "./icons.ts"
 import { button } from "./ui.ts"
@@ -38,10 +39,12 @@ export const reelFile = (projectId: string): ReelFile => {
   const post = postPanel(projectId)
   const downloadAll = button("main", "Скачать все", {}, "download")
   const tabs = appTabs((app) => { choose(app) })
+  const sheet = sheetView(projectId)
   const node = h("div", { class: "done-file", hidden: true }, tabs.node,
     h("div", { class: "done-pane", role: "tabpanel", "aria-label": "Ролик" },
       h("div", { class: "done-viewer" }, player),
-      h("div", { class: "done-about" }, facts, closed, download, saveHint, post.node)))
+      h("div", { class: "done-about" }, facts, closed, download, saveHint, post.node)),
+    sheet.node)
 
   // Switching the source restarts the video, so another app's file of the same build keeps its place and keeps playing.
   const load = (file: File, app: App): void => {
@@ -70,6 +73,7 @@ export const reelFile = (projectId: string): ReelFile => {
     else download.removeAttribute("href")
     saveHint.textContent = saveHintOf(app)
     post.show(app)
+    sheet.paint(file.made, file.sheets.find((one) => one.app === app))
   }
 
   const choose = (app: App): void => {

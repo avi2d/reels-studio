@@ -14,17 +14,17 @@ const spanText = (span: Covered): string => {
 }
 
 const coverSentence = (sheet: Sheet): string => {
-  if (sheet.covered === undefined) return "Студия не нашла лицо в собранном ролике и не проверила, закрывают ли его кнопки Instagram."
-  if (sheet.covered.length === 0) return "Кнопки Instagram нигде не закрывают лицо."
-  return `Кнопки Instagram закрывают лицо: ${sheet.covered.map(spanText).join(", ")}.`
+  if (sheet.covered === undefined) return `Студия не нашла лицо в собранном ролике и не проверила, закрывают ли его кнопки ${sheet.app}.`
+  if (sheet.covered.length === 0) return `Кнопки ${sheet.app} нигде не закрывают лицо.`
+  return `Кнопки ${sheet.app} закрывают лицо: ${sheet.covered.map(spanText).join(", ")}.`
 }
 
 const frame = (projectId: string, made: string, sheet: Sheet, time: number, index: number): HTMLElement => {
   const covered = isCovered(sheet.covered ?? [], time)
   return h("figure", { class: `done-frame${covered ? " done-frame--covered" : ""}` },
     h("div", { class: "done-frame__picture" },
-      h("img", { src: Api.reelFrameUrl(projectId, made, index), alt: `Кадр на ${formatLength(time)}`, loading: "lazy", decoding: "async" }),
-      h("div", { class: "done-zones", "aria-hidden": "true", style: styleOf("Instagram") },
+      h("img", { src: Api.reelFrameUrl(projectId, made, sheet.app, index), alt: `Кадр на ${formatLength(time)}`, loading: "lazy", decoding: "async" }),
+      h("div", { class: "done-zones", "aria-hidden": "true", style: styleOf(sheet.app) },
         ...BANDS.map((band) => h("div", { class: `done-zone done-zone--${band}` })))),
     h("figcaption", {}, covered ? `${formatLength(time)} · лицо под кнопками` : formatLength(time)))
 }
@@ -35,10 +35,10 @@ export interface SheetView {
 }
 
 export const sheetView = (projectId: string): SheetView => {
+  const title = h("h2", { id: "done-sheet-title" })
   const sentence = h("p", { class: "done-sheet__sentence" })
   const frames = h("div", { class: "done-sheet__frames" })
-  const node = h("section", { class: "done-sheet", "aria-labelledby": "done-sheet-title", hidden: true },
-    h("h2", { id: "done-sheet-title" }, "Кадры под кнопками Instagram"), sentence, frames)
+  const node = h("section", { class: "done-sheet", "aria-labelledby": "done-sheet-title", hidden: true }, title, sentence, frames)
   let painted = ""
   return {
     node,
@@ -48,6 +48,7 @@ export const sheetView = (projectId: string): SheetView => {
       const key = `${made}:${JSON.stringify(sheet)}`
       if (key === painted) return
       painted = key
+      title.textContent = `Кадры под кнопками ${sheet.app}`
       sentence.textContent = coverSentence(sheet)
       sentence.classList.toggle("done-sheet__sentence--warn", (sheet.covered ?? []).length > 0)
       frames.replaceChildren(...sheet.frames.map((time, index) => frame(projectId, made, sheet, time, index)))

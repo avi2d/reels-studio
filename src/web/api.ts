@@ -210,5 +210,5 @@ export const insertUrls = (id: string): InsertUrls => ({
   clipUrl: (name: string): string => clipUrl(id, name)
 })
 
-export const reelFrameUrl = (id: string, made: string, index: number): string =>
-  `/api/projects/${id}/reel/frame?made=${encodeURIComponent(made)}&index=${index}`
+export const reelFrameUrl = (id: string, made: string, app: App, index: number): string =>
+  `/api/projects/${id}/reel/frame?made=${encodeURIComponent(made)}&app=${APP_FILE_NAME[app]}&index=${index}`

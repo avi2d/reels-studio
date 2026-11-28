@@ -13,13 +13,14 @@ import { Projects } from "./projects.ts"
 import { sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
 import { buildReel, readReel } from "./reel.ts"
-import { reelDownloadAt, reelFrameAt, reelPictureAt, reelVideoAt, type Picture, type ReelVersion } from "./reel-record.ts"
+import { reelDownloadAt, reelFrameAt, reelPictureAt, reelVideoAt, type Picture, type ReelVersion, type SheetFrame } from "./reel-record.ts"
 import { readChecks } from "./reel-checks.ts"
 import { buildFailures, checkSentence, DOWNLOAD_CLOSED, type BuildChecks } from "../shared/reel-checks.ts"
 import { noFaceOf, runTrial } from "./retouch.ts"
 import { checkSound, readSoundCheck, soundKeyOf } from "./sound-check.ts"
 import { readCut, readCutAndMontage, readEdits, readTimeline, type Cut } from "./timeline-files.ts"
 import { partsOf, secondsOf } from "./media-commands.ts"
+import { readApps } from "./task-choices.ts"
 
 interface Running {
   readonly dir: string
@@ -157,8 +158,9 @@ const checkedCut = Effect.fnUntraced(function*(dir: string) {
   const names = yield* sourceNames(dir)
   const edits = yield* readEdits(dir)
   const { cut, montage } = yield* readCutAndMontage(dir, names, edits)
-  const checks = yield* readChecks(dir, cut, montage, secondsOf(partsOf(cut.clips)))
-  return { cut, checks }
+  const apps = yield* readApps(dir)
+  const checks = yield* readChecks(dir, cut, montage, secondsOf(partsOf(cut.clips)), apps)
+  return { cut, apps, checks }
 })
 
 const buildProblem = (checks: BuildChecks): string | undefined => {
@@ -168,10 +170,10 @@ const buildProblem = (checks: BuildChecks): string | undefined => {
 }
 
 const checkedBuild = Effect.fnUntraced(function*(dir: string, onDone: Progress) {
-  const { cut, checks } = yield* checkedCut(dir)
+  const { cut, apps, checks } = yield* checkedCut(dir)
   const problem = buildProblem(checks)
   if (problem !== undefined) return yield* badRequest(problem)
-  yield* buildReel(dir, cut, checks, onDone)
+  yield* buildReel(dir, cut, apps, checks, onDone)
 })
 
 const step = Effect.fnUntraced(function*(failures: Failures, tried: Tried, work: Ref.Ref<Work>) {
@@ -205,8 +207,8 @@ const stopReel = Effect.fnUntraced(function*(work: Ref.Ref<Work>, reels: Reels, 
 const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, reels: Reels, work: Ref.Ref<Work>, context: Context.Context<Needs>) => {
   const reelOf = Effect.fnUntraced(function*(dir: string) {
     const job = (yield* Ref.get(reels)).get(dir) ?? { state: "idle" }
-    const { cut, checks } = yield* checkedCut(dir)
-    return yield* readReel(dir, cut, job, checks)
+    const { cut, apps, checks } = yield* checkedCut(dir)
+    return yield* readReel(dir, cut, apps, job, checks)
   })
 
   const reel = Effect.fn("Media.reel")(function*(id: string) {
@@ -239,8 +241,8 @@ const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, r
     }
   }, orBroken, Effect.provideContext(context))
 
-  const reelFrame = Effect.fn("Media.reelFrame")(function*(id: string, made: string, index: number) {
-    const target = yield* reelFrameAt(yield* folder(id), made, index)
+  const reelFrame = Effect.fn("Media.reelFrame")(function*(id: string, frame: SheetFrame) {
+    const target = yield* reelFrameAt(yield* folder(id), frame)
     if (target === undefined) return yield* notFound("Такого кадра нет")
     return target
   }, orBroken, Effect.provideContext(context))
@@ -294,7 +296,7 @@ export class Media extends Context.Service<Media, {
   readonly reelFile: (id: string, made: string, version: ReelVersion, app: App | undefined) => Effect.Effect<string, ApiError>
   readonly reelDownload: (id: string, made: string, app: App | undefined) => Effect.Effect<string, ApiError>
   readonly reelPicture: (id: string, picture: Picture) => Effect.Effect<string, ApiError>
-  readonly reelFrame: (id: string, made: string, index: number) => Effect.Effect<string, ApiError>
+  readonly reelFrame: (id: string, frame: SheetFrame) => Effect.Effect<string, ApiError>
   readonly sound: (id: string) => Effect.Effect<SoundCheck, ApiError>
   readonly withoutWork: <A, E, R>(dir: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 } & TrialHandlers>()("reels-studio/Media") {

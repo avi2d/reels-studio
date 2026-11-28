@@ -131,7 +131,7 @@ export const previewDb = (parts: ReadonlyArray<PartGains>, video: string, time: 
 }
 
 // The covered stretches are missing when the studio could not look for the face in the file.
-export const Sheet = Schema.Struct({ frames: Schema.Array(Schema.Finite), covered: Schema.optionalKey(Schema.Array(Covered)) })
+export const Sheet = Schema.Struct({ app: App, frames: Schema.Array(Schema.Finite), covered: Schema.optionalKey(Schema.Array(Covered)) })
 export type Sheet = typeof Sheet.Type
 
 export const AppSize = Schema.Struct({ app: App, size: Schema.Finite })
@@ -151,7 +151,7 @@ export const ReelView = Schema.Struct({
     colour: Schema.optionalKey(ColourView),
     levelling: Schema.optionalKey(Levelling),
     checks: Schema.optionalKey(ReelChecks),
-    sheet: Schema.optionalKey(Sheet)
+    sheets: Schema.Array(Sheet)
   }))
 })
 export type ReelView = typeof ReelView.Type

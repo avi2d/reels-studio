@@ -1,4 +1,6 @@
-import { Effect, FileSystem } from "effect"
+import { Array as Arr, Effect, FileSystem } from "effect"
+import type { App } from "../shared/brief.ts"
+import type { Captions } from "../shared/captions.ts"
 import { isOpen, type Cut as MontageCut } from "../shared/montage-cut.ts"
 import { judgeSound, jumpsOf, type Levelling } from "../shared/reel.ts"
 import { UNBUILT_LOUDNESS, type BuildChecks, type LoudnessCheck, type PlacesCheck, type TextsCheck } from "../shared/reel-checks.ts"
@@ -23,22 +25,28 @@ const namedText = (montage: MontageCut | undefined, id: string | undefined): { r
   return named.part === undefined ? { text: named.name } : { text: named.name, part: named.part }
 }
 
-const textsCheck = Effect.fnUntraced(function*(dir: string, cut: Cut, montage: MontageCut | undefined, seconds: number) {
-  if (cut.captions.texts.length === 0) return { id: "texts", state: "inside" } satisfies TextsCheck
-  const key = `${dir}:${seconds}:${Bun.hash(JSON.stringify([cut.captions.texts, cut.captions.look, cut.captions.title]))}`
+const appInk = Effect.fnUntraced(function*(dir: string, captions: Captions, seconds: number, app: App) {
+  const key = `${dir}:${app}:${seconds}:${Bun.hash(JSON.stringify([captions.texts, captions.look, captions.title]))}`
   const fs = yield* FileSystem.FileSystem
-  const ink = measured.get(key) ?? (yield* Effect.gen(function*() {
+  return measured.get(key) ?? (yield* Effect.gen(function*() {
     const work = yield* fs.makeTempDirectory({ prefix: "reel-check-" })
-    return yield* firstTextOutside(work, cut.captions, seconds).pipe(
+    return yield* firstTextOutside(work, captions, seconds, app).pipe(
       Effect.ensuring(fs.remove(work, { recursive: true }).pipe(Effect.catch((error) => Effect.logError("the text check files were not removed", error)))),
       Effect.map((outside) => remember(key, outside))
     )
   }).pipe(
-    Effect.catch((error) => Effect.as(Effect.logError("the on-screen texts were not measured", error), "unmeasured" as const))
+    Effect.catch((error) => Effect.as(Effect.logError("the on-screen texts were not measured", app, error), "unmeasured" as const))
   ))
-  return ink === "inside" || ink === "unmeasured"
-    ? { id: "texts", state: ink } satisfies TextsCheck
-    : { id: "texts", state: "outside", ...namedText(montage, ink.id) } satisfies TextsCheck
+})
+
+const textsCheck = Effect.fnUntraced(function*(dir: string, cut: Cut, montage: MontageCut | undefined, seconds: number, apps: Arr.NonEmptyReadonlyArray<App>) {
+  if (cut.captions.texts.length === 0) return { id: "texts", state: "inside", apps } satisfies TextsCheck
+  for (const app of apps) {
+    const ink = yield* appInk(dir, cut.captions, seconds, app)
+    if (ink === "unmeasured") return { id: "texts", state: ink, apps } satisfies TextsCheck
+    if (ink !== "inside") return { id: "texts", state: "outside", apps, app, ...namedText(montage, ink.id) } satisfies TextsCheck
+  }
+  return { id: "texts", state: "inside", apps } satisfies TextsCheck
 })
 
 const placesCheck = (montage: MontageCut | undefined): PlacesCheck => {
@@ -58,9 +66,9 @@ export const loudnessCheck = (levelling: Levelling | undefined, part: string | u
   return part === undefined ? { id: "loudness", state: "heard", level } : { id: "loudness", state: "heard", level, part }
 }
 
-export const readChecks = Effect.fnUntraced(function*(dir: string, cut: Cut, montage: MontageCut | undefined, seconds: number) {
+export const readChecks = Effect.fnUntraced(function*(dir: string, cut: Cut, montage: MontageCut | undefined, seconds: number, apps: Arr.NonEmptyReadonlyArray<App>) {
   return {
-    texts: yield* textsCheck(dir, cut, montage, seconds),
+    texts: yield* textsCheck(dir, cut, montage, seconds, apps),
     places: placesCheck(montage),
     length: { id: "length", seconds }
   } satisfies BuildChecks

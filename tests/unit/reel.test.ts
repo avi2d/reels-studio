@@ -123,7 +123,7 @@ test("the reel facts say which face setting the file was built with, not the one
 })
 
 test("a file built with another face setting says the face differs, not that the cut changed", () => {
-  const file = { made: "m", seconds: 30, apps: [{ app: "Instagram" as const, size: 1 }] as const, fresh: false, face: "off" as const }
+  const file = { made: "m", seconds: 30, apps: [{ app: "Instagram" as const, size: 1 }] as const, fresh: false, face: "off" as const, sheets: [] }
   expect(staleText({ job: { state: "idle" }, cut: 30, face: "light", checks: PASSING, file }, false)).toBe("На вкладке «Внешность» выбрано другое лицо, чем в файле. Соберите ролик заново, чтобы файл совпал с выбором.")
   expect(staleText({ job: { state: "idle" }, cut: 30, face: "off", checks: PASSING, file }, false)).toBe("Монтаж изменился после сборки. Соберите ролик заново, чтобы файл совпал с монтажом.")
   expect(staleText({ job: { state: "idle" }, cut: 30, face: "light", checks: PASSING, file }, true)).toBe("Монтаж изменился после сборки. Соберите ролик заново, чтобы файл совпал с монтажом.")

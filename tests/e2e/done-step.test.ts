@@ -6,7 +6,7 @@ import type { ReelView } from "../../src/shared/reel.ts"
 let browser: Browser
 let server: ReturnType<typeof Bun.serve>
 
-const file = { made: "2026-01-01T00:00:00.000Z", seconds: 7, apps: [{ app: "Instagram", size: 1000 }], fresh: true, face: "off" } satisfies NonNullable<ReelView["file"]>
+const file = { made: "2026-01-01T00:00:00.000Z", seconds: 7, apps: [{ app: "Instagram", size: 1000 }], fresh: true, face: "off", sheets: [] } satisfies NonNullable<ReelView["file"]>
 const unbuilt = { job: { state: "idle" }, cut: 7, face: "off", checks: PASSING } satisfies ReelView
 const ready = { ...unbuilt, file: { ...file, checks: PASSING } } satisfies ReelView
 const offline = "Нет связи со студией. Проверьте Wi-Fi."

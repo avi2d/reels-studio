@@ -6,7 +6,6 @@ import * as Api from "../api.ts"
 import { h } from "../dom.ts"
 import { checkListView, checkRows } from "./done-checks.ts"
 import { reelFile } from "./done-file.ts"
-import { sheetView } from "./done-sheet.ts"
 import { failureText, headingOf, phaseOf, progressOf, type Busy, type File, type Phase } from "./done-model.ts"
 import { icon } from "./icons.ts"
 import { button } from "./ui.ts"
@@ -56,12 +55,11 @@ export const doneStep = (projectId: string): DoneStep => {
   const checks = checkListView(projectId)
   const rebuildFailures = checkRows(projectId)
   const file = reelFile(projectId)
-  const sheet = sheetView(projectId)
   const build = button("main", "Собрать ролик")
   const blocked = h("p", { class: "hint", hidden: true }, BLOCKED)
   const actions = h("div", { class: "done-actions" }, file.downloadAll, build, blocked)
   const body = h("div", { class: "body body--done" },
-    h("div", { class: "head" }, title), progress.node, problem, empty, stale, checks.node, file.node, sheet.node, rebuildFailures.node, actions)
+    h("div", { class: "head" }, title), progress.node, problem, empty, stale, checks.node, file.node, rebuildFailures.node, actions)
 
   const paint = (view: ReelView): void => {
     const phase = phaseOf(view)
@@ -76,7 +74,6 @@ export const doneStep = (projectId: string): DoneStep => {
     checks.node.hidden = phase.kind === "empty" || phase.kind === "building" || (built !== undefined && built.checks === undefined)
     checks.paint(built?.checks ?? { ...view.checks, loudness: UNBUILT_LOUDNESS })
     rebuildFailures.paint(built === undefined ? [] : failures)
-    sheet.paint(built?.made ?? "", built?.sheet)
     actions.hidden = phase.kind === "building" || phase.kind === "empty"
     state.blocked = failures.length > 0
     build.disabled = state.blocked

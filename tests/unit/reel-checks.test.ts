@@ -41,7 +41,14 @@ const lowRight = { x: 0.48, y: 0.6, size: 0.15 }
 
 test("a face low on the right is under the Instagram buttons and a face high in the middle is not", () => {
   const gaze = { step: 0.5, samples: [], heads: [middle, lowRight, lowRight, middle, null] }
-  expect(coveredSpans(gaze, 2.5)).toEqual([{ from: 0.5, to: 1.5 }])
+  expect(coveredSpans(gaze, 2.5, "Instagram")).toEqual([{ from: 0.5, to: 1.5 }])
+})
+
+test("a face just above Instagram's button column is under TikTok's taller one, so a TikTok file is not judged by Instagram's buttons", () => {
+  const raised = { x: 0.45, y: 0.38, size: 0.1 }
+  const gaze = { step: 0.5, samples: [], heads: [raised, raised] }
+  expect(coveredSpans(gaze, 1, "Instagram")).toEqual([])
+  expect(coveredSpans(gaze, 1, "TikTok")).toEqual([{ from: 0, to: 1 }])
 })
 
 test("every covered stretch gets a frame on the sheet, not only the evenly spaced ones", () => {

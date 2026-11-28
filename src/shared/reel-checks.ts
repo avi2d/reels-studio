@@ -1,13 +1,15 @@
 import { Schema } from "effect"
+import { App } from "./brief.ts"
 
 // Instagram takes a reel of up to three minutes.
 export const LONGEST_REEL = 180
 
 const Part = Schema.optionalKey(Schema.String)
+const CheckedApps = Schema.NonEmptyArray(App)
 
 export const TextsCheck = Schema.Union([
-  Schema.Struct({ id: Schema.Literal("texts"), state: Schema.Literals(["inside", "unmeasured"]) }),
-  Schema.Struct({ id: Schema.Literal("texts"), state: Schema.Literal("outside"), text: Schema.String, part: Part })
+  Schema.Struct({ id: Schema.Literal("texts"), state: Schema.Literals(["inside", "unmeasured"]), apps: CheckedApps }),
+  Schema.Struct({ id: Schema.Literal("texts"), state: Schema.Literal("outside"), apps: CheckedApps, app: App, text: Schema.String, part: Part })
 ])
 export type TextsCheck = typeof TextsCheck.Type
 
@@ -59,9 +61,12 @@ const clock = (seconds: number, round: (value: number) => number = Math.round): 
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`
 }
 
+const appList = (apps: ReadonlyArray<App>): string =>
+  apps.length < 2 ? apps.join("") : `${apps.slice(0, -1).join(", ")} и ${apps.at(-1)}`
+
 export const checkTitle = (check: ReelCheck): string => {
   switch (check.id) {
-    case "texts": return "Надписи в полях Instagram"
+    case "texts": return `Надписи в полях ${appList(check.apps)}`
     case "places": return "Вопросы в монтаже"
     case "length": return `Длина до ${clock(LONGEST_REEL)}`
     case "loudness": return "Громкость"
@@ -71,7 +76,7 @@ export const checkTitle = (check: ReelCheck): string => {
 export const checkSentence = (check: ReelCheck): string => {
   switch (check.id) {
     case "texts":
-      if (check.state === "outside") return `Надпись «${check.text}» выходит за поля Instagram. Сократите её на шаге «Монтаж».`
+      if (check.state === "outside") return `Надпись «${check.text}» выходит за поля ${check.app}. Сократите её на шаге «Монтаж».`
       return check.state === "inside" ? "Все надписи внутри полей." : "Студия не смогла проверить надписи. Подробности в журнале студии. Откройте шаг заново."
     case "places":
       return check.open === 0 ? "Вопросов не осталось." : `В монтаже остались вопросы: ${check.open}. Ответьте на них на шаге «Монтаж».`

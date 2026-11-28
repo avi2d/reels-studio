@@ -149,16 +149,18 @@ The «Внешность» stage shows them side by side under the skin and eye 
 
 The stage plays the built file and offers «Скачать».
 On «Ролики», the download requires four passing checks for the built file.
-The build records whether the texts fit Instagram's margins, no question remains in «Монтаж», and the cut runs no longer than 3:00.
+The build records whether the texts fit the margins of each chosen app, no question remains in «Монтаж», and the cut runs no longer than 3:00.
 The studio checks loudness on the built file and finds the part in the cut it built.
 A file without recorded build checks stays playable but cannot be downloaded until rebuilt, and «Ролики» says «Для скачивания соберите ролик заново.» next to it.
 Edits after a build affect «Собрать заново», not the download of the previous file.
 Each failed check names the fix, and «Исправить» opens «Монтаж» at the part when the check has one.
 If a text, question, or length check fails, the server refuses the build with the same sentence and HTTP 400.
-The text check draws the texts as the build does and keeps the result until the inputs to the draw change.
-After a build, the step shows up to nine frames under an Instagram player mask.
-Each stretch where the buttons cover the face gets a frame from its middle first, and up to six evenly spaced frames fill the rest.
-It warns with the times when the buttons cover the face, measured on the built 1080 by 1920 file.
+The text check draws the texts in each chosen app's zone as that app's build does, names the app whose margins a text leaves, and keeps each result until the app or the inputs to the draw change.
+The chosen apps are read once when the build starts, so the recorded checks and the files come from the same choice.
+After a build, each app's tab shows up to nine frames of that app's file under that app's player mask.
+The middles of up to nine stretches where that app's buttons cover the face come first, and up to six evenly spaced frames fill the rest.
+It warns with the times when that app's buttons cover the face, measured on that app's built 1080 by 1920 file.
+A sheet from a build that did not record its app is not shown.
 The stage names the measured loudness of the built file with a plain verdict word.
 It says when the peaks stay clean.
 A chart shows the 3 s short-term loudness over time before and after the levelling, with the target as a line and the jumps marked.
@@ -430,9 +432,9 @@ Each video folder holds these next to `plan.json`:
 | `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses, the subtitle corrections and the answers to the places to check, to the inserts, to the texts and to the zooms |
 | `reel/reel-<stamp>-<app>.mp4` | The published reel video of one app, `instagram`, `youtube` or `tiktok`, named by its build time |
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
-| `reel/reel-<stamp>-frame-<n>.jpg` | A frame of the built file for the sheet under the mask of the Instagram player |
+| `reel/reel-<stamp>-frame-<app>-<n>.jpg` | A frame of the app's built file for the sheet under the mask of that app's player |
 | `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |
-| `reel/reel.json` | The build time, the video file it published for each app, the parts with their pushes, the crop window of each video, the inserts, a hash of the subtitles, key thoughts, subtitle look, title place and name plate as the person answered them, the face setting, the skin colour and gain of each video, the times of the sheet frames and the stretches where the buttons cover the face, `buildChecks` with the text, question and length checks at build time that decide the download, `loudnessPart` with the part named for a loudness jump in the built cut, and the measured loudness it holds, so the stage can tell whether the cut changed since |
+| `reel/reel.json` | The build time, the video file it published for each app, the parts with their pushes, the crop window of each video, the inserts, a hash of the subtitles, key thoughts, subtitle look, title place and name plate as the person answered them, the face setting, the skin colour and gain of each video, `sheets` with, for each app, the times of its sheet frames and the stretches where its buttons cover the face, `buildChecks` with the text, question and length checks at build time that decide the download, `loudnessPart` with the part named for a loudness jump in the built cut, and the measured loudness it holds, so the stage can tell whether the cut changed since |
 | `reel/sound.json` | The parts of the last checked cut with the heard clip inserts, its measured loudness before and after levelling, and the gain of each part over its source time, which the montage plays |
 | `reel/sound-work/` | The sound of each clip and the levelled sound while a check runs, removed when it ends |
 | `posts.json` | The caption and hashtags the person wrote for each app on «Ролики», so choosing an app again brings its text back |

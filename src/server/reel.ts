@@ -18,7 +18,6 @@ import type { BuildChecks } from "../shared/reel-checks.ts"
 import { loudnessPartOf } from "./reel-checks.ts"
 import { layFrames, moveFrames } from "./reel-sheet.ts"
 import { concatParts, levelSound, partFileOf, renderedOf, SOUND_STEPS } from "./reel-sound.ts"
-import { readApps } from "./task-choices.ts"
 import { colourJoins, coloursOf, gainOf, measureSkin } from "./skin.ts"
 import type { Cut } from "./timeline-files.ts"
 import {
@@ -32,7 +31,7 @@ const sweepReel = Effect.fnUntraced(function*(dir: string) {
   const pictures = record?.colour === undefined
     ? []
     : Array.from({ length: record.colour.joins }, (_, index) => [pictureOf(record.made, index + 1, "before"), pictureOf(record.made, index + 1, "after")]).flat()
-  const frames = record?.sheet?.frames.map((_, index) => frameOf(record.made, index)) ?? []
+  const frames = record?.sheets.flatMap((sheet) => sheet.frames.map((_, index) => frameOf(record.made, sheet.app, index))) ?? []
   const kept = new Set<string | undefined>([...record?.files.map((file) => file.video) ?? [], record?.levelling === undefined ? undefined : beforeOf(record.made), ...pictures, ...frames])
   if (!(yield* fs.exists(`${dir}/reel`))) return
   yield* Effect.forEach(yield* fs.readDirectory(`${dir}/reel`), (name) =>
@@ -190,14 +189,13 @@ const freshWork = Effect.fnUntraced(function*(dir: string) {
   yield* sweepReel(dir)
 })
 
-const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, buildChecks: BuildChecks, onAll: (share: number) => Effect.Effect<void>) {
+const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, apps: Arr.NonEmptyReadonlyArray<App>, buildChecks: BuildChecks, onAll: (share: number) => Effect.Effect<void>) {
   const onDone = (share: number): Effect.Effect<void> => onAll(share * (1 - SHEET_SHARE))
   const place = reelPlaces(dir)
   const parts = partsOf(cut.clips)
   const total = secondsOf(parts)
   const pictures = yield* Effect.forEach(cut.inserts, (insert) => insertLayerOf(dir, insert))
   const face = yield* readFace(dir)
-  const apps = yield* readApps(dir)
   const finishing = pictures.length > 0 || hasCaptions(cut.captions)
   const insertsShare = finishing ? INSERTS_SHARE : 0
   const faceShare = face === "light" ? FACE_SHARE : 0
@@ -214,8 +212,9 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, buildCheck
   const frames = parts.reduce((sum, part) => sum + part.frames, 0)
   if (chain.face !== undefined) yield* retouchStep(place.work, chain.face, frames, (share) => onDone(partsShare + SOUND_SHARE + faceShare * share))
   yield* finishApps(place.work, chain.apps, captions, pictures, total, { from: 1 - insertsShare, share: insertsShare }, onDone)
-  const sheetFile = chain.apps.find((step) => step.app === "Instagram") ?? chain.apps[0]
-  const sheet = yield* layFrames(place.work, sheetFile.to, total, (share) => onAll(1 - SHEET_SHARE + SHEET_SHARE * share))
+  const sheetShare = SHEET_SHARE / chain.apps.length
+  const sheets = yield* Effect.forEach(chain.apps, (step, index) =>
+    layFrames(place.work, step.app, step.to, total, (share) => onAll(1 - SHEET_SHARE + sheetShare * (index + share))))
   const made = DateTime.formatIso(yield* DateTime.now)
   const loudnessPart = loudnessPartOf(levelling, total, onFrames(cut.clips))
   const record = {
@@ -230,14 +229,14 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, buildCheck
     levelling,
     buildChecks,
     ...(loudnessPart === undefined ? {} : { loudnessPart }),
-    sheet
+    sheets
   }
   yield* publishPictures(dir, made, joins)
-  yield* moveFrames(place.work, sheet, (index) => place.video(frameOf(made, index)))
+  for (const sheet of sheets) yield* moveFrames(place.work, sheet, (index) => place.video(frameOf(made, sheet.app, index)))
   yield* publish(dir, record)
 })
 
-export const buildReel = Effect.fn("Reel.build")(function*(dir: string, cut: Cut, buildChecks: BuildChecks, onDone: (share: number) => Effect.Effect<void>) {
+export const buildReel = Effect.fn("Reel.build")(function*(dir: string, cut: Cut, apps: Arr.NonEmptyReadonlyArray<App>, buildChecks: BuildChecks, onDone: (share: number) => Effect.Effect<void>) {
   const fs = yield* FileSystem.FileSystem
   const cleanup = Effect.andThen(
     fs.remove(reelPlaces(dir).work, { recursive: true, force: true }).pipe(
@@ -247,7 +246,7 @@ export const buildReel = Effect.fn("Reel.build")(function*(dir: string, cut: Cut
       Effect.catch((error) => Effect.logError("the unpublished reel video was not removed", error))
     )
   )
-  yield* encodeReel(dir, cut, buildChecks, onDone).pipe(Effect.ensuring(cleanup))
+  yield* encodeReel(dir, cut, apps, buildChecks, onDone).pipe(Effect.ensuring(cleanup))
 })
 
 const colourView = (colour: Colour): ColourView => ({
@@ -256,7 +255,7 @@ const colourView = (colour: Colour): ColourView => ({
   unmeasured: colour.videos.filter((video) => video.state === "unmeasured").length
 })
 
-export const readReel = Effect.fnUntraced(function*(dir: string, cut: Cut, job: ReelView["job"], checks: BuildChecks) {
+export const readReel = Effect.fnUntraced(function*(dir: string, cut: Cut, apps: ReadonlyArray<App>, job: ReelView["job"], checks: BuildChecks) {
   const fs = yield* FileSystem.FileSystem
   const parts = partsOf(cut.clips)
   const seconds = secondsOf(parts)
@@ -267,7 +266,6 @@ export const readReel = Effect.fnUntraced(function*(dir: string, cut: Cut, job: 
   const { record } = published
   const checked = fileChecks(record)
   const crops = yield* readCrops(dir, parts)
-  const apps = yield* readApps(dir)
   const sameApps = apps.length === record.files.length && apps.every((app, index) => record.files[index]?.app === app)
   const file = {
     made: record.made,
@@ -278,7 +276,7 @@ export const readReel = Effect.fnUntraced(function*(dir: string, cut: Cut, job: 
     ...(record.colour === undefined ? {} : { colour: colourView(record.colour) }),
     ...(record.levelling === undefined ? {} : { levelling: record.levelling }),
     ...(checked === undefined ? {} : { checks: checked }),
-    ...(record.sheet === undefined ? {} : { sheet: record.sheet })
+    sheets: record.sheets
   }
   return { job, cut: seconds, face, checks, file } satisfies ReelView
 })

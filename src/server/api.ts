@@ -249,7 +249,7 @@ const reel = Layer.mergeAll(
   }))),
   HttpRouter.add("GET", "/api/projects/:id/reel/frame", (request) => reply(Effect.gen(function*() {
     const media = yield* Media
-    const target = yield* media.reelFrame(yield* param("id"), madeOf(request), yield* frameOf(request))
+    const target = yield* media.reelFrame(yield* param("id"), yield* frameOf(request))
     return yield* sendFile(target, "image/jpeg", request.headers["range"])
   }))),
   HttpRouter.add("GET", "/api/projects/:id/reel/download", (request) => reply(Effect.gen(function*() {

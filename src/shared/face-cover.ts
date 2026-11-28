@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import type { App } from "./brief.ts"
 import type { Gaze, Head } from "./timeline.ts"
 import { FRAME, overlaps, textAreaOf, type Rect } from "./zones.ts"
 
@@ -22,8 +23,8 @@ export const Covered = Schema.Struct({ from: Schema.Finite, to: Schema.Finite })
 export type Covered = typeof Covered.Type
 
 // The heads must come from the built 1080 by 1920 file, whose height is the unit of every head.
-export const coveredSpans = (gaze: Gaze, seconds: number): ReadonlyArray<Covered> => {
-  const buttons = textAreaOf("Instagram").buttons
+export const coveredSpans = (gaze: Gaze, seconds: number, app: App): ReadonlyArray<Covered> => {
+  const buttons = textAreaOf(app).buttons
   if (buttons === undefined) return []
   const spans: Array<Covered> = []
   let start: number | undefined

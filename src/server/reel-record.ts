@@ -34,7 +34,7 @@ const recordFields = {
   levelling: Schema.optionalKey(Levelling),
   buildChecks: Schema.optionalKey(BuildChecks),
   loudnessPart: Schema.optionalKey(Schema.String),
-  sheet: Schema.optionalKey(Sheet)
+  sheets: Schema.Array(Sheet).pipe(Schema.withDecodingDefaultKey(Effect.succeed([])))
 }
 export const Record = Schema.Struct({ ...recordFields, files: Schema.NonEmptyArray(AppFile) })
 export type Record = typeof Record.Type
@@ -80,7 +80,7 @@ export const pictureName = (join: number, side: PictureSide): string => `join-${
 
 export const pictureOf = (made: string, join: number, side: PictureSide): string => `${stemOf(made)}-${pictureName(join, side)}`
 
-export const frameOf = (made: string, index: number): string => `${stemOf(made)}-${frameName(index)}`
+export const frameOf = (made: string, app: App, index: number): string => `${stemOf(made)}-${frameName(app, index)}`
 
 export const recordOf = Effect.fnUntraced(function*(dir: string) {
   const fs = yield* FileSystem.FileSystem
@@ -132,8 +132,14 @@ export const reelDownloadAt = Effect.fnUntraced(function*(dir: string, made: str
   return opensDownload(fileChecks(reel.record)) ? { state: "ready", target: file.target } as const : { state: "closed" } as const
 })
 
-export const reelFrameAt = (dir: string, made: string, index: number): ReturnType<typeof builtFileAt> =>
-  builtFileAt(dir, frameOf(made, index))
+export interface SheetFrame {
+  readonly made: string
+  readonly app: App
+  readonly index: number
+}
+
+export const reelFrameAt = (dir: string, frame: SheetFrame): ReturnType<typeof builtFileAt> =>
+  builtFileAt(dir, frameOf(frame.made, frame.app, frame.index))
 
 export interface Picture {
   readonly made: string

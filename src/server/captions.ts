@@ -1,6 +1,8 @@
 import { Data, Effect, FileSystem, Option, Path, Schema } from "effect"
 import { assOf, fitPlate, fitWord, hasCaptions, NO_CAPTIONS, plateOf, shownTexts, wordLookOf, type CaptionPart, type Captions } from "../shared/captions.ts"
+import type { App } from "../shared/brief.ts"
 import type { Transcript } from "../shared/plan.ts"
+import { APP_FILE_NAME } from "../shared/reel.ts"
 import { correctedWord, subtitleWords } from "../shared/subtitles.ts"
 import { TextsFile, type PlannedTexts } from "../shared/texts.ts"
 import type { Block, Clip, Edits } from "../shared/timeline.ts"
@@ -92,8 +94,8 @@ const outsideInk = Effect.fnUntraced(function*(work: string, captions: Captions,
 const shownAt = (span: { readonly start: number; readonly end: number }, at: number): boolean =>
   at >= Math.round(span.start * 100) / 100 && at < Math.round(span.end * 100) / 100
 
-export const firstTextOutside = Effect.fnUntraced(function*(work: string, captions: Captions, seconds: number) {
-  const ink = (yield* outsideInk(work, captions, "texts", seconds, "Instagram", "instagram"))[0]
+export const firstTextOutside = Effect.fnUntraced(function*(work: string, captions: Captions, seconds: number, app: App) {
+  const ink = (yield* outsideInk(work, captions, "texts", seconds, app, APP_FILE_NAME[app]))[0]
   if (ink === undefined) return "inside" as const
   return { id: captions.texts.find((text) => shownAt(text, ink.at))?.id }
 })

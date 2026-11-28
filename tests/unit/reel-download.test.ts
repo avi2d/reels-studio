@@ -5,6 +5,7 @@ import { Effect } from "effect"
 import { readReel } from "../../src/server/reel.ts"
 import { reelDownloadAt } from "../../src/server/reel-record.ts"
 import { loudnessPartOf } from "../../src/server/reel-checks.ts"
+import { APPS } from "../../src/shared/brief.ts"
 import { NO_CAPTIONS } from "../../src/shared/captions.ts"
 import type { Levelling } from "../../src/shared/reel.ts"
 import type { BuildChecks } from "../../src/shared/reel-checks.ts"
@@ -32,7 +33,7 @@ const read = async (file: { seconds: number; buildChecks?: BuildChecks; loudness
     await writeFile(`${dir}/reel/file.mp4`, "published")
     const cut = { clips: [{ video: "take.mov", block: "current", start: 0, end: current }], captions: NO_CAPTIONS, inserts: [] }
     return await Effect.runPromise(Effect.all({
-      view: readReel(dir, cut, { state: "idle" }, checkAt(current)),
+      view: readReel(dir, cut, APPS, { state: "idle" }, checkAt(current)),
       download: reelDownloadAt(dir, made, undefined)
     }).pipe(Effect.provide(BunServices.layer)))
   } finally {
