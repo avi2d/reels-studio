@@ -16,7 +16,7 @@ import { readChecks } from "./reel-checks.ts"
 import { buildFailures, checkSentence, DOWNLOAD_CLOSED, type BuildChecks } from "../shared/reel-checks.ts"
 import { noFaceOf, runTrial } from "./retouch.ts"
 import { checkSound, readSoundCheck, soundKeyOf } from "./sound-check.ts"
-import { readCut, readEdits, readMontageCut, readTimeline, type Cut } from "./timeline-files.ts"
+import { readCut, readCutAndMontage, readEdits, readTimeline, type Cut } from "./timeline-files.ts"
 import { partsOf, secondsOf } from "./media-commands.ts"
 
 interface Running {
@@ -154,8 +154,7 @@ const checkSoundOf = (tried: Tried) => (dir: string, cut: Cut, onDone: (share: n
 const checkedCut = Effect.fnUntraced(function*(dir: string) {
   const names = yield* sourceNames(dir)
   const edits = yield* readEdits(dir)
-  const cut = yield* readCut(dir, names, edits)
-  const montage = yield* readMontageCut(dir, names, edits)
+  const { cut, montage } = yield* readCutAndMontage(dir, names, edits)
   const checks = yield* readChecks(dir, cut, montage, secondsOf(partsOf(cut.clips)))
   return { cut, checks }
 })

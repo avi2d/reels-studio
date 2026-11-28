@@ -153,8 +153,8 @@ Edits after a build affect «Собрать заново», not the download of 
 Each failed check names the fix, and «Исправить» opens «Монтаж» at the part when the check has one.
 If a text, question, or length check fails, the server refuses the build with the same sentence and HTTP 400.
 The text check draws the texts as the build does and keeps the result until the inputs to the draw change.
-After a build, the step shows six evenly spaced frames under an Instagram player mask.
-It also shows a frame from each stretch where the buttons cover the face, up to nine frames in all.
+After a build, the step shows up to nine frames under an Instagram player mask.
+Each stretch where the buttons cover the face gets a frame from its middle first, and up to six evenly spaced frames fill the rest.
 It warns with the times when the buttons cover the face, measured on the built 1080 by 1920 file.
 The stage names the measured loudness of the built file with a plain verdict word.
 It says when the peaks stay clean.

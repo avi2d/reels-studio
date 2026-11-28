@@ -44,7 +44,7 @@ const SHEET_FRAMES = 6
 const MOST_FRAMES = 9
 const APART = 0.5
 
-// Evenly spaced frames, and one in the middle of each stretch the buttons cover, so every warning has a frame to look at.
+// Covered stretches take frames before the even ones, so a warning has a frame to look at.
 export const sheetTimes = (seconds: number, covered: ReadonlyArray<Covered>): ReadonlyArray<number> => {
   const even = Array.from({ length: SHEET_FRAMES }, (_, index) => (index + 0.5) * seconds / SHEET_FRAMES)
   const middles = covered.map((span) => (span.from + span.to) / 2)

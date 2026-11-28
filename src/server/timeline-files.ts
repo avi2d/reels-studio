@@ -162,8 +162,14 @@ const readHeard = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<
   return { transcripts, gazes, gazeWritten, faces }
 })
 
+type Heard = Effect.Success<ReturnType<typeof readHeard>>
+
 export const readTimeline = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>, unseen: ReadonlyMap<string, GazeFailure>, edits?: Edits) {
-  const { transcripts, gazes, gazeWritten, faces } = yield* readHeard(dir, names)
+  return yield* timelineOf(dir, yield* readHeard(dir, names), unseen, edits)
+})
+
+const timelineOf = Effect.fnUntraced(function*(dir: string, heard: Heard, unseen: ReadonlyMap<string, GazeFailure>, edits?: Edits) {
+  const { transcripts, gazes, gazeWritten, faces } = heard
   const looks: ReadonlyArray<Look> = [...transcripts.keys()].map((name) =>
     lookOf(name, gazes.get(name), gazeWritten.has(name), unseen.get(places({ dir, name }).source)))
   const attached = yield* readReachable(dir)
@@ -185,8 +191,12 @@ export interface Cut {
   readonly captions: Captions
 }
 
-export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>, saved?: Edits) {
-  const { transcripts, faces } = yield* readHeard(dir, names)
+export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>) {
+  return yield* cutOfHeard(dir, yield* readHeard(dir, names))
+})
+
+const cutOfHeard = Effect.fnUntraced(function*(dir: string, heard: Heard, saved?: Edits) {
+  const { transcripts, faces } = heard
   const written = yield* readBlocks(dir)
   if (written === "none" || written === "unreadable") return { clips: [], inserts: [], captions: NO_CAPTIONS } satisfies Cut
   const { blocks } = soundBlocks(written, transcripts, new Map())
@@ -203,11 +213,11 @@ export const readCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyA
   return { clips, inserts: shownInserts(placesNow, clips, edits, pictures, resolved), captions: yield* readCaptions(dir, clips, transcripts, blocks, edits) } satisfies Cut
 })
 
-// The same cut the Монтаж step draws, so the final check counts the questions the step shows.
-export const readMontageCut = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>, edits: Edits) {
-  const view = yield* readTimeline(dir, names, new Map(), edits)
-  if (view.timeline.state !== "ready") return undefined
-  const { transcripts } = yield* readHeard(dir, names)
-  return cutOfPage(view, view.timeline, transcripts, view.timeline.edits)
+// The montage cut is the one the Монтаж step draws, so the final check counts the questions the step shows.
+export const readCutAndMontage = Effect.fnUntraced(function*(dir: string, names: ReadonlyArray<string>, edits: Edits) {
+  const heard = yield* readHeard(dir, names)
+  const view = yield* timelineOf(dir, heard, new Map(), edits)
+  const montage = view.timeline.state === "ready" ? cutOfPage(view, view.timeline, heard.transcripts, view.timeline.edits) : undefined
+  return { cut: yield* cutOfHeard(dir, heard, edits), montage }
 })
 
