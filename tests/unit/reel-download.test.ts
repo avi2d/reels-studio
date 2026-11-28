@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { BunServices } from "@effect/platform-bun"
 import { Effect } from "effect"
 import { readReel } from "../../src/server/reel.ts"
-import { reelDownloadAt } from "../../src/server/reel-record.ts"
+import { reelDownloadAt, reelVideoAt } from "../../src/server/reel-record.ts"
 import { loudnessPartOf } from "../../src/server/reel-checks.ts"
 import { APPS } from "../../src/shared/brief.ts"
 import { NO_CAPTIONS } from "../../src/shared/captions.ts"
@@ -21,7 +21,7 @@ const checkAt = (seconds: number): BuildChecks => ({
   texts: PASSING.texts, places: PASSING.places, length: { id: "length", seconds }
 })
 
-const read = async (file: { seconds: number; buildChecks?: BuildChecks; loudnessPart?: string; levelling: Levelling }, current: number) => {
+const read = async (file: { seconds: number; buildChecks?: unknown; loudnessPart?: string; levelling: Levelling }, current: number) => {
   await mkdir("node_modules/.cache", { recursive: true })
   const dir = await mkdtemp("node_modules/.cache/reel-download-")
   try {
@@ -30,12 +30,15 @@ const read = async (file: { seconds: number; buildChecks?: BuildChecks; loudness
     await writeFile(`${dir}/reel/reel.json`, JSON.stringify({
       ...checks, made, video: "file.mp4", parts: [{ video: "take.mov", start: 0, frames: seconds * 30 }]
     }))
-    await writeFile(`${dir}/reel/file.mp4`, "published")
+    const published = `${dir}/reel/file.mp4`
+    await writeFile(published, "published")
     const cut = { clips: [{ video: "take.mov", block: "current", start: 0, end: current }], captions: NO_CAPTIONS, inserts: [] }
-    return await Effect.runPromise(Effect.all({
+    const result = await Effect.runPromise(Effect.all({
       view: readReel(dir, cut, APPS, { state: "idle" }, checkAt(current)),
-      download: reelDownloadAt(dir, made, undefined)
+      download: reelDownloadAt(dir, made, undefined),
+      playback: reelVideoAt(dir, made, "after", "Instagram")
     }).pipe(Effect.provide(BunServices.layer)))
+    return { ...result, published }
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
@@ -53,6 +56,15 @@ test("a passing edit does not unlock the download of a legacy 3:30 build", async
   const { view, download } = await read({ seconds: 210, levelling }, 170)
   expect(view.file?.seconds).toBe(210)
   expect(view.file?.checks).toBeUndefined()
+  expect(download.state).toBe("closed")
+})
+
+test("build checks without app data do not hide the published video or open its download", async () => {
+  const buildChecks = { ...checkAt(170), texts: { id: "texts", state: "inside" } }
+  const { view, download, playback, published } = await read({ seconds: 170, buildChecks, levelling }, 170)
+  expect(view.file?.made).toBe(made)
+  expect(view.file?.checks).toBeUndefined()
+  expect(playback).toBe(published)
   expect(download.state).toBe("closed")
 })
 

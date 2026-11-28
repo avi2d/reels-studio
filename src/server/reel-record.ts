@@ -32,7 +32,7 @@ const recordFields = {
   captions: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed(""))),
   face: Face.pipe(Schema.withDecodingDefaultKey(Effect.succeed("off" as const))),
   levelling: Schema.optionalKey(Levelling),
-  buildChecks: Schema.optionalKey(BuildChecks),
+  buildChecks: Schema.optionalKey(BuildChecks).pipe(Schema.catchDecoding(() => Effect.succeedNone)),
   loudnessPart: Schema.optionalKey(Schema.String),
   sheets: Schema.Array(Sheet).pipe(Schema.withDecodingDefaultKey(Effect.succeed([])))
 }
