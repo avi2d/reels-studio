@@ -16,12 +16,18 @@ export interface Part {
   readonly length: number
   readonly joins: ReadonlyArray<Numbered<Place>>
   readonly inserts: ReadonlyArray<Numbered<InsertPlace>>
-  readonly texts: ReadonlyArray<Numbered<TextPlace>>
+  readonly texts: ReadonlyArray<NamedText>
+}
+
+export interface NamedText {
+  readonly place: TextPlace
+  readonly name: string
 }
 
 export type Question =
   | { readonly kind: "join"; readonly part: string; readonly place: Numbered<Place> }
   | { readonly kind: "insert"; readonly part: string; readonly place: Numbered<InsertPlace> }
+  | { readonly kind: "text"; readonly part: string; readonly place: NamedText }
 
 export interface Cut {
   readonly parts: ReadonlyArray<Part>
@@ -33,7 +39,7 @@ export interface Cut {
   readonly questions: ReadonlyArray<Question>
   readonly outside: {
     readonly inserts: ReadonlyArray<Numbered<InsertPlace>>
-    readonly texts: ReadonlyArray<Numbered<TextPlace>>
+    readonly texts: ReadonlyArray<NamedText>
   }
 }
 
@@ -56,9 +62,15 @@ const saidIn = (placed: ReadonlyArray<Placed>, video: string, word: number): str
 
 export const joinKey = (join: Join): string => `${join.end.video}:${join.end.end}:${join.start.video}:${join.start.start}`
 
-export const questionKey = (question: Question): string => question.kind === "join"
-  ? `join:${joinKey(question.place.place.join)}`
-  : `insert:${question.place.place.planned.id}`
+export const questionKey = (question: Question): string => {
+  switch (question.kind) {
+    case "join": return `join:${joinKey(question.place.place.join)}`
+    case "insert": return `insert:${question.place.place.planned.id}`
+    case "text": return `text:${question.place.place.planned.id}`
+  }
+}
+
+const isAsked = (place: TextPlace): boolean => place.state === "shown" || place.reason === "removed"
 
 export const isOpen = (question: Question): boolean => question.place.place.answer === undefined
 
@@ -68,12 +80,21 @@ export const cutOfPage = (view: TimelinePage, timeline: Ready, transcripts: Read
   const reel = cutOf(clipsOf(placed), faces, transcripts, edits)
   const joins = numbered(placesOf(clipsOf(placed), faces, transcripts, edits))
   const inserts = numbered(insertPlaces(view.inserts.state === "ready" ? view.inserts.planned : [], reel, transcripts, edits, view.pictures))
-  const texts = numbered(textPlaces(view.texts.state === "ready" ? view.texts.planned : [], reel, transcripts))
+  const allTexts = textPlaces(view.texts.state === "ready" ? view.texts.planned : [], reel, transcripts, edits.texts ?? [])
   // An insert or a text starts a little before its phrase, so its start can fall in the part before the one that says it.
   const insertPart = ({ place }: Numbered<InsertPlace>): string | undefined =>
     place.span === undefined ? undefined : saidIn(placed, place.planned.video, place.planned.from) ?? blockAt(reel, place.span.start)
-  const textPart = ({ place }: Numbered<TextPlace>): string | undefined =>
+  const textPart = ({ place }: { readonly place: TextPlace }): string | undefined =>
     saidIn(placed, place.planned.video, place.planned.from) ?? (place.state === "shown" ? blockAt(reel, place.shown.start) : undefined)
+  const firstPart = placed[0]?.block.id
+  const title = allTexts.filter((place) => firstPart !== undefined && textPart({ place }) === firstPart)
+    .toSorted((left, right) => left.planned.from - right.planned.from)[0]
+  let thoughtNumber = 0
+  const texts = allTexts.map((place): NamedText => {
+    if (place === title) return { place, name: "Заголовок" }
+    thoughtNumber += 1
+    return { place, name: `Мысль ${thoughtNumber}` }
+  })
   let start = 0
   const parts = placed.map((one, index): Part => {
     const spans = reel.filter((clip) => clip.block === one.block.id)
@@ -91,7 +112,8 @@ export const cutOfPage = (view: TimelinePage, timeline: Ready, transcripts: Read
   })
   const questions = parts.flatMap((part): ReadonlyArray<Question> => [
     ...part.joins.map((place) => ({ kind: "join" as const, part: part.one.block.id, place })),
-    ...part.inserts.map((place) => ({ kind: "insert" as const, part: part.one.block.id, place }))
+    ...part.inserts.map((place) => ({ kind: "insert" as const, part: part.one.block.id, place })),
+    ...part.texts.filter(({ place }) => isAsked(place)).map((place) => ({ kind: "text" as const, part: part.one.block.id, place }))
   ])
   return {
     parts,

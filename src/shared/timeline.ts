@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 import type { Span, Transcript } from "./plan.ts"
-import { PlannedTexts } from "./texts.ts"
+import { PlannedTexts, TextAnswer, textKey } from "./texts.ts"
 
 export const MIN_PAUSE = 0.5
 export const PAUSE_REST = 0.2
@@ -87,6 +87,7 @@ export const Edits = Schema.Struct({
   kept: Schema.optionalKey(Schema.Array(PauseRef)),
   joins: Schema.Array(AnsweredJoin).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   inserts: Schema.Array(InsertAnswer).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  texts: Schema.optionalKey(Schema.Array(TextAnswer)),
   subtitles: Schema.optionalKey(Schema.Array(WordCorrection))
 })
 export type Edits = typeof Edits.Type
@@ -331,14 +332,18 @@ export const mergeEdits = (base: Edits, local: Edits, current: Edits): Edits => 
       : local.joins.find((have) => sameEnds(have, one))
     return picked === undefined ? [] : [picked]
   })
-  const insertOf = (list: ReadonlyArray<InsertAnswer>, id: string): InsertAnswer | undefined => list.find((one) => one.id === id)
-  const insertIds = [...new Set([...base.inserts, ...local.inserts, ...current.inserts].map((one) => one.id))]
-  const sameInsert = (left: InsertAnswer | undefined, right: InsertAnswer | undefined): boolean =>
-    left === undefined || right === undefined ? left === right : insertKey(left) === insertKey(right)
-  const inserts = insertIds.flatMap((id) => {
-    const entry = sameInsert(insertOf(base.inserts, id), insertOf(local.inserts, id)) ? insertOf(current.inserts, id) : insertOf(local.inserts, id)
-    return entry === undefined ? [] : [entry]
-  })
+  const mergeAnswers = <Answer extends { readonly id: string }>(key: (answer: Answer) => string) =>
+    (baseAnswers: ReadonlyArray<Answer>, localAnswers: ReadonlyArray<Answer>, currentAnswers: ReadonlyArray<Answer>): Array<Answer> => {
+      const find = (list: ReadonlyArray<Answer>, id: string): Answer | undefined => list.find((one) => one.id === id)
+      const same = (left: Answer | undefined, right: Answer | undefined): boolean =>
+        left === undefined || right === undefined ? left === right : key(left) === key(right)
+      return [...new Set([...baseAnswers, ...localAnswers, ...currentAnswers].map((one) => one.id))].flatMap((id) => {
+        const entry = same(find(baseAnswers, id), find(localAnswers, id)) ? find(currentAnswers, id) : find(localAnswers, id)
+        return entry === undefined ? [] : [entry]
+      })
+    }
+  const inserts = mergeAnswers(insertKey)(base.inserts, local.inserts, current.inserts)
+  const texts = mergeAnswers(textKey)(base.texts ?? [], local.texts ?? [], current.texts ?? [])
   const corrections = [...(base.subtitles ?? []), ...(local.subtitles ?? []), ...(current.subtitles ?? [])]
   const sameWord = (left: WordCorrection, right: WordCorrection): boolean =>
     left.block === right.block && left.video === right.video && left.index === right.index
@@ -366,6 +371,7 @@ export const mergeEdits = (base: Edits, local: Edits, current: Edits): Edits => 
     kept: mergePauses(local.kept ?? [], base.kept ?? [], current.kept ?? []),
     joins,
     inserts,
+    ...(texts.length === 0 ? {} : { texts }),
     ...(subtitles.length === 0 ? {} : { subtitles })
   }
 }

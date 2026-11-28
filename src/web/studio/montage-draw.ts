@@ -48,7 +48,7 @@ const partsNav = (cut: Cut, selected: string | undefined, select: (block: string
 }
 
 const detailOf = (cut: Cut, loaded: Loaded, state: State, actions: PartActions): HTMLElement => {
-  const numbers = new Map([...cut.parts.flatMap((part) => part.texts), ...cut.outside.texts].map(({ place, number }) => [place.planned.id, number]))
+  const names = new Map([...cut.parts.flatMap((part) => part.texts), ...cut.outside.texts].map(({ place, name }) => [place.planned.id, name]))
   const data = (words: PartData["words"]): PartData => ({
     count: cut.parts.length,
     rest: cut.rest,
@@ -57,7 +57,7 @@ const detailOf = (cut: Cut, loaded: Loaded, state: State, actions: PartActions):
     pictures: loaded.view.pictures,
     words,
     phraseOf: phraseOf(loaded.transcripts),
-    textNumber: (planned) => numbers.get(planned.id) ?? 0
+    textName: (id) => names.get(id) ?? "Другая надпись"
   })
   const part = cut.parts.find((one) => one.one.block.id === state.selected)
   const gone = cut.gone.find((block) => block.id === state.selected)

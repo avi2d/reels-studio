@@ -65,6 +65,18 @@
 .thought__lines { font-weight: 500; overflow-wrap: anywhere; }
 .thought__lines mark { background: none; color: #a8456b; font-style: italic; font-weight: 600; }
 .thought--off .hint:last-child { color: var(--red); }
+.thought__lines--off { color: var(--muted); text-decoration: line-through; }
+.thought__lines--off mark { color: inherit; }
+.text-edit { display: flex; flex-direction: column; gap: 8px; }
+.text-edit__line { display: flex; align-items: center; gap: 8px; }
+.text-edit__field { flex: 1; min-width: 0; min-height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font: inherit; font-size: 16px; }
+.text-edit__line--accent .text-edit__field { color: #a8456b; font-style: italic; font-weight: 600; }
+.text-edit__field:focus { outline: 2px solid var(--blue); outline-offset: -1px; }
+.text-edit__field[aria-invalid="true"] { border-color: var(--red); }
+.text-edit__count { min-width: 4.5ch; text-align: right; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.text-edit__count--over { color: var(--red); font-weight: 600; }
+.text-edit__note { margin: 0; color: var(--red); font-size: 14px; }
+.text-edit__note:empty { display: none; }
 
 .ask { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); scroll-margin: calc(var(--top) + 140px) 0 24px; }
 .ask:focus { outline: none; }

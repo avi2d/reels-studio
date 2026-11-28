@@ -1,3 +1,4 @@
+import { withText } from "../../shared/captions.ts"
 import { aroundInsert, reelWithin, shiftedBy, withInsert, type Shown } from "../../shared/inserts.ts"
 import { AROUND_JOIN_SECONDS, aroundJoin, cutOf, facesByVideo, withAnswer, withCover } from "../../shared/joins.ts"
 import { lengthOf } from "../../shared/plan.ts"
@@ -98,6 +99,11 @@ export const partActions = (context: ActionsContext): PartActions => {
       const window = aroundInsert(span)
       hear(reelWithin(state.cut?.reel ?? [], window), shiftedBy(state.shown, window.start))
     },
-    answerInsert: (answer) => { history.change(withInsert(state.edits, answer)) }
+    answerInsert: (answer) => { history.change(withInsert(state.edits, answer)) },
+    showText: (span) => {
+      const window = aroundInsert(span)
+      hear(reelWithin(state.cut?.reel ?? [], window), shiftedBy(state.shown, window.start))
+    },
+    answerText: (answer) => { history.change(withText(state.edits, answer)) }
   }
 }

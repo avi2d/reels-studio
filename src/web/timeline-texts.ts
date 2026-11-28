@@ -1,4 +1,4 @@
-import type { TextPlace } from "../shared/captions.ts"
+import { linesOfPlace, type TextPlace } from "../shared/captions.ts"
 import type { PlannedText, PlannedTexts } from "../shared/texts.ts"
 import { h } from "./dom.ts"
 import { formatLength } from "./format.ts"
@@ -10,8 +10,8 @@ export interface TextData {
   readonly phraseOf: (planned: PlannedText) => string
 }
 
-const linesOf = (planned: PlannedText): string => {
-  const text = planned.lines.map((line) => line.text.trim()).filter((line) => line !== "").join(" / ")
+const linesOf = (place: TextPlace): string => {
+  const text = linesOfPlace(place).map((line) => line.text.trim()).filter((line) => line !== "").join(" / ")
   return text === "" ? "Без текста" : `«${text}»`
 }
 
@@ -26,9 +26,9 @@ const textItem = (place: TextPlace, number: number, data: TextData): HTMLElement
   return h("li", { class: place.state === "shown" ? "pause-row place text-place answered" : "pause-row place text-place dropped", "data-key": `text:${place.planned.id}` },
     h("span", { class: "where" },
       h("b", {}, place.state === "shown" ? `Мысль ${number}` : `Мысль ${number} не встанет в ролик`),
-      h("span", { class: "text-lines" }, linesOf(place.planned)),
+      h("span", { class: "text-lines" }, linesOf(place)),
       ...(said === undefined ? [] : [h("span", {}, said)]),
-      ...(place.state === "dropped" ? [h("span", { class: "error" }, whyDropped(place, (by) => data.places.findIndex((one) => one.planned.id === by.id) + 1))] : [])))
+      ...(place.state === "dropped" ? [h("span", { class: "error" }, whyDropped(place, (by) => `Мысль ${data.places.findIndex((one) => one.planned.id === by.id) + 1}`))] : [])))
 }
 
 const statusOf = ({ planned, places }: TextData): ReadonlyArray<HTMLElement> => {

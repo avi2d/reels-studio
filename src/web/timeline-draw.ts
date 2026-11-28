@@ -325,7 +325,7 @@ export const drawReady = (parts: Parts, drawn: Drawn, actions: Actions): DrawnRe
   const shown = shownInserts(inserts, reel, edits, loaded.view.pictures)
   drawRows(parts, displayed, open, shown, actions)
   const { texts } = loaded.view
-  const thoughts = textPlaces(texts.state === "ready" ? texts.planned : [], reel, loaded.transcripts)
+  const thoughts = textPlaces(texts.state === "ready" ? texts.planned : [], reel, loaded.transcripts, edits.texts ?? [])
   const { places, coverage } = drawPanels(parts, displayed, placed, open, index, loaded, edits, timeline.rest, deleted, faces, inserts, thoughts, actions)
   return {
     open,
