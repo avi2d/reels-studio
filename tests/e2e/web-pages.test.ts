@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises"
 import { BunServices } from "@effect/platform-bun"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Result, Schema } from "effect"
 import { Attachments } from "../../src/server/attachments.ts"
 import { Projects } from "../../src/server/projects.ts"
 import { Settings } from "../../src/server/settings.ts"
@@ -51,8 +51,8 @@ test("an outside page keeps its PDF and licence from one load, not a second ungu
       await mkdir(folder)
       const before = loads
       const result = await saved(folder, `http://outside.test:${server.port}${path}`)
-      expect(result._tag).toBe("Success")
-      if (result._tag !== "Success") throw result.failure
+      expect(Result.isSuccess(result)).toBe(true)
+      if (!Result.isSuccess(result)) throw result.failure
       expect(result.success.licence).toBe("CC BY 4.0")
       expect((await readFile(`${folder}/attached/${result.success.file}`)).subarray(0, 5).toString()).toBe("%PDF-")
       const record = Schema.decodeUnknownSync(Schema.fromJsonString(WebPagesFile))(await readFile(`${folder}/web-pages.json`, "utf8"))
@@ -93,8 +93,8 @@ test("home requests leave no PDF or source record", async () => {
       const dir = await mkdtemp("node_modules/.cache/web-page-")
       try {
         const result = await saved(dir, `http://outside.test:${server.port}${path}`)
-        expect(result._tag).toBe("Failure")
-        if (result._tag !== "Failure") throw new Error("A home-network request was saved")
+        expect(Result.isFailure(result)).toBe(true)
+        if (!Result.isFailure(result)) throw new Error("A home-network request was saved")
         expect(result.failure.message).toBe(AT_HOME)
         expect(await readdir(`${dir}/attached`).catch(() => [])).toEqual([])
         expect(await Bun.file(`${dir}/web-pages.json`).exists()).toBe(false)
@@ -159,8 +159,8 @@ test("unreachable, cancelled, sink, worker and socket resources do not discard a
   })
   try {
     const result = await saved(dir, `http://outside.test:${server.port}/page`)
-    expect(result._tag).toBe("Success")
-    if (result._tag !== "Success") throw result.failure
+    expect(Result.isSuccess(result)).toBe(true)
+    if (!Result.isSuccess(result)) throw result.failure
     expect(result.success.licence).toBe("CC BY 4.0")
     expect((await readFile(`${dir}/attached/${result.success.file}`)).subarray(0, 5).toString()).toBe("%PDF-")
     const record = Schema.decodeUnknownSync(Schema.fromJsonString(WebPagesFile))(await readFile(`${dir}/web-pages.json`, "utf8"))
@@ -201,8 +201,8 @@ test("dedicated, shared and service workers are blocked without discarding their
       const dir = await mkdtemp("node_modules/.cache/web-worker-")
       try {
         const result = await saved(dir, `http://localhost:${server.port}${path}`)
-        expect(result._tag).toBe("Success")
-        if (result._tag !== "Success") throw result.failure
+        expect(Result.isSuccess(result)).toBe(true)
+        if (!Result.isSuccess(result)) throw result.failure
         expect(result.success.licence).toBe("CC BY 4.0")
         expect((await readFile(`${dir}/attached/${result.success.file}`)).subarray(0, 5).toString()).toBe("%PDF-")
         expect(privateHits).toBe(0)

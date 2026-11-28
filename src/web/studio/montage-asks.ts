@@ -51,14 +51,18 @@ export const joinAsk = ({ place, number }: Numbered<Place>, inside: boolean, pic
 
 const KIND_NAMES = { picture: "Картинка", clip: "Видео", page: "Страница документа" } satisfies Record<InsertPlace["visual"]["kind"], string>
 
+const insertFacts = (place: InsertPlace, phrase: string): string => {
+  const { span } = place
+  const done = insertDone(place)
+  return [`на словах «${phrase}»`, ...span === undefined ? [] : [formatLength(span.start)], ...done === undefined ? [] : [done]].join(" · ")
+}
+
 export const insertAsk = ({ place, number }: Numbered<InsertPlace>, phrase: string, data: InsertData, actions: AskActions): HTMLElement => {
   const { planned, span, visual } = place
   const { pictures } = data
   const source = sourceOf(visual, data.sources)
   const id = planned.id
-  const done = insertDone(place)
   const answer = (one: InsertAnswer): void => { actions.answerInsert(one) }
-  const facts = [`на словах «${phrase}»`, ...span === undefined ? [] : [formatLength(span.start)], ...done === undefined ? [] : [done]]
   return card(place.answer === undefined && span !== undefined, `insert:${id}`,
     h("div", { class: "insert" },
       h("img", { class: place.answer === "remove" ? "insert__art insert__art--off" : "insert__art", src: actions.visualUrl(visual), alt: "" }),
@@ -66,7 +70,7 @@ export const insertAsk = ({ place, number }: Numbered<InsertPlace>, phrase: stri
         h("b", {}, `Вставка ${number}. ${source === undefined ? KIND_NAMES[visual.kind] : sourceKind(source)}`),
         h("span", {}, source === undefined || visual.kind !== "page" ? visualName(visual) : `Страница ${visual.page}`),
         ...source === undefined ? [] : sourceLines(source),
-        h("span", { class: "hint" }, facts.join(" · ")),
+        h("span", { class: "hint" }, insertFacts(place, phrase)),
         ...planned.reason === "" ? [] : [h("span", { class: "hint" }, planned.reason)],
         ...articleWarnings(source === undefined ? [] : [source], phrase),
         ...span === undefined ? [h("span", { class: "hint" }, "Этой фразы сейчас нет в ролике, поэтому вставку не видно.")] : [])),

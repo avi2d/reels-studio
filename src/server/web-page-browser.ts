@@ -32,90 +32,165 @@ const rejectHomeTarget = Effect.fnUntraced(function*(address: string) {
   )
 })
 
+type Cdp = Effect.Success<ReturnType<typeof openBrowser>>
+
+interface Capture {
+  readonly cdp: Cdp
+  readonly ready: Deferred.Deferred<string>
+  readonly loaded: Deferred.Deferred<void>
+  readonly idle: Deferred.Deferred<void>
+  readonly pages: Set<string>
+  readonly loadedLoaders: Set<string>
+  readonly active: Set<Deferred.Deferred<void>>
+  main: string | undefined
+  loader: string | undefined
+  mainFrame: string | undefined
+}
+
+const autoAttach = { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }
+
+const attachPage = Effect.fnUntraced(function*(capture: Capture, session: string, type: string) {
+  const { cdp } = capture
+  yield* cdp.send("Target.setAutoAttach", autoAttach, session)
+  yield* cdp.send("Network.enable", {}, session)
+  yield* cdp.send("Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }, session)
+  yield* cdp.send("Network.setBypassServiceWorker", { bypass: true }, session)
+  yield* cdp.send("Fetch.enable", { patterns: [{ urlPattern: "*", requestStage: "Request" }] }, session)
+  capture.pages.add(session)
+  yield* cdp.send("Page.enable", {}, session)
+  yield* cdp.send("Page.setLifecycleEventsEnabled", { enabled: true }, session)
+  if (capture.main === undefined && type === "page") {
+    capture.main = session
+    yield* Deferred.succeed(capture.ready, session)
+  }
+  yield* cdp.send("Runtime.runIfWaitingForDebugger", {}, session)
+})
+
+const onAttached = Effect.fnUntraced(function*(capture: Capture, event: BrowserEvent) {
+  const attached = yield* decoded(Attached, event.params)
+  const type = attached.targetInfo.type
+  if (type !== "page" && type !== "iframe") {
+    yield* rejectHomeTarget(attached.targetInfo.url)
+    yield* capture.cdp.send("Target.closeTarget", { targetId: attached.targetInfo.targetId }).pipe(Effect.orElseSucceed(() => undefined))
+    return
+  }
+  yield* attachPage(capture, attached.sessionId, type)
+})
+
+const onPaused = Effect.fnUntraced(function*(capture: Capture, event: BrowserEvent) {
+  const { cdp } = capture
+  const paused = yield* decoded(Paused, event.params)
+  const isMainDocument = paused.resourceType === "Document" && paused.frameId === capture.mainFrame && event.sessionId === capture.main
+  yield* Effect.gen(function*() {
+    const response = yield* pageResponse(paused.request).pipe(
+      Effect.timeout(isMainDocument ? "15 seconds" : "3 seconds")
+    )
+    yield* cdp.send("Fetch.fulfillRequest", { requestId: paused.requestId, ...response }, event.sessionId).pipe(
+      Effect.catchTag("BrowserCommandError", (error) =>
+        error.message.includes("Invalid InterceptionId") ? Effect.void : Effect.fail(error))
+    )
+  }).pipe(Effect.catch((error) => Effect.gen(function*() {
+    if (error instanceof ApiError && error.message === AT_HOME) return yield* error
+    if (isMainDocument) {
+      return yield* badRequest(NOT_OPENED)
+    }
+    yield* cdp.send("Fetch.failRequest", { requestId: paused.requestId, errorReason: "Failed" }, event.sessionId).pipe(
+      Effect.orElseSucceed(() => undefined)
+    )
+  })))
+})
+
+const onSocket = Effect.fnUntraced(function*(event: BrowserEvent) {
+  const socket = yield* decoded(Socket, event.params)
+  yield* rejectHomeTarget(socket.url)
+})
+
+const onDetached = Effect.fnUntraced(function*(capture: Capture, event: BrowserEvent) {
+  const detached = yield* decoded(Detached, event.params)
+  capture.pages.delete(detached.sessionId)
+})
+
+const onFrameNavigated = Effect.fnUntraced(function*(capture: Capture, event: BrowserEvent) {
+  if (event.sessionId !== capture.main) return
+  const { frame } = yield* decoded(Frame, event.params)
+  if (frame.parentId === undefined && frame.url !== "about:blank") capture.loader = frame.loaderId
+})
+
+const onLifecycle = Effect.fnUntraced(function*(capture: Capture, event: BrowserEvent) {
+  if (event.sessionId !== capture.main) return
+  const lifecycle = yield* decoded(Lifecycle, event.params)
+  if (lifecycle.name === "DOMContentLoaded") {
+    capture.loadedLoaders.add(lifecycle.loaderId)
+    if (lifecycle.loaderId === capture.loader) yield* Deferred.succeed(capture.loaded, undefined)
+  } else if (lifecycle.name === "networkIdle" && lifecycle.loaderId === capture.loader) {
+    yield* Deferred.succeed(capture.idle, undefined)
+  }
+})
+
+const handle = (capture: Capture, event: BrowserEvent) => {
+  switch (event.method) {
+    case "Target.attachedToTarget": return onAttached(capture, event)
+    case "Fetch.requestPaused": return onPaused(capture, event)
+    case "Network.webSocketCreated": return onSocket(event)
+    case "Target.detachedFromTarget": return onDetached(capture, event)
+    case "Page.frameNavigated": return onFrameNavigated(capture, event)
+    case "Page.lifecycleEvent": return onLifecycle(capture, event)
+    default: return Effect.void
+  }
+}
+
+const settleBeforeSave = Effect.fnUntraced(function*(capture: Capture, session: string) {
+  const { cdp } = capture
+  yield* Effect.raceFirst(Deferred.await(capture.idle), Effect.sleep("4 seconds"))
+  yield* Effect.forEach([...capture.pages], (page) => cdp.send("Page.setWebLifecycleState", { state: "frozen" }, page))
+  yield* cdp.send("Page.stopLoading", {}, session)
+  yield* Effect.all([...capture.active].map((done) => Deferred.await(done)), { concurrency: "unbounded" })
+})
+
+const openAndSave = Effect.fnUntraced(function*(capture: Capture, address: string) {
+  const { cdp } = capture
+  yield* cdp.send("Browser.setDownloadBehavior", { behavior: "deny" })
+  const target = yield* decoded(Target, yield* cdp.send("Target.createTarget", { url: "about:blank" }))
+  yield* cdp.send("Target.attachToTarget", { targetId: target.targetId, flatten: true })
+  const session = yield* Deferred.await(capture.ready)
+  const tree = yield* decoded(FrameTree, yield* cdp.send("Page.getFrameTree", {}, session))
+  capture.mainFrame = tree.frameTree.frame.id
+  const navigation = yield* decoded(Navigation, yield* cdp.send("Page.navigate", { url: address }, session))
+  if (navigation.errorText !== undefined || navigation.loaderId === undefined) return yield* badRequest(NOT_OPENED)
+  capture.loader ??= navigation.loaderId
+  if (!capture.loadedLoaders.has(capture.loader)) yield* Deferred.await(capture.loaded)
+  yield* settleBeforeSave(capture, session)
+  const dom = yield* decoded(Dom, yield* cdp.send("Runtime.evaluate", {
+    expression: "document.documentElement.outerHTML", returnByValue: true
+  }, session))
+  const pdf = yield* decoded(Pdf, yield* cdp.send("Page.printToPDF", {
+    printBackground: true, displayHeaderFooter: false
+  }, session))
+  return { pdf: Buffer.from(pdf.data, "base64"), licence: licenceOf(dom.result.value) }
+})
+
 export const capturePage = Effect.fnUntraced(function*(chrome: string, profile: string, address: string) {
   const cdp = yield* openBrowser(chrome, profile)
-  const ready = yield* Deferred.make<string>()
-  const loaded = yield* Deferred.make<void>()
-  const idle = yield* Deferred.make<void>()
-  const pages = new Set<string>()
-  const loadedLoaders = new Set<string>()
-  const active = new Set<Deferred.Deferred<void>>()
-  let main: string | undefined
-  let loader: string | undefined
-  let mainFrame: string | undefined
-
-  const autoAttach = { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }
-  const handle = Effect.fnUntraced(function*(event: BrowserEvent) {
-    if (event.method === "Target.attachedToTarget") {
-      const attached = yield* decoded(Attached, event.params)
-      const session = attached.sessionId
-      const type = attached.targetInfo.type
-      if (type !== "page" && type !== "iframe") {
-        yield* rejectHomeTarget(attached.targetInfo.url)
-        yield* cdp.send("Target.closeTarget", { targetId: attached.targetInfo.targetId }).pipe(Effect.orElseSucceed(() => undefined))
-        return
-      }
-      yield* cdp.send("Target.setAutoAttach", autoAttach, session)
-      yield* cdp.send("Network.enable", {}, session)
-      yield* cdp.send("Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }, session)
-      yield* cdp.send("Network.setBypassServiceWorker", { bypass: true }, session)
-      yield* cdp.send("Fetch.enable", { patterns: [{ urlPattern: "*", requestStage: "Request" }] }, session)
-      pages.add(session)
-      yield* cdp.send("Page.enable", {}, session)
-      yield* cdp.send("Page.setLifecycleEventsEnabled", { enabled: true }, session)
-      if (main === undefined && type === "page") {
-        main = session
-        yield* Deferred.succeed(ready, session)
-      }
-      yield* cdp.send("Runtime.runIfWaitingForDebugger", {}, session)
-    } else if (event.method === "Fetch.requestPaused") {
-      const paused = yield* decoded(Paused, event.params)
-      const isMainDocument = paused.resourceType === "Document" && paused.frameId === mainFrame && event.sessionId === main
-      yield* Effect.gen(function*() {
-        const response = yield* pageResponse(paused.request).pipe(
-          Effect.timeout(isMainDocument ? "15 seconds" : "3 seconds")
-        )
-        yield* cdp.send("Fetch.fulfillRequest", { requestId: paused.requestId, ...response }, event.sessionId).pipe(
-          Effect.catchTag("BrowserCommandError", (error) =>
-            error.message.includes("Invalid InterceptionId") ? Effect.void : Effect.fail(error))
-        )
-      }).pipe(Effect.catch((error) => Effect.gen(function*() {
-        if (error instanceof ApiError && error.message === AT_HOME) return yield* error
-        if (isMainDocument) {
-          return yield* badRequest(NOT_OPENED)
-        }
-        yield* cdp.send("Fetch.failRequest", { requestId: paused.requestId, errorReason: "Failed" }, event.sessionId).pipe(
-          Effect.orElseSucceed(() => undefined)
-        )
-      })))
-    } else if (event.method === "Network.webSocketCreated") {
-      const socket = yield* decoded(Socket, event.params)
-      yield* rejectHomeTarget(socket.url)
-    } else if (event.method === "Target.detachedFromTarget") {
-      const detached = yield* decoded(Detached, event.params)
-      pages.delete(detached.sessionId)
-    } else if (event.method === "Page.frameNavigated" && event.sessionId === main) {
-      const { frame } = yield* decoded(Frame, event.params)
-      if (frame.parentId === undefined && frame.url !== "about:blank") loader = frame.loaderId
-    } else if (event.method === "Page.lifecycleEvent" && event.sessionId === main) {
-      const lifecycle = yield* decoded(Lifecycle, event.params)
-      if (lifecycle.name === "DOMContentLoaded") {
-        loadedLoaders.add(lifecycle.loaderId)
-        if (lifecycle.loaderId === loader) yield* Deferred.succeed(loaded, undefined)
-      } else if (lifecycle.name === "networkIdle" && lifecycle.loaderId === loader) {
-        yield* Deferred.succeed(idle, undefined)
-      }
-    }
-  })
-
+  const capture: Capture = {
+    cdp,
+    ready: yield* Deferred.make<string>(),
+    loaded: yield* Deferred.make<void>(),
+    idle: yield* Deferred.make<void>(),
+    pages: new Set<string>(),
+    loadedLoaders: new Set<string>(),
+    active: new Set<Deferred.Deferred<void>>(),
+    main: undefined,
+    loader: undefined,
+    mainFrame: undefined
+  }
   yield* Stream.fromQueue(cdp.events).pipe(
     Stream.runForEach((event) => Effect.gen(function*() {
       const finished = yield* Deferred.make<void>()
-      active.add(finished)
-      yield* handle(event).pipe(
+      capture.active.add(finished)
+      yield* handle(capture, event).pipe(
         Effect.catch((error) => Deferred.fail(cdp.failed, error instanceof ApiError ? error : badRequest(NOT_OPENED))),
         Effect.ensuring(Effect.gen(function*() {
-          active.delete(finished)
+          capture.active.delete(finished)
           yield* Deferred.succeed(finished, undefined)
         })),
         Effect.forkScoped
@@ -123,31 +198,7 @@ export const capturePage = Effect.fnUntraced(function*(chrome: string, profile: 
     })),
     Effect.forkScoped
   )
-
-  const capture = Effect.gen(function*() {
-    yield* cdp.send("Browser.setDownloadBehavior", { behavior: "deny" })
-    const target = yield* decoded(Target, yield* cdp.send("Target.createTarget", { url: "about:blank" }))
-    yield* cdp.send("Target.attachToTarget", { targetId: target.targetId, flatten: true })
-    const session = yield* Deferred.await(ready)
-    const tree = yield* decoded(FrameTree, yield* cdp.send("Page.getFrameTree", {}, session))
-    mainFrame = tree.frameTree.frame.id
-    const navigation = yield* decoded(Navigation, yield* cdp.send("Page.navigate", { url: address }, session))
-    if (navigation.errorText !== undefined || navigation.loaderId === undefined) return yield* badRequest(NOT_OPENED)
-    loader ??= navigation.loaderId
-    if (!loadedLoaders.has(loader)) yield* Deferred.await(loaded)
-    yield* Effect.raceFirst(Deferred.await(idle), Effect.sleep("4 seconds"))
-    yield* Effect.forEach([...pages], (page) => cdp.send("Page.setWebLifecycleState", { state: "frozen" }, page))
-    yield* cdp.send("Page.stopLoading", {}, session)
-    yield* Effect.all([...active].map((done) => Deferred.await(done)), { concurrency: "unbounded" })
-    const dom = yield* decoded(Dom, yield* cdp.send("Runtime.evaluate", {
-      expression: "document.documentElement.outerHTML", returnByValue: true
-    }, session))
-    const pdf = yield* decoded(Pdf, yield* cdp.send("Page.printToPDF", {
-      printBackground: true, displayHeaderFooter: false
-    }, session))
-    return { pdf: Buffer.from(pdf.data, "base64"), licence: licenceOf(dom.result.value) }
-  })
-  return yield* Effect.raceFirst(capture, Deferred.await(cdp.failed))
+  return yield* Effect.raceFirst(openAndSave(capture, address), Deferred.await(cdp.failed))
 }, (effect) => effect.pipe(
   Effect.scoped,
   Effect.timeout("20 seconds"),

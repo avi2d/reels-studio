@@ -31,7 +31,7 @@ export const openBrowser = Effect.fnUntraced(function*(chrome: string, profile: 
   const pending = new Map<number, Deferred.Deferred<unknown, BrowserCommandError>>()
   let next = 0
   const fail = () => Deferred.fail(failed, badRequest(NOT_OPENED))
-  yield* Stream.fromQueue(outgoing).pipe(Stream.run(process.getInputFd(3)), Effect.catch(() => fail()), Effect.forkScoped)
+  yield* Stream.fromQueue(outgoing).pipe(Stream.run(process.getInputFd(3)), Effect.catch((error) => Effect.logError("web page browser input failed", error).pipe(Effect.andThen(fail))), Effect.forkScoped)
   yield* process.getOutputFd(4).pipe(
     Stream.decodeText(),
     Stream.map((chunk) => chunk.replaceAll("\0", "\n")),
