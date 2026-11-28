@@ -188,7 +188,9 @@ export const capturePage = Effect.fnUntraced(function*(chrome: string, profile: 
       const finished = yield* Deferred.make<void>()
       capture.active.add(finished)
       yield* handle(capture, event).pipe(
-        Effect.catch((error) => Deferred.fail(cdp.failed, error instanceof ApiError ? error : badRequest(NOT_OPENED))),
+        Effect.catch((error) => error instanceof ApiError
+          ? Deferred.fail(cdp.failed, error)
+          : Effect.logError("a web page browser event failed", error).pipe(Effect.andThen(Deferred.fail(cdp.failed, badRequest(NOT_OPENED))))),
         Effect.ensuring(Effect.gen(function*() {
           capture.active.delete(finished)
           yield* Deferred.succeed(finished, undefined)
@@ -202,5 +204,6 @@ export const capturePage = Effect.fnUntraced(function*(chrome: string, profile: 
 }, (effect) => effect.pipe(
   Effect.scoped,
   Effect.timeout("20 seconds"),
+  Effect.tapError((cause) => cause instanceof ApiError ? Effect.void : Effect.logError("the web page browser failed", cause)),
   Effect.mapError((cause) => cause instanceof ApiError ? cause : badRequest(NOT_OPENED))
 ))

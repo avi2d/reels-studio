@@ -37,7 +37,10 @@ export const openBrowser = Effect.fnUntraced(function*(chrome: string, profile: 
     Stream.map((chunk) => chunk.replaceAll("\0", "\n")),
     Stream.splitLines,
     Stream.runForEach((line) => Effect.gen(function*() {
-      const message = yield* decodeMessage(line).pipe(Effect.mapError(() => badRequest(NOT_OPENED)))
+      const message = yield* decodeMessage(line).pipe(
+        Effect.tapError((error) => Effect.logError("web page browser sent an unreadable message", error)),
+        Effect.mapError(() => badRequest(NOT_OPENED))
+      )
       if ("method" in message) {
         yield* Queue.offer(events, message)
       } else {
@@ -49,10 +52,16 @@ export const openBrowser = Effect.fnUntraced(function*(chrome: string, profile: 
         }
       }
     })),
-    Effect.matchEffect({ onFailure: fail, onSuccess: fail }),
+    Effect.matchEffect({
+      onFailure: (error) => (error instanceof ApiError ? Effect.void : Effect.logError("web page browser output failed", error)).pipe(Effect.andThen(fail)),
+      onSuccess: () => Effect.logError("web page browser closed its output").pipe(Effect.andThen(fail))
+    }),
     Effect.forkScoped
   )
-  yield* process.exitCode.pipe(Effect.matchEffect({ onFailure: fail, onSuccess: fail }), Effect.forkScoped)
+  yield* process.exitCode.pipe(Effect.matchEffect({
+    onFailure: (error) => Effect.logError("web page browser exit was not read", error).pipe(Effect.andThen(fail)),
+    onSuccess: (code) => Effect.logError("web page browser exited", code).pipe(Effect.andThen(fail))
+  }), Effect.forkScoped)
 
   const send = Effect.fnUntraced(function*(method: string, params: Readonly<Record<string, unknown>> = {}, sessionId?: string) {
     const id = ++next

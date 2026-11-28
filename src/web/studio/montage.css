@@ -65,7 +65,7 @@
 .thought { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; }
 .thought__lines { font-weight: 500; overflow-wrap: anywhere; }
 .thought__lines mark { background: none; color: #a8456b; font-style: italic; font-weight: 600; }
-.thought--off .hint:last-child { color: var(--red); }
+.thought__why { color: var(--red); }
 .thought__lines--off { color: var(--muted); text-decoration: line-through; }
 .thought__lines--off mark { color: inherit; }
 .text-edit { display: flex; flex-direction: column; gap: 8px; }
@@ -92,7 +92,7 @@
 .insert__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
 .insert__text b { font-weight: 600; }
 .insert__text .hint a { color: inherit; text-decoration: underline; }
-.insert__text .hint--warn { color: var(--red); }
+.hint.hint--warn { color: var(--red); }
 .chooser > summary { display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--surface); font-weight: 600; font-size: 14px; list-style: none; cursor: pointer; }
 .chooser > summary::-webkit-details-marker { display: none; }
 .chooser.chosen > summary { background: var(--blue); border-color: var(--blue); color: var(--surface); }

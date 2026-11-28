@@ -124,5 +124,5 @@ export const droppedText = (name: string, place: DroppedText, nameOf: (id: strin
   h("li", { class: "thought thought--off" },
     h("b", {}, name),
     linesView(linesOfPlace(place), false),
-    h("span", { class: "hint" }, whyDropped(place, nameOf)),
+    h("span", { class: "hint thought__why" }, whyDropped(place, nameOf)),
     ...articleWarnings(sources, linesOfPlace(place).map((line) => line.text).join(" ")))
