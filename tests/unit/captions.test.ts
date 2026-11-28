@@ -45,7 +45,7 @@ test("a subtitle word whose ink fits comes back unchanged instead of shrinking",
 
 test("a word that clears the Instagram buttons shrinks in the TikTok file, whose button column starts higher", () => {
   const word = { text: "слово", start: 0, end: 1 }
-  const ink = { left: 200, right: 870, top: 900, bottom: 960 }
+  const ink = { left: 200, right: 900, top: 900, bottom: 960 }
   expect(fitWord(word, ink, 78, "Instagram")).toBe(word)
   expect(fitWord(word, ink, 78, "TikTok").size ?? 78).toBeLessThan(78)
 })
