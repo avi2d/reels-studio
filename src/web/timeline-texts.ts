@@ -1,17 +1,18 @@
-import type { TextPlace } from "../shared/captions.ts"
+import { linesOfPlace, type TextPlace } from "../shared/captions.ts"
 import type { PlannedText, PlannedTexts } from "../shared/texts.ts"
 import { h } from "./dom.ts"
 import { formatLength } from "./format.ts"
 import { whyDropped } from "./text-drops.ts"
+import { nameIn, type NamedText } from "./text-names.ts"
 
 export interface TextData {
   readonly planned: PlannedTexts
-  readonly places: ReadonlyArray<TextPlace>
+  readonly texts: ReadonlyArray<NamedText>
   readonly phraseOf: (planned: PlannedText) => string
 }
 
-const linesOf = (planned: PlannedText): string => {
-  const text = planned.lines.map((line) => line.text.trim()).filter((line) => line !== "").join(" / ")
+const linesOf = (place: TextPlace): string => {
+  const text = linesOfPlace(place).map((line) => line.text.trim()).filter((line) => line !== "").join(" / ")
   return text === "" ? "Без текста" : `«${text}»`
 }
 
@@ -21,17 +22,18 @@ const saidOf = (place: TextPlace, data: TextData): string | undefined => {
   return place.state === "shown" ? `${phrase} · ${formatLength(place.shown.start)}` : phrase
 }
 
-const textItem = (place: TextPlace, number: number, data: TextData): HTMLElement => {
+const textItem = ({ place, name }: NamedText, data: TextData): HTMLElement => {
   const said = saidOf(place, data)
   return h("li", { class: place.state === "shown" ? "pause-row place text-place answered" : "pause-row place text-place dropped", "data-key": `text:${place.planned.id}` },
     h("span", { class: "where" },
-      h("b", {}, place.state === "shown" ? `Мысль ${number}` : `Мысль ${number} не встанет в ролик`),
-      h("span", { class: "text-lines" }, linesOf(place.planned)),
+      h("b", {}, place.state === "shown" ? name : `${name} не встанет в ролик`),
+      h("span", { class: "text-lines" }, linesOf(place)),
       ...(said === undefined ? [] : [h("span", {}, said)]),
-      ...(place.state === "dropped" ? [h("span", { class: "error" }, whyDropped(place, (by) => data.places.findIndex((one) => one.planned.id === by.id) + 1))] : [])))
+      ...(place.state === "dropped" ? [h("span", { class: "error" }, whyDropped(place, (id) => nameIn(data.texts, id)))] : [])))
 }
 
-const statusOf = ({ planned, places }: TextData): ReadonlyArray<HTMLElement> => {
+const statusOf = ({ planned, texts }: TextData): ReadonlyArray<HTMLElement> => {
+  const places = texts.map(({ place }) => place)
   if (planned.state === "unreadable") return [h("p", { class: "error", role: "status" }, "Ключевые мысли не прочитались, поэтому в ролике их нет. Попросите студию написать их заново.")]
   if (planned.state !== "ready") return []
   const dropped = places.filter((place) => place.state === "dropped").length
@@ -44,4 +46,4 @@ export const textList = (data: TextData): ReadonlyArray<HTMLElement> =>
     h("h3", {}, "Ключевые мысли"),
     h("p", { class: "did" }, "Пока звучит фраза, вверху кадра стоит её ключевая мысль. Две мысли не стоят на экране одновременно."),
     ...statusOf(data),
-    h("ol", { class: "place-list" }, ...data.places.map((place, index) => textItem(place, index + 1, data))))]
+    h("ol", { class: "place-list" }, ...data.texts.map((text) => textItem(text, data))))]

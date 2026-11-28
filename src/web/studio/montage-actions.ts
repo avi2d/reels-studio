@@ -1,3 +1,4 @@
+import { withText } from "../../shared/captions.ts"
 import { aroundInsert, reelWithin, shiftedBy, withInsert, type Shown } from "../../shared/inserts.ts"
 import { AROUND_JOIN_SECONDS, aroundJoin, withAnswer, withCover } from "../../shared/joins.ts"
 import { lengthOf, type Span } from "../../shared/plan.ts"
@@ -100,6 +101,10 @@ const blockActions = ({ state, history, toast }: ActionsContext): Pick<PartActio
 
 export const partActions = (context: ActionsContext): PartActions => {
   const { projectId, state, history, hear } = context
+  const showAround = (span: Span): void => {
+    const window = aroundInsert(span)
+    hear(reelWithin(state.cut?.reel ?? [], window), shiftedBy(state.shown, window.start))
+  }
   return {
     ...Api.insertUrls(projectId),
     ...joinActions(context),
@@ -117,11 +122,10 @@ export const partActions = (context: ActionsContext): PartActions => {
       const window = word === undefined ? undefined : wordWindow(reel, block, video, word)
       if (window !== undefined) hear(reelWithin(reel, window), shiftedBy(state.shown, window.start))
     },
-    showInsert: (span) => {
-      const window = aroundInsert(span)
-      hear(reelWithin(state.cut?.reel ?? [], window), shiftedBy(state.shown, window.start))
-    },
+    showInsert: showAround,
     answerInsert: (answer) => { history.change(withInsert(state.edits, answer)) },
+    showText: showAround,
+    answerText: (answer) => { history.change(withText(state.edits, answer)) },
     setZoom: (id, level) => { history.change(withZoom(state.edits, id, level)) },
     hearZoom: (place) => {
       const window = { start: Math.max(0, place.at - ZOOM_BEFORE_SECONDS), end: place.at + ZOOM_AFTER_SECONDS }

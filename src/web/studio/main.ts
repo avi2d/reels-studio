@@ -6,6 +6,7 @@ import { run } from "../run.ts"
 import { studioChat, type StudioChat } from "./chat.ts"
 import { rail, stepBody, stepName, topBar } from "./frame.ts"
 import { listView } from "./list.ts"
+import { doneStep } from "./done.ts"
 import { lookStep } from "./look.ts"
 import { montageStep } from "./montage.ts"
 import { planStep, type TaskDraft } from "./plan.ts"
@@ -88,6 +89,10 @@ const reelPage = (id: string, step: Step): Effect.Effect<void, Api.Failed> =>
       leaveStep = view.dispose
     } else if (step === "look") {
       const view = lookStep(id)
+      body = view.body
+      leaveStep = view.dispose
+    } else if (step === "done") {
+      const view = doneStep(id)
       body = view.body
       leaveStep = view.dispose
     } else if (step === "montage") {

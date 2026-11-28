@@ -328,6 +328,15 @@ Both are kept as a subtitle correction in `timeline.json`, so a word the person 
 
 The chat model writes the key thoughts to `texts.json`, each tied to the words of one phrase.
 The «Паузы и склейки» stage lists every key thought of `texts.json` under «Ключевые мысли», with its lines and, when the studio knows them, its words and its time in the cut.
+The step «Монтаж» lists the first shown text of the first part as «Заголовок» and the rest as «Мысль 1», «Мысль 2» and so on, and the stage list uses the same names.
+Each shown text on that step is a place to check.
+It shows its lines, its words and its time, and «Посмотреть» plays 1 s before it, the text and 1 s after it.
+«Оставить» keeps the wording, «Исправить» opens a field for each line to retype it, and «Убрать» takes the text out of the reel.
+`timeline.json` keeps each answer by the text id, and a retyped text keeps its new lines and shows the proposed ones under them.
+A line holds at most 20 characters, or 8 in an accent line, and a text holds at most 3 lines.
+The page does not save a longer or empty wording, and the server refuses it with «Надпись не помещается на экране».
+The built file carries the retyped lines or leaves out a removed text.
+
 A key thought the reel cannot show stays in the list, marked «не встанет в ролик», with its reason:
 
 | Reason | What the list says |
@@ -336,7 +345,8 @@ A key thought the reel cannot show stays in the list, marked «не встане
 | Its word numbers are not in the transcript, or the first comes after the last | The video text has no such words |
 | The cut removed every word of its phrase | The phrase is not in the reel now |
 | It has no line with text | There is nothing to show |
-| An earlier thought in time already stands for the whole phrase | The list names that thought by its number and says it holds the screen |
+| The person removed it | The person removed it from the reel |
+| An earlier thought in time already stands for the whole phrase | The list names that thought and says it holds the screen |
 
 When `texts.json` does not read, the list says so.
 
@@ -351,7 +361,7 @@ Two rules exist:
 The step «Монтаж» lists the rules under «Правила» as short phrases, such as «пауза остаётся 0,2 с».
 A step with no rule of its own shows no list.
 The person changes a rule by writing in the chat, such as «оставляй паузы подлиннее» or «медленнее», and the chat model writes `rules.json`.
-The step then shows the change, every pause or zoom it moved and one button that returns the old values.
+The step then shows the change, every pause it moved, every zoom it moved that the step lists, and one button that returns the old values.
 A zoom the person set by hand keeps its answer.
 When one reply changed both rules, the button returns both.
 The pin next to a rule keeps its value for the next reels, and a new reel starts with the pinned values.
@@ -375,11 +385,11 @@ Each video folder holds these next to `plan.json`:
 | `zooms.json` | The key words to zoom on, each with an id, its video and its word numbers, written by the chat model |
 | `rules.json` | The rules of the reel, `pause` and `zoom`. A new reel starts with the pinned rules, and the chat model may write it |
 | `rules-change.json` | The last rule change made from the chat, with the value before it, so one press can undo it. Only the studio writes it |
-| `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses, the subtitle corrections and the answers to the places to check, to the inserts and to the zooms |
+| `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses, the subtitle corrections and the answers to the places to check, to the inserts, to the texts and to the zooms |
 | `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
 | `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |
-| `reel/reel.json` | The build time, the video file it published, the parts with their pushes, the crop window of each video, the inserts, a hash of the subtitles and key thoughts, the face setting, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
+| `reel/reel.json` | The build time, the video file it published, the parts with their pushes, the crop window of each video, the inserts, a hash of the subtitles and key thoughts as the person answered them, the face setting, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
 | `reel/sound.json` | The parts of the last checked cut with the heard clip inserts, its measured loudness before and after levelling, and the gain of each part over its source time, which the montage plays |
 | `reel/sound-work/` | The sound of each clip and the levelled sound while a check runs, removed when it ends |
 | `looks.json` | The face setting of the reel, `off` or `light`, the subtitle look, `brand`, `plate` or `example`, with its size, `normal` or `large`, and the name plate, shown or not, with its text, written when the person picks them |

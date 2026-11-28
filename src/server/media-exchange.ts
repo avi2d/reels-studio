@@ -1,7 +1,8 @@
 import { type Crypto, Context, Effect, type FileSystem, Ref, Semaphore } from "effect"
 import type { ChildProcessSpawner } from "effect/process"
+import { linesProblem } from "../shared/texts.ts"
 import { mergeEdits as joinEdits, type Edits } from "../shared/timeline.ts"
-import { type ApiError, orUnavailable } from "./api-error.ts"
+import { type ApiError, badRequest, orUnavailable } from "./api-error.ts"
 import type { Projects } from "./projects.ts"
 import type { Settings } from "./settings.ts"
 import { readEdits, writeEdits } from "./timeline-files.ts"
@@ -42,9 +43,11 @@ export const makeExchange = (
       }))
     }).pipe(orUnavailable("the timeline was not saved", "Не получилось сохранить монтаж. Попробуйте ещё раз."), Effect.provideContext(context))
   const mergeEdits = (id: string, base: Edits, local: Edits): Effect.Effect<Edits, ApiError> =>
-    exchangeEdits(id, (current) => {
-      const edits = joinEdits(base, local, current)
-      return { edits, value: edits }
-    })
+    (local.texts ?? []).some((one) => one.answer === "retyped" && linesProblem(one.lines) !== undefined)
+      ? Effect.fail(badRequest("Надпись не помещается на экране. Сократите её и сохраните ещё раз."))
+      : exchangeEdits(id, (current) => {
+        const edits = joinEdits(base, local, current)
+        return { edits, value: edits }
+      })
   return { exchangeEdits, mergeEdits }
 })

@@ -2,6 +2,7 @@ import { stepPath } from "../../shared/page.ts"
 import { chosenTake } from "../../shared/timeline.ts"
 import { h } from "../dom.ts"
 import type { EditHistory } from "../edit-history.ts"
+import { nameIn } from "../text-names.ts"
 import { formatLength } from "../format.ts"
 import type { Montage } from "../montage.ts"
 import type { Loaded } from "../timeline-draw.ts"
@@ -48,7 +49,7 @@ const partsNav = (cut: Cut, selected: string | undefined, select: (block: string
 }
 
 const detailOf = (cut: Cut, loaded: Loaded, state: State, actions: PartActions): HTMLElement => {
-  const numbers = new Map([...cut.parts.flatMap((part) => part.texts), ...cut.outside.texts].map(({ place, number }) => [place.planned.id, number]))
+  const texts = [...cut.parts.flatMap((part) => part.texts), ...cut.outside.texts]
   const data = (words: PartData["words"]): PartData => ({
     count: cut.parts.length,
     rest: cut.rest,
@@ -57,7 +58,7 @@ const detailOf = (cut: Cut, loaded: Loaded, state: State, actions: PartActions):
     pictures: loaded.view.pictures,
     words,
     phraseOf: phraseOf(loaded.transcripts),
-    textNumber: (planned) => numbers.get(planned.id) ?? 0
+    textName: (id) => nameIn(texts, id)
   })
   const part = cut.parts.find((one) => one.one.block.id === state.selected)
   const gone = cut.gone.find((block) => block.id === state.selected)
