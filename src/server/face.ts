@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Option, Schema } from "effect"
+import { Effect, FileSystem, Option, Schema, Semaphore } from "effect"
 import { Face } from "../shared/face.ts"
 import { Noise, NOISE_DEFAULT } from "../shared/noise.ts"
 import { retouchArgs, retouchedFrames } from "./media-commands.ts"
@@ -13,6 +13,7 @@ const LooksFile = Schema.fromJsonString(Schema.Struct({ face: Face, noise: Noise
 const encodeLooks = Schema.encodeEffect(LooksFile)
 
 const looksFile = (dir: string): string => `${dir}/looks.json`
+const looksWriteLock = Semaphore.makeUnsafe(1)
 
 // Only her own choice changes her face, so a missing or broken file reads as off.
 export const faceOf = (text: string | undefined): Face =>
@@ -41,7 +42,7 @@ const writeLooks = Effect.fnUntraced(function*(dir: string, change: { readonly f
   const fresh = `${looksFile(dir)}.new`
   yield* fs.writeFileString(fresh, yield* encodeLooks({ ...(yield* readLooks(dir)), ...change }))
   yield* fs.rename(fresh, looksFile(dir))
-})
+}, looksWriteLock.withPermits(1))
 
 export const writeFace = Effect.fnUntraced(function*(dir: string, face: Face) {
   yield* writeLooks(dir, { face })
