@@ -67,8 +67,9 @@ const isBeforeArticleWord = (tokens: ReadonlyArray<string>, at: number): boolean
 
 const isListedAfterArticleWord = (tokens: ReadonlyArray<string>, at: number): boolean => {
   const opener = runOpenerAt(tokens, at)
-  if (!ARTICLE_WORD.test(tokens[opener] ?? "") || isBeforeArticleWord(tokens, opener - 1)) return false
+  if (!ARTICLE_WORD.test(tokens[opener] ?? "")) return false
   const closer = runCloser(tokens, at)
+  if (PART_WORD.test(closer) && isBeforeArticleWord(tokens, opener - 1)) return false
   return opener === at - 1 || !(PART_WORD.test(closer) || COUNT_UNIT.test(closer))
 }
 

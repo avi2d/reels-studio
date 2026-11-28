@@ -128,6 +128,13 @@ test("a number before a plural article form is a count, not an article number", 
   expect(articleMentions(["между", "5", "статьями"])).toEqual([])
 })
 
+test("a second article word in a list keeps its own number, not read as a part", () => {
+  expect(articleMentions(["ст.", "158,", "ст.", "159", "УК"])).toEqual(["158", "159"])
+  expect(articleMentions(["статья", "105,", "статья", "111", "УК"])).toEqual(["105", "111"])
+  expect(articleMentions(["статья", "620", "статья", "621"])).toEqual(["620", "621"])
+  expect(articleMentions(["ч.", "2", "ст.", "158,", "ст.", "159"])).toEqual(["158", "159"])
+})
+
 test("a number with no article word next to it is not a mention", () => {
   expect(articleMentions(["Это", "стоит", "620", "рублей"])).toEqual([])
 })
