@@ -3,7 +3,7 @@ import { doubtAnswer, doubtsOf, type DoubtAnswer, type WordDoubt } from "../../s
 import { insertPlaces, shownInserts, type InsertPlace, type Shown } from "../../shared/inserts.ts"
 import { cutOf, facesByVideo, placesOf, type Join, type Place } from "../../shared/joins.ts"
 import { lengthOf, type Transcript } from "../../shared/plan.ts"
-import { bareWord } from "../../shared/subtitles.ts"
+import { bareWord, correctedWord } from "../../shared/subtitles.ts"
 import { arrange, assemble, clipsOf, type Block, type Clip, type Edits, type Placed, type TimelinePage } from "../../shared/timeline.ts"
 
 export interface Numbered<T> {
@@ -87,7 +87,10 @@ const wordsOf = (one: Placed, transcripts: ReadonlyMap<string, Transcript>, edit
     const word = transcript.words[doubt.index]
     if (word === undefined || doubt.index < from || doubt.index > to || !one.spans.some((span) => word.end > span.start && word.start < span.end)) return []
     const heard = bareWord(word.text)
-    const corrected = (edits.subtitles ?? []).find((fix) => fix.block === one.block.id && fix.video === video && fix.index === doubt.index)?.text
+    const corrections = edits.subtitles ?? []
+    const direct = corrections.find((fix) => fix.block === one.block.id && fix.video === video && fix.index === doubt.index)
+    const shown = correctedWord([one.block], transcripts, corrections, one.block.id, video, doubt.index)
+    const corrected = direct?.text ?? (shown === word.text ? undefined : shown)
     return [{ ...doubt, video, heard, answer: doubtAnswer(heard, doubt.fix, corrected) }]
   })
 }
