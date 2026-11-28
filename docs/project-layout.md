@@ -33,13 +33,15 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/shared/library.ts` | The formats of an uploaded video, of a video offered to a reel from the shared list or another folder, and of a pick, used by the server and the page |
 | `src/shared/file-name.ts` | The cleaned name the library stores for an uploaded file, used by the server and the page to tell whether a picked file is already listed |
 | `src/shared/project.ts` | The formats of a reel's `project.json`, of the title a person sends to create or rename it, and of the reel the page gets with its one status: created, uploaded or built, used by the server and the page |
+| `src/shared/web-pages.ts` | The formats of `web-pages.json` and of the source of a saved page, and the check of the article numbers a phrase names against the articles of a page, used by the server and the page |
+| `src/server/web-pages.ts` | Saves a page from the internet as a PDF in `attached/` with its address and licence, through Chrome in `web-page-browser.ts`, which refuses every connection to the home network |
 | `src/shared/page.ts` | The addresses of the home, uploaded videos and project pages, and of the new screens under `/new` with their five steps, used by the server and the page |
 | `tools/transcribe/` | The speech recognizer, a Python script that uv runs |
 | `tools/pdf/` | The PDF reader that renders the first pages and takes out the text, and renders one page with the place of each letter for an insert, Python scripts that uv runs |
 | `tools/gaze/` | The measure of where the speaker looks and the skin and eye trial, Python scripts that uv runs |
 | `tools/fonts/` | The script that makes Reels Accent from Playfair Display Italic, with fontTools |
 | `deploy/reels-studio.service` | The systemd user unit that keeps the studio running |
-| `src/pi/` | The pi extension that keeps the chat model inside one video folder |
+| `src/pi/` | The pi extensions that keep the chat model inside one video folder and give it the tool that saves a web page by its address |
 | `src/web/` | The page, its styles and its script |
 | `src/web/studio/` | The new screens at `/new`: the reel list, the top bar and the five steps, beside the old page until they replace it. The reel list shows reels and uploaded takes five to a page and uploads takes, and step 1, «Записи», adds any number of ticked uploaded takes to the reel at once, lists its recordings and plays a recording. Step 2, «План», takes the task, the apps and the task files and shows the plan, and the chat opens from every step with replies that stream and a stop button. Step 3, «Монтаж», edits the parts of the reel, walks through the open questions and undoes changes. `rules.ts` lists the rules on the step they belong to, with a pin and the undo of a chat change |
 | `skills/` | The four skills the chat model reads: plan, style, player zones and inserts |

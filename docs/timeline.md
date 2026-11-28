@@ -257,8 +257,9 @@ It shows the chosen picture from 1 s before the join to 1.5 s after it, and take
 ## Inserts
 
 An insert shows a file the person attached in the chat or to the task over the video while a phrase is said: a picture or a screenshot, a video clip, or one page of a PDF.
+The text of a law counts as a PDF: when the brief names a page on the internet, the chat model saves it by its address, the studio prints it as a PDF to `attached/` and lists it in `web-pages.json`, and the model places it as it places any PDF.
 The chat model chooses the phrase by its meaning and writes it to `inserts.json`, as the reels-inserts skill says.
-The studio leaves out an insert with a repeated id, a file that is not in `attached/`, that the person removed from the task and no chat message names, or that is not of its kind, a quote that the text of its PDF page does not hold, or word numbers the transcript does not hold, and the page says how many it left out.
+The studio leaves out an insert with a repeated id, a file that is not in `attached/`, that the person removed from the task and no chat message or saved web page names, or that is not of its kind, a quote that the text of its PDF page does not hold, or word numbers the transcript does not hold, and the page says how many it left out.
 The quote is matched without regard to case, ё, line breaks and hyphens.
 An insert covers the words of its phrase that the cut plays, and at least 2 s.
 Two inserts never stand at once: the later one starts where the earlier one ends, and one left shorter than 1 s is dropped.
@@ -272,6 +273,9 @@ A clip plays from its `start` for as long as its phrase, and holds its last fram
 A clip is silent until the person turns its sound on, and it does not grow.
 A PDF page is rendered 1800 px wide, its quoted lines are marked in yellow, and it is cropped around the marked lines as wide as the text of the page, at most square and no taller than the text, so it stands as a card.
 The marked page and the clip preview the page plays are kept in `attached-views/<file>/`.
+The studio opens a page from the internet only on the computer it runs on and refuses an address on the home network.
+The insert card of a saved page names the site with a link, and the licence the page states or that it states none.
+The card, the part title, the subtitle words, each key thought and each removed part warn when they name an article that the saved law pages do not hold.
 
 The row of blocks shows each insert as a mark under the blocks it covers, and the mark plays it.
 The «Паузы и склейки» stage lists every insert as a place to check, with what it shows, its words and the reason the model gave.
@@ -321,6 +325,7 @@ Each video folder holds these next to `plan.json`:
 | `blocks.json` | The blocks and their takes, written by the chat model |
 | `inserts.json` | The pictures, clips and PDF pages to show over phrases, written by the chat model |
 | `texts.json` | The titles and key thoughts to show over phrases, written by the chat model |
+| `web-pages.json` | The file, address, licence and time of each page saved from the internet. Only the studio writes it |
 | `rules.json` | The rules of the reel, now `pause`, the seconds a shortened pause keeps. A new reel starts with the pinned rules, and the chat model may write it |
 | `rules-change.json` | The last rule change made from the chat, with the value before it, so one press can undo it. Only the studio writes it |
 | `timeline.json` | The order of the blocks, the deleted blocks, the chosen takes, the removed pauses, the returned pauses, the subtitle corrections and the answers to the places to check and to the inserts |
