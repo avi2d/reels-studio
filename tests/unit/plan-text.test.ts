@@ -38,12 +38,12 @@ test("nested dash items stay under their parent instead of becoming top-level si
   ])
 })
 
-test("dedenting nested items and continuations does not attach them to the deepest child", () => {
+test("dedented continuations stay on the last nested item instead of moving above it", () => {
   expect(planBlocks("- Части:\n  - Заголовок\n    - Текст\n      на экране\n  - Мысль\n  по порядку\n- Паузы\n\n- Вопросы")).toEqual([
     { kind: "list", items: [
-      { text: "Части: по порядку", children: [
+      { text: "Части:", children: [
         { text: "Заголовок", children: [{ text: "Текст на экране", children: [] }] },
-        { text: "Мысль", children: [] }
+        { text: "Мысль по порядку", children: [] }
       ] },
       { text: "Паузы", children: [] }
     ] },
