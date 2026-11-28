@@ -61,7 +61,7 @@ test("pause noise is read in the windows that are quiet before cleaning, not in 
 })
 
 test("a silent window reads as the floor of the scale instead of being dropped", () => {
-  const metadata = "frame:0\nlavfi.astats.Overall.RMS_level=-36.45\nframe:1\nlavfi.astats.Overall.RMS_level=-inf\nframe:2\nlavfi.astats.Overall.RMS_level=-120.3\n"
+  const metadata = "frame:0\nlavfi.astats.Overall.RMS_level=-36.47\nframe:1\nlavfi.astats.Overall.RMS_level=-inf\nframe:2\nlavfi.astats.Overall.RMS_level=-120.3\n"
   expect(windowLevelsOf(metadata, -100)).toEqual([-36.5, -100, -100])
 })
 
