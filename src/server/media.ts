@@ -2,8 +2,6 @@ import { Cause, Context, Deferred, Effect, Exit, FileSystem, Layer, Option, Ref 
 import type { Offer, Pick, UploadedVideo } from "../shared/library.ts"
 import type { VideoView } from "../shared/plan.ts"
 import type { PictureSide, ReelJob, ReelView, SoundCheck } from "../shared/reel.ts"
-import type { Face } from "../shared/face.ts"
-import type { RetouchPicture, RetouchView } from "../shared/retouch.ts"
 import { type Edits, type GazeFailure, type TimelineView } from "../shared/timeline.ts"
 import { ApiError, badRequest, notFound } from "./api-error.ts"
 import { makeExchange, type Needs } from "./media-exchange.ts"
@@ -13,8 +11,10 @@ import { Projects } from "./projects.ts"
 import { sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
 import { buildReel, readReel, reelPictureAt, reelVideoAt, type ReelVersion } from "./reel.ts"
-import { writeFace } from "./face.ts"
-import { lastTrial, noFaceOf, readTrial, runTrial, trialPicture } from "./retouch.ts"
+import { readNoise } from "./face.ts"
+import { noiseHandlers, queueWaiting, trialHandlers, type NoiseHandlers, type TrialHandlers } from "./media-looks.ts"
+import { runCleaning } from "./noise.ts"
+import { noFaceOf, runTrial } from "./retouch.ts"
 import { checkSound, readSoundCheck, soundKeyOf } from "./sound-check.ts"
 import { readCut, readTimeline, type Cut } from "./timeline-files.ts"
 import { partsOf } from "./media-commands.ts"
@@ -109,13 +109,6 @@ const markGazeFailed = (failures: Unseen, job: Job) => (cause: Cause.Cause<unkno
 const setReel = (reels: Reels, dir: string, job: ReelJob): Effect.Effect<void> =>
   Ref.update(reels, (map) => new Map([...map, [dir, job]]))
 
-const queueWaiting = (reels: Reels, dir: string): Effect.Effect<boolean> =>
-  Ref.modify(reels, (map) => {
-    const job = map.get(dir)
-    if (job?.state === "waiting" || job?.state === "running") return [false, map]
-    return [true, new Map([...map, [dir, { state: "waiting" }]])]
-  })
-
 const forgetReel = (reels: Reels, dir: string): Effect.Effect<void> =>
   Ref.update(reels, (map) => new Map([...map].filter(([other]) => other !== dir)))
 
@@ -150,7 +143,10 @@ type Tried = Ref.Ref<ReadonlyMap<string, string>>
 
 // The task reads the cut again when it starts, which can be a later cut than the one the poll queued.
 const checkSoundOf = (tried: Tried) => (dir: string, cut: Cut, onDone: (share: number) => Effect.Effect<void>) =>
-  Ref.update(tried, (map) => new Map([...map, [dir, soundKeyOf(partsOf(cut.clips), cut.inserts)]])).pipe(Effect.andThen(checkSound(dir, cut, onDone)))
+  readNoise(dir).pipe(
+    Effect.flatMap((noise) => Ref.update(tried, (map) => new Map([...map, [dir, soundKeyOf(partsOf(cut.clips), cut.inserts, noise)]]))),
+    Effect.andThen(checkSound(dir, cut, onDone))
+  )
 
 const step = Effect.fnUntraced(function*(failures: Failures, tried: Tried, work: Ref.Ref<Work>) {
   const { closed, closedJobs } = yield* Ref.get(work)
@@ -163,6 +159,8 @@ const step = Effect.fnUntraced(function*(failures: Failures, tried: Tried, work:
   if (sound !== undefined) return yield* attempt(work, { dir: sound, name: "the sound check" }, reelTask(failures.sounds, sound, checkSoundOf(tried)), () => Effect.void)
   const trial = yield* nextReel(failures.trials, closed)
   if (trial !== undefined) return yield* attempt(work, { dir: trial, name: "the retouch trial" }, reelTask(failures.trials, trial, (dir, cut, onDone) => runTrial(dir, cut.clips, onDone)), () => Effect.void)
+  const cleaning = yield* nextReel(failures.cleanings, closed)
+  if (cleaning !== undefined) return yield* attempt(work, { dir: cleaning, name: "the noise cleaning" }, reelTask(failures.cleanings, cleaning, (dir, cut, onDone) => runCleaning(dir, cut.clips, onDone)), () => Effect.void)
   const stale = yield* nextStale(failures.stale, jobs)
   if (stale !== undefined) return yield* attempt(work, stale, refreshPreview(stale), () => markFailed(failures.stale, stale))
   const unseen = yield* nextUnseen(failures.unseen, jobs)
@@ -228,7 +226,7 @@ const soundHandler = (folder: (id: string) => Effect.Effect<string, ApiError>, s
     const cut = yield* readCut(dir, yield* sourceNames(dir))
     const job = (yield* Ref.get(sounds)).get(dir) ?? { state: "idle" }
     const view = yield* readSoundCheck(dir, cut, job)
-    const key = soundKeyOf(partsOf(cut.clips), cut.inserts)
+    const key = soundKeyOf(partsOf(cut.clips), cut.inserts, yield* readNoise(dir))
     const heard = view.heard?.fresh === true
     const busy = job.state === "waiting" || job.state === "running"
     if (cut.clips.length === 0 || heard || busy || (yield* Ref.get(tried)).get(dir) === key) return view
@@ -241,42 +239,6 @@ export interface Picture {
   readonly join: number
   readonly side: PictureSide
 }
-
-const trialHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, trials: Reels, context: Context.Context<Needs>) => {
-  const trialOf = Effect.fnUntraced(function*(dir: string) {
-    const job = (yield* Ref.get(trials)).get(dir) ?? { state: "idle" }
-    return yield* readTrial(dir, (yield* readCut(dir, yield* sourceNames(dir))).clips, job)
-  })
-
-  const trial = Effect.fn("Media.trial")(function*(id: string) {
-    return yield* trialOf(yield* folder(id))
-  }, orBroken, Effect.provideContext(context))
-
-  const startTrial = Effect.fn("Media.startTrial")(function*(id: string) {
-    const dir = yield* folder(id)
-    const { clips } = yield* readCut(dir, yield* sourceNames(dir))
-    if (clips.length === 0) return yield* badRequest("В монтаже нет ни одного блока. Сначала соберите блоки.")
-    yield* queueWaiting(trials, dir)
-    return yield* trialOf(dir)
-  }, orBroken, Effect.provideContext(context))
-
-  const trialFile = Effect.fn("Media.trialFile")(function*(id: string, name: RetouchPicture) {
-    const target = yield* trialPicture(yield* folder(id), name)
-    if (target === undefined) return yield* notFound("Проба ещё не готова")
-    return target
-  }, orBroken, Effect.provideContext(context))
-
-  const setFace = Effect.fn("Media.setFace")(function*(id: string, face: Face) {
-    const dir = yield* folder(id)
-    if (face === "light" && (yield* lastTrial(dir)) === undefined) return yield* badRequest(NO_TRIAL_YET)
-    yield* writeFace(dir, face)
-    return yield* trialOf(dir)
-  }, orBroken, Effect.provideContext(context))
-
-  return { trial, startTrial, trialFile, setFace }
-}
-
-const NO_TRIAL_YET = "Сначала сделайте пробу и сравните лицо до и после."
 
 export class Media extends Context.Service<Media, {
   readonly videos: (id: string) => Effect.Effect<ReadonlyArray<VideoView>, ApiError>
@@ -295,14 +257,10 @@ export class Media extends Context.Service<Media, {
   readonly buildReel: (id: string) => Effect.Effect<ReelView, ApiError>
   readonly cancelReel: (id: string) => Effect.Effect<ReelView, ApiError>
   readonly reelFile: (id: string, made: string, version: ReelVersion) => Effect.Effect<string, ApiError>
-  readonly trial: (id: string) => Effect.Effect<RetouchView, ApiError>
-  readonly startTrial: (id: string) => Effect.Effect<RetouchView, ApiError>
-  readonly trialFile: (id: string, name: RetouchPicture) => Effect.Effect<string, ApiError>
-  readonly setFace: (id: string, face: Face) => Effect.Effect<RetouchView, ApiError>
   readonly reelPicture: (id: string, picture: Picture) => Effect.Effect<string, ApiError>
   readonly sound: (id: string) => Effect.Effect<SoundCheck, ApiError>
   readonly withoutWork: <A, E, R>(dir: string, use: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
-}>()("reels-studio/Media") {
+} & TrialHandlers & NoiseHandlers>()("reels-studio/Media") {
   static readonly layer = Layer.effect(
     Media,
     Effect.gen(function*() {
@@ -315,11 +273,12 @@ export class Media extends Context.Service<Media, {
       const reels: Reels = yield* Ref.make<ReadonlyMap<string, ReelJob>>(new Map())
       const trials: Reels = yield* Ref.make<ReadonlyMap<string, ReelJob>>(new Map())
       const sounds: Reels = yield* Ref.make<ReadonlyMap<string, ReelJob>>(new Map())
+      const cleanings: Reels = yield* Ref.make<ReadonlyMap<string, ReelJob>>(new Map())
       const tried: Tried = yield* Ref.make<ReadonlyMap<string, string>>(new Map())
       const work = yield* Ref.make<Work>({ closed: new Set(), closedJobs: new Set(), running: undefined })
 
       const guarded = Effect.gen(function*() {
-        const outcome = yield* Effect.exit(step({ unheard, unseen, stale, reels, trials, sounds }, tried, work))
+        const outcome = yield* Effect.exit(step({ unheard, unseen, stale, reels, trials, cleanings, sounds }, tried, work))
         if (Exit.isSuccess(outcome)) return
         yield* Effect.logError("the media worker failed", outcome.cause)
         yield* Effect.sleep("3 seconds")
@@ -378,7 +337,7 @@ export class Media extends Context.Service<Media, {
         )
       }
 
-      const { uploaded, retryUploaded, uploadedPreview, removeUploaded, library, reuse } = makeShelves(projects, { unheard, unseen, stale, reels, trials, sounds }, withoutJob, context)
+      const { uploaded, retryUploaded, uploadedPreview, removeUploaded, library, reuse } = makeShelves(projects, { unheard, unseen, stale, reels, trials, cleanings, sounds }, withoutJob, context)
 
       const timeline = Effect.fn("Media.timeline")(function*(id: string) {
         const dir = yield* projects.folder(id)
@@ -393,7 +352,9 @@ export class Media extends Context.Service<Media, {
 
       const sound = soundHandler(projects.folder, sounds, tried, context)
 
-      return Media.of({ videos, preview, retry, library, reuse, uploaded, retryUploaded, uploadedPreview, removeUploaded, timeline, exchangeEdits, mergeEdits, reel, buildReel: queueReel, cancelReel, reelFile, reelPicture, sound, trial, startTrial, trialFile, setFace, withoutWork })
+      const { noise, startCleaning, cleanedFile, setNoise } = noiseHandlers(projects.folder, cleanings, context)
+
+      return Media.of({ videos, preview, retry, library, reuse, uploaded, retryUploaded, uploadedPreview, removeUploaded, timeline, exchangeEdits, mergeEdits, reel, buildReel: queueReel, cancelReel, reelFile, reelPicture, sound, trial, startTrial, trialFile, setFace, noise, startCleaning, cleanedFile, setNoise, withoutWork })
     })
   )
 }

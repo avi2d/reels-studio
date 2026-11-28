@@ -1,5 +1,6 @@
 import { DateTime, Effect, FileSystem, Option, Schema, type PlatformError } from "effect"
 import { Face } from "../shared/face.ts"
+import { Noise } from "../shared/noise.ts"
 import { faceLeft } from "../shared/framing.ts"
 import { visualKey, type Shown } from "../shared/inserts.ts"
 import { Frame } from "../shared/timeline.ts"
@@ -16,7 +17,8 @@ import { hasCaptions, type Captions } from "../shared/captions.ts"
 import { placeCaptions } from "./captions.ts"
 import { finishArgs } from "./finish-commands.ts"
 import { isHdrVideo, measureLoudness, measurePart, places, readGaze, shortTermLoudness, tool } from "./media-jobs.ts"
-import { readFace, retouchVideo } from "./face.ts"
+import { readFace, readNoise, retouchVideo } from "./face.ts"
+import { videoChain, type VideoStep } from "./video-chain.ts"
 import { Settings } from "./settings.ts"
 import { colourJoins, coloursOf, gainOf, measureSkin } from "./skin.ts"
 import type { Cut } from "./timeline-files.ts"
@@ -42,6 +44,7 @@ const Record = Schema.Struct({
   inserts: Schema.Array(ShownInsert).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   captions: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed(""))),
   face: Face.pipe(Schema.withDecodingDefaultKey(Effect.succeed("off" as const))),
+  noise: Noise.pipe(Schema.withDecodingDefaultKey(Effect.succeed("off" as const))),
   levelling: Schema.optionalKey(Levelling)
 })
 const RecordFile = Schema.fromJsonString(Record)
@@ -178,7 +181,7 @@ const publishPictures = Effect.fnUntraced(function*(dir: string, made: string, j
   }
 })
 
-export const renderParts = Effect.fnUntraced(function*(dir: string, parts: ReadonlyArray<Part>, colours: ReadonlyArray<VideoColour>, work: string, output: string, onDone: (share: number) => Effect.Effect<void>) {
+export const renderParts = Effect.fnUntraced(function*(dir: string, parts: ReadonlyArray<Part>, colours: ReadonlyArray<VideoColour>, noise: Noise, work: string, output: string, onDone: (share: number) => Effect.Effect<void>) {
   const settings = yield* Settings
   const total = secondsOf(parts)
   const crops = yield* readCrops(dir, parts)
@@ -188,7 +191,7 @@ export const renderParts = Effect.fnUntraced(function*(dir: string, parts: Reado
     const { source, look } = yield* lookOf(dir, part.video, colours, hdr, crops)
     const before = secondsOf(parts.slice(0, names.length))
     const name = partFileOf(names.length, "mov")
-    yield* tool("ffmpeg", partArgs(source, part, look, settings.encoder, `${work}/${name}`), settings.heavy, (line) => {
+    yield* tool("ffmpeg", partArgs(source, part, look, noise, settings.encoder, `${work}/${name}`), settings.heavy, (line) => {
       const seconds = progressSeconds(line)
       return seconds === undefined ? Effect.void : onDone(Math.min(1, (before + seconds) / total))
     })
@@ -283,25 +286,6 @@ const SOUND_SHARE = 0.2
 const FACE_SHARE = 0.4
 const INSERTS_SHARE = 0.25
 
-type VideoStep =
-  | { readonly kind: "face"; readonly from: string; readonly to: string }
-  | { readonly kind: "inserts"; readonly from: string; readonly to: string }
-
-interface VideoChain {
-  readonly levelled: string
-  readonly steps: ReadonlyArray<VideoStep>
-}
-
-// Her face is retouched before the inserts go on, so no attached picture is ever retouched.
-export const videoChain = (work: string, face: Face, inserts: boolean): VideoChain => {
-  const reel = `${work}/reel.mp4`
-  const retouched = `${work}/retouched.mp4`
-  const levelled = face === "off" && !inserts ? reel : `${work}/levelled.mp4`
-  const faceStep: ReadonlyArray<VideoStep> = face === "light" ? [{ kind: "face", from: levelled, to: inserts ? retouched : reel }] : []
-  const insertStep: ReadonlyArray<VideoStep> = inserts ? [{ kind: "inserts", from: face === "light" ? retouched : levelled, to: reel }] : []
-  return { levelled, steps: [...faceStep, ...insertStep] }
-}
-
 const retouchStep = Effect.fnUntraced(function*(work: string, step: VideoStep, frames: number, onDone: (share: number) => Effect.Effect<void>) {
   const fs = yield* FileSystem.FileSystem
   const folder = `${work}/face`
@@ -317,6 +301,7 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
   const total = secondsOf(parts)
   const pictures = yield* Effect.forEach(cut.inserts, (insert) => insertLayerOf(dir, insert))
   const face = yield* readFace(dir)
+  const noise = yield* readNoise(dir)
   const finishing = pictures.length > 0 || hasCaptions(cut.captions)
   const insertsShare = finishing ? INSERTS_SHARE : 0
   const faceShare = face === "light" ? FACE_SHARE : 0
@@ -326,7 +311,7 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
   yield* sweepReel(dir)
   const captions = yield* placeCaptions(place.work, cut.captions, total)
   const colours = yield* measureColours(dir, parts, place.work)
-  const crops = yield* renderParts(dir, parts, colours, place.work, `${place.work}/joined.mp4`, (share) => onDone(share * partsShare))
+  const crops = yield* renderParts(dir, parts, colours, noise, place.work, `${place.work}/joined.mp4`, (share) => onDone(share * partsShare))
   const joins = yield* makePictures(dir, parts, colours, new Map(), crops)
   const rendered: Array<Rendered> = []
   for (const [index, part] of parts.entries()) {
@@ -350,6 +335,7 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
     inserts: recorded(cut.inserts),
     captions: captionsKey(cut.captions),
     face,
+    noise,
     colour: { videos: colours, joins },
     levelling
   }
@@ -382,6 +368,7 @@ export const readReel = Effect.fnUntraced(function*(dir: string, cut: Cut, job: 
   const seconds = secondsOf(parts)
   const published = yield* publishedReel(dir)
   const face = yield* readFace(dir)
+  const noise = yield* readNoise(dir)
   if (published === undefined) return { job, cut: seconds, face } satisfies ReelView
   const size = Number((yield* fs.stat(published.target)).size)
   const { record } = published
@@ -390,7 +377,7 @@ export const readReel = Effect.fnUntraced(function*(dir: string, cut: Cut, job: 
     made: record.made,
     seconds: secondsOf(record.parts),
     size,
-    fresh: sameParts(record.parts, parts) && sameCrops(record.crops, crops) && sameInserts(record.inserts, recorded(cut.inserts)) && record.captions === captionsKey(cut.captions) && record.face === face,
+    fresh: sameParts(record.parts, parts) && sameCrops(record.crops, crops) && sameInserts(record.inserts, recorded(cut.inserts)) && record.captions === captionsKey(cut.captions) && record.face === face && record.noise === noise,
     face: record.face,
     ...(record.colour === undefined ? {} : { colour: colourView(record.colour) }),
     ...(record.levelling === undefined ? {} : { levelling: record.levelling })

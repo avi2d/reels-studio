@@ -14,6 +14,7 @@ import { paintSubtitle, playback } from "../timeline-subtitles.ts"
 import { icon } from "./icons.ts"
 import { lookFace } from "./look-face.ts"
 import { lookMargins } from "./look-margins.ts"
+import { lookNoise } from "./look-noise.ts"
 import { cutOfPage, type Cut } from "./montage-model.ts"
 import { paintThought, shownTexts } from "./montage-screen.ts"
 import { button } from "./ui.ts"
@@ -59,13 +60,18 @@ export const lookStep = (projectId: string): LookStep => {
   const clock = h("span", { class: "clock" })
   const frame = h("div", { class: "frame" }, overlay.node, thought, subtitle, margins.overlay)
   const face = lookFace(projectId)
+  const noise = lookNoise(projectId, (urlOf) => { player.source(urlOf) })
   const empty = h("p", { class: "hint", hidden: true }, EMPTY)
   const work = h("div", { class: "look", hidden: true },
     h("div", { class: "look-viewer" }, frame, h("div", { class: "montage-viewer__bar" }, go, clock), margins.controls),
-    h("section", { class: "group look-settings", "aria-labelledby": "look-picture" },
-      h("h2", { class: "group__title", id: "look-picture" }, "Картинка"),
-      face.node,
-      row("Цвет", h("p", { class: "look-row__text" }, COLOUR))))
+    h("div", { class: "look-groups" },
+      h("section", { class: "group look-settings", "aria-labelledby": "look-picture" },
+        h("h2", { class: "group__title", id: "look-picture" }, "Картинка"),
+        face.node,
+        row("Цвет", h("p", { class: "look-row__text" }, COLOUR))),
+      h("section", { class: "group look-settings", "aria-labelledby": "look-sound" },
+        h("h2", { class: "group__title", id: "look-sound" }, "Звук"),
+        noise.node)))
   const next = h("div", { class: "next", hidden: true }, h("a", { class: "btn btn--main", href: stepPath(projectId, "done") }, "Дальше: ролики", icon("right")))
   const body = h("div", { class: "body body--look" },
     h("div", { class: "head" }, h("h1", { tabindex: "-1" }, "Оформление")),
@@ -128,12 +134,14 @@ export const lookStep = (projectId: string): LookStep => {
     refresh()
     sound.refresh()
     face.refresh()
+    noise.refresh()
   })
   return {
     body,
     dispose: () => {
       player.stop()
       face.dispose()
+      noise.dispose()
     }
   }
 }

@@ -21,10 +21,14 @@
 .look-row { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
 .look-row__label { font-weight: 600; }
 .look-row__control { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
-.look-row__control p { margin: 0; }
-.look-row__control .hint[hidden], .look-trial .btn[hidden], .look-row progress[hidden] { display: none; }
+.look-row__control p { margin: 0; text-wrap: pretty; }
+.look-row__control .hint[hidden], .look-row__control .btn[hidden], .look-trial .btn[hidden], .look-row progress[hidden] { display: none; }
 .look-row__control .hint:empty { display: none; }
 .look-row progress { width: 100%; max-width: 320px; }
+.look-groups { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.look-noise__choices .btn { padding-inline: 12px; white-space: nowrap; }
+.look-noise__facts { display: flex; flex-direction: column; gap: 4px; }
+.look-noise__facts:empty { display: none; }
 
 @media (hover: hover) {
   .look-margins .chip:hover { border-color: #9aa0b0; }

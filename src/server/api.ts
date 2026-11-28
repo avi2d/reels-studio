@@ -1,14 +1,16 @@
-import { Effect, FileSystem, Layer, Option, Schema, Stream } from "effect"
+import { Effect, Layer, Option, Schema, Stream } from "effect"
 import { NewTask } from "../shared/brief.ts"
 import { CHAT_TURN_HEADER } from "../shared/chat.ts"
 import { Pick } from "../shared/library.ts"
 import { Face } from "../shared/face.ts"
 import { RetouchPicture } from "../shared/retouch.ts"
+import { Cleaned, Noise } from "../shared/noise.ts"
 import { Effort, ProjectTitleInput } from "../shared/project.ts"
 import { PictureSide } from "../shared/reel.ts"
 import { Edits, type TimelinePage } from "../shared/timeline.ts"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { ApiError, badRequest, notFound } from "./api-error.ts"
+import { attachment, sendFile } from "./api-files.ts"
 import { Attachments } from "./attachments.ts"
 import { Brief } from "./brief.ts"
 import { Chat } from "./chat.ts"
@@ -18,7 +20,6 @@ import { allowedHosts, isAllowedHost, isHomeAddress, isSameOrigin } from "./home
 import { Media } from "./media.ts"
 import type { ReelVersion } from "./reel.ts"
 import { Projects } from "./projects.ts"
-import { parseRange } from "./range.ts"
 import { keepRule, undoChange } from "./rules.ts"
 import { orRules, rulesPage } from "./rules-page.ts"
 import { KeptInput, RuleId } from "../shared/rules.ts"
@@ -243,32 +244,6 @@ const uploads = Layer.mergeAll(
   })))
 )
 
-const UNREADABLE = new ApiError({ status: 500, message: "Видео недоступно. Попробуйте открыть страницу ещё раз." })
-
-const sendFile = Effect.fnUntraced(function*(target: string, contentType: string, rangeHeader: string | undefined, extra: Readonly<Record<string, string>> = {}) {
-  const fs = yield* FileSystem.FileSystem
-  const size = Number((yield* fs.stat(target)).size)
-  const range = parseRange(rangeHeader, size)
-  const headers = { "accept-ranges": "bytes", "cache-control": "no-store", ...extra }
-  if (range.kind === "outside") {
-    return HttpServerResponse.empty({ status: 416, headers: { ...headers, "content-range": `bytes */${size}` } })
-  }
-  if (range.kind === "whole") return yield* HttpServerResponse.file(target, { contentType, headers })
-  return yield* HttpServerResponse.file(target, {
-    status: 206,
-    contentType,
-    offset: range.start,
-    bytesToRead: range.end - range.start + 1,
-    headers: { ...headers, "content-range": `bytes ${range.start}-${range.end}/${size}` }
-  })
-}, Effect.mapError((cause) => cause instanceof ApiError ? cause : UNREADABLE))
-
-// The ASCII name serves a browser that ignores filename*, which alone carries the Russian title.
-export const attachment = (title: string): string => {
-  const name = `${title.trim() || "reel"}.mp4`
-  return `attachment; filename="reel.mp4"; filename*=UTF-8''${encodeURIComponent(name)}`
-}
-
 const reel = Layer.mergeAll(
   HttpRouter.add("GET", "/api/projects/:id/reel", reply(Effect.gen(function*() {
     const media = yield* Media
@@ -327,6 +302,30 @@ const retouch = Layer.mergeAll(
     const name = yield* Schema.decodeUnknownEffect(RetouchPicture)(yield* param("name")).pipe(Effect.mapError(() => notFound("Такого файла в пробе нет")))
     const target = yield* media.trialFile(yield* param("id"), name)
     return yield* sendFile(target, name.endsWith(".jpg") ? "image/jpeg" : "video/mp4", request.headers["range"])
+  })))
+)
+
+const NewNoise = Schema.Struct({ noise: Noise })
+
+const noise = Layer.mergeAll(
+  HttpRouter.add("GET", "/api/projects/:id/noise", reply(Effect.gen(function*() {
+    const media = yield* Media
+    return json(yield* media.noise(yield* param("id")))
+  }))),
+  HttpRouter.add("POST", "/api/projects/:id/noise", reply(Effect.gen(function*() {
+    const media = yield* Media
+    return json(yield* media.startCleaning(yield* param("id")), 202)
+  }))),
+  HttpRouter.add("PUT", "/api/projects/:id/noise/choice", reply(Effect.gen(function*() {
+    const media = yield* Media
+    const id = yield* param("id")
+    return json(yield* media.setNoise(id, (yield* body(NewNoise)).noise))
+  }))),
+  HttpRouter.add("GET", "/api/projects/:id/noise/:noise/:name", (request) => reply(Effect.gen(function*() {
+    const media = yield* Media
+    const strength = yield* Schema.decodeUnknownEffect(Cleaned)(yield* param("noise")).pipe(Effect.mapError(() => notFound("Такой очистки звука нет")))
+    const target = yield* media.cleanedFile(yield* param("id"), strength, yield* param("name"))
+    return yield* sendFile(target, "video/mp4", request.headers["range"])
   })))
 )
 
@@ -396,4 +395,4 @@ const homeOnly = HttpRouter.middleware(
   { global: true }
 )
 
-export const apiRoutes = Layer.mergeAll(projects, brief, rules, chat, uploads, videos, reel, retouch, homeOnly)
+export const apiRoutes = Layer.mergeAll(projects, brief, rules, chat, uploads, videos, reel, retouch, noise, homeOnly)

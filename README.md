@@ -15,7 +15,7 @@ It does not publish a video.
 
 - Bun, at the version `.bun-version` pins.
 - pi, the agent the chat runs on, signed in to at least one model provider.
-- ffmpeg and ffprobe, built with the `zscale` and `tonemap` filters for HDR video, and libass with the `ass` and `bbox` filters for text.
+- ffmpeg and ffprobe, built with the `zscale` and `tonemap` filters for HDR video, the `afftdn` filter for room noise, and libass with the `ass` and `bbox` filters for text.
 - uv, which installs and runs the speech recognizer in `tools/transcribe/`, the gaze measure in `tools/gaze/` and the PDF reader in `tools/pdf/`.
 - A computer on the home network that keeps running while the studio is in use.
 
@@ -43,6 +43,8 @@ Step 2, «План», saves the task with its apps and files, shows the plan and
 Step 3, «Монтаж», lists the parts of the reel with their takes, pauses, words, texts and inserts.
 Its «Вопросы» button walks through every doubtful word, join and insert still waiting for an answer, and «Отменить» undoes any change on the step.
 The rules, now the length of a pause, show as «Правила» on the step they belong to, change from a chat sentence and carry to the next reels with a pin, as [Takes and blocks](docs/timeline.md) says.
+On step 4, «Оформление», play the reel and switch between the three «Шум» choices to hear the room noise change.
+The studio uses your choice when it builds the reel and leaves the original recording alone.
 
 The studio answers the home network and the owner's Mac through the `local-apps` gateway.
 The gateway must listen only on that Mac's loopback address.

@@ -62,10 +62,10 @@ test("the picture before a join takes the last frame of the part, not the frame 
 
 test("a matched video is scaled per channel in RGB, and the first video is encoded as before", () => {
   const one = { video: "b.mov", start: 0, frames: 30 }
-  const matched = filterOf(partArgs("b.mov", one, { hdr: false, gain: { r: 1.1, g: 1, b: 0.9 } }, "libx264", "p.mov"))
+  const matched = filterOf(partArgs("b.mov", one, { hdr: false, gain: { r: 1.1, g: 1, b: 0.9 } }, "off", "libx264", "p.mov"))
   expect(matched).toContain("colorchannelmixer=rr=1.1000:gg=1.0000:bb=0.9000")
   expect(matched.indexOf("colorchannelmixer")).toBeLessThan(matched.indexOf("crop=1080:1920"))
-  expect(filterOf(partArgs("a.mov", one, { hdr: false, gain: undefined }, "libx264", "p.mov"))).not.toContain("colorchannelmixer")
+  expect(filterOf(partArgs("a.mov", one, { hdr: false, gain: undefined }, "off", "libx264", "p.mov"))).not.toContain("colorchannelmixer")
 })
 
 test("the colour note speaks only when a video was matched or had no face, not for a reel of one video", () => {

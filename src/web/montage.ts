@@ -14,7 +14,10 @@ export interface Montage {
   readonly play: (clips: ReadonlyArray<Clip>) => void
   readonly show: (clip: Clip) => void
   readonly stop: () => void
+  readonly source: (urlOf: UrlOf) => void
 }
+
+export type UrlOf = (video: string) => string
 
 class Refused extends Data.TaggedError("Refused")<{ readonly byBrowser: boolean }> {}
 
@@ -102,6 +105,8 @@ const SEEK_SLACK = 0.05
 const HAVE_METADATA = 1
 const HAVE_CURRENT_DATA = 2
 
+const LOADED = ["seeked", "loadeddata", "canplay"] as const
+
 const hasFrame = (node: HTMLVideoElement): boolean => node.readyState >= HAVE_CURRENT_DATA && !node.seeking
 
 const transformOf = (frame: Frame | undefined): string =>
@@ -113,6 +118,7 @@ interface Screen {
   readonly seek: (node: HTMLVideoElement, at: number, frame: Frame | undefined) => void
   readonly reveal: (node: HTMLVideoElement) => void
   readonly nodeOf: (video: string) => HTMLVideoElement
+  readonly source: (urlOf: UrlOf, onLoaded: (node: HTMLVideoElement) => void) => void
   shown: HTMLVideoElement | undefined
 }
 
@@ -125,6 +131,7 @@ interface ScreenEvents {
 const screenOf = (projectId: string, events: ScreenEvents, facesFor: (video: string) => VideoFaces | undefined): Screen => {
   const node = h("div", { class: "screen" })
   const nodes = new Map<string, HTMLVideoElement>()
+  const files: { urlOf: UrlOf } = { urlOf: (video) => Api.previewUrl(projectId, video) }
   const wanted = new WeakMap<HTMLVideoElement, number>()
   const framing = new WeakMap<HTMLVideoElement, Frame | undefined>()
   const applyFrame = (video: HTMLVideoElement): void => {
@@ -147,6 +154,22 @@ const screenOf = (projectId: string, events: ScreenEvents, facesFor: (video: str
     nodes,
     seek,
     shown: undefined,
+    // A new file loads from its start, so each element is sent back to where it stood once the file has loaded.
+    source: (urlOf, onLoaded) => {
+      files.urlOf = urlOf
+      for (const [name, video] of nodes) {
+        const url = urlOf(name)
+        if (video.getAttribute("src") === url) continue
+        if (video.readyState >= HAVE_METADATA) wanted.set(video, video.currentTime)
+        const loaded = (): void => {
+          if (!hasFrame(video)) return
+          for (const event of LOADED) video.removeEventListener(event, loaded)
+          onLoaded(video)
+        }
+        for (const event of LOADED) video.addEventListener(event, loaded)
+        video.src = url
+      }
+    },
     reveal: (shown) => {
       for (const other of nodes.values()) other.classList.toggle("shown", other === shown)
       screen.shown = shown
@@ -171,13 +194,18 @@ const screenOf = (projectId: string, events: ScreenEvents, facesFor: (video: str
         if (screen.shown === video) screen.shown = undefined
         events.failed(video)
       })
-      video.src = Api.previewUrl(projectId, name)
+      video.src = files.urlOf(name)
       nodes.set(name, video)
       node.append(video)
       return video
     }
   }
   return screen
+}
+
+const sourceFor = (screen: Screen, isWatching: () => boolean, start: (node: HTMLVideoElement) => void) => (urlOf: UrlOf): void => {
+  const playing = isWatching() ? screen.shown : undefined
+  screen.source(urlOf, (node) => { if (node === playing && isWatching() && screen.shown === node) start(node) })
 }
 
 export const montage = (projectId: string, onChange: (playing: Playing | undefined) => void, levelAt: LevelAt, facesFor: (video: string) => VideoFaces | undefined): Montage => {
@@ -278,5 +306,5 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
     if (screen.shown === undefined || node === screen.shown || hasFrame(node)) reveal(node)
     else state.awaited = node
   }
-  return { node: screen.node, play, show, stop }
+  return { node: screen.node, play, show, stop, source: sourceFor(screen, () => state.clips.length > 0, start) }
 }

@@ -8,6 +8,7 @@ import { ProjectView, type Effort } from "../shared/project.ts"
 import { ReelView, SoundCheck, type PictureSide } from "../shared/reel.ts"
 import type { Face } from "../shared/face.ts"
 import { RetouchView, type RetouchPicture } from "../shared/retouch.ts"
+import { NoiseView, type Cleaned, type Noise } from "../shared/noise.ts"
 import { Edits, TimelinePage } from "../shared/timeline.ts"
 import { RulesView, type RuleId } from "../shared/rules.ts"
 
@@ -146,6 +147,18 @@ export const setFace = (id: string, face: Face): Effect.Effect<RetouchView, Fail
 
 export const retouchUrl = (id: string, name: RetouchPicture, made: string): string =>
   `/api/projects/${id}/retouch/${name}?made=${encodeURIComponent(made)}`
+
+export const getNoise = (id: string): Effect.Effect<NoiseView, Failed> =>
+  call(NoiseView, `/api/projects/${id}/noise`)
+
+export const startCleaning = (id: string): Effect.Effect<NoiseView, Failed> =>
+  call(NoiseView, `/api/projects/${id}/noise`, { method: "POST" })
+
+export const setNoise = (id: string, noise: Noise): Effect.Effect<NoiseView, Failed> =>
+  call(NoiseView, `/api/projects/${id}/noise/choice`, { ...post({ noise }), method: "PUT" })
+
+export const cleanedPreviewUrl = (id: string, noise: Cleaned, name: string, made: string): string =>
+  `/api/projects/${id}/noise/${noise}/${encodeURIComponent(name)}?made=${encodeURIComponent(made)}`
 
 export const removeProject = (id: string): Effect.Effect<{ readonly removed: string }, Failed> =>
   call(Schema.Struct({ removed: Schema.String }), `/api/projects/${id}`, { method: "DELETE" })

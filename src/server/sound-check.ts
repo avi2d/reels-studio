@@ -1,6 +1,8 @@
 import { Effect, FileSystem, Option, Schema } from "effect"
 import { Levelling, PartGains, type ReelJob, type SoundCheck } from "../shared/reel.ts"
 import { partsOf, secondsOf, type Part } from "./media-commands.ts"
+import type { Noise } from "../shared/noise.ts"
+import { readNoise } from "./face.ts"
 import { soundPartArgs } from "./sound-commands.ts"
 import { places, tool } from "./media-jobs.ts"
 import { levelSound, partFileOf, PartRecord, renderedOf, SOUND_STEPS, type Rendered } from "./reel.ts"
@@ -16,8 +18,9 @@ const encodeHeard = Schema.encodeEffect(HeardFile)
 
 const PARTS_SHARE = 0.4
 
-export const soundKeyOf = (parts: ReadonlyArray<Part>, inserts: ReadonlyArray<Shown>): string =>
+export const soundKeyOf = (parts: ReadonlyArray<Part>, inserts: ReadonlyArray<Shown>, noise: Noise): string =>
   JSON.stringify({
+    noise,
     parts: parts.map(({ video, start, frames }) => ({ video, start, frames })),
     inserts: inserts.flatMap(({ visual, start, end }) => visual.kind === "clip" && visual.sound
       ? [{ file: visual.file, from: visual.start, start, end }]
@@ -35,18 +38,19 @@ const hearCut = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (shar
   const settings = yield* Settings
   const { record, work } = soundPlaces(dir)
   const parts = partsOf(cut.clips)
+  const noise = yield* readNoise(dir)
   yield* fs.remove(work, { recursive: true, force: true })
   yield* fs.makeDirectory(work, { recursive: true })
   const rendered: Array<Rendered> = []
   for (const [index, part] of parts.entries()) {
     const name = partFileOf(index, "wav")
-    yield* tool("ffmpeg", soundPartArgs(places({ dir, name: part.video }).source, part, `${work}/${name}`), settings.heavy)
+    yield* tool("ffmpeg", soundPartArgs(places({ dir, name: part.video }).source, part, noise, `${work}/${name}`), settings.heavy)
     rendered.push(yield* renderedOf(work, parts, index, part, name))
     yield* onDone(PARTS_SHARE * (index + 1) / parts.length)
   }
   const layers = yield* Effect.forEach(cut.inserts.filter(({ visual }) => visual.kind === "clip" && visual.sound), (insert) => insertLayerOf(dir, insert))
   const heard = yield* levelSound(work, rendered, `${work}/levelled.mp4`, "sound", (step) => onDone(PARTS_SHARE + (1 - PARTS_SHARE) * step / SOUND_STEPS), layers)
-  yield* fs.writeFileString(`${work}/sound.json`, yield* encodeHeard({ key: soundKeyOf(parts, cut.inserts), parts, levelling: heard.levelling, gains: heard.parts }))
+  yield* fs.writeFileString(`${work}/sound.json`, yield* encodeHeard({ key: soundKeyOf(parts, cut.inserts, noise), parts, levelling: heard.levelling, gains: heard.parts }))
   yield* fs.rename(`${work}/sound.json`, record)
 })
 
@@ -67,6 +71,6 @@ export const readSoundCheck = Effect.fnUntraced(function*(dir: string, cut: Cut,
   if (heard === undefined) return { job } satisfies SoundCheck
   return {
     job,
-    heard: { fresh: heard.key === soundKeyOf(partsOf(cut.clips), cut.inserts), seconds: secondsOf(heard.parts), levelling: heard.levelling, parts: heard.gains }
+    heard: { fresh: heard.key === soundKeyOf(partsOf(cut.clips), cut.inserts, yield* readNoise(dir)), seconds: secondsOf(heard.parts), levelling: heard.levelling, parts: heard.gains }
   } satisfies SoundCheck
 })
