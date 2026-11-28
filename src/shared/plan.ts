@@ -10,8 +10,7 @@ export type Transcript = typeof Transcript.Type
 
 const Removal = Schema.Struct({ from: Schema.Int, to: Schema.Int, reason: Schema.optionalKey(Schema.String) })
 
-export const VideoPlan = Schema.Struct({ video: Schema.String, remove: Schema.Array(Removal) })
-export type VideoPlan = typeof VideoPlan.Type
+const VideoPlan = Schema.Struct({ video: Schema.String, remove: Schema.Array(Removal) })
 
 export const Plan = Schema.Struct({ videos: Schema.Array(VideoPlan) })
 
