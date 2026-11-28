@@ -1,5 +1,6 @@
 import { Option, Schema } from "effect"
 
+import { WEB_PAGE_TOOL } from "../pi/guard-rules.ts"
 import type { ChatEvent } from "../shared/chat.ts"
 
 const PiRecord = Schema.Struct({
@@ -32,7 +33,8 @@ const STEPS: Readonly<Record<string, string>> = {
   find: "Ищу файлы ролика",
   grep: "Ищу по тексту",
   write: "Записываю",
-  edit: "Правлю запись"
+  edit: "Правлю запись",
+  [WEB_PAGE_TOOL]: "Открываю страницу в интернете"
 }
 
 const responseEvents = (record: PiRecordValue): ReadonlyArray<ChatEvent> | undefined => {

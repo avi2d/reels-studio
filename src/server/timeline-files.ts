@@ -17,6 +17,7 @@ import { quoteOnPage } from "./insert-files.ts"
 import { places, readGaze, readTranscript } from "./media-jobs.ts"
 import { readReachable } from "./attached-files.ts"
 import { reelRules } from "./rules.ts"
+import { pageSources } from "./web-page-files.ts"
 import { ZoomsFile, type PlannedZooms } from "../shared/zoom-plan.ts"
 import { zoomedOf } from "../shared/zooms.ts"
 import { cutOfPage } from "../shared/montage-cut.ts"
@@ -169,12 +170,13 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
   const pictures = picturesOf(attached)
   const inserts = yield* readInserts(dir, transcripts, attached)
   const texts = yield* readTexts(dir)
+  const sources = (yield* pageSources(dir)).filter((source) => attached.includes(source.file))
   const zooms = yield* readZooms(dir, transcripts)
   const doubts = yield* readDoubts(dir, transcripts)
   const written = yield* readBlocks(dir)
-  if (written === "none" || written === "unreadable") return { looks, faces, pictures, inserts, texts, zooms, doubts, timeline: { state: written } } satisfies TimelineView
+  if (written === "none" || written === "unreadable") return { looks, faces, pictures, inserts, texts, sources, zooms, doubts, timeline: { state: written } } satisfies TimelineView
   const rules = yield* reelRules(dir)
-  return { looks, faces, pictures, inserts, texts, zooms, doubts, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir), rest: rules.pause, zoom: rules.zoom } } satisfies TimelineView
+  return { looks, faces, pictures, inserts, texts, sources, zooms, doubts, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir), rest: rules.pause, zoom: rules.zoom } } satisfies TimelineView
 })
 
 export interface Cut {

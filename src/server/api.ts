@@ -24,6 +24,7 @@ import { KeptInput, RuleId } from "../shared/rules.ts"
 import { Settings } from "./settings.ts"
 import { sendFile } from "./send-file.ts"
 import * as Tus from "./tus.ts"
+import { WebPages } from "./web-pages.ts"
 import { body, json, param, reply } from "./api-reply.ts"
 import { looksRoutes } from "./looks-api.ts"
 
@@ -53,6 +54,7 @@ const versionOf = (request: HttpServerRequest.HttpServerRequest): ReelVersion =>
   new URL(request.url, "http://localhost").searchParams.get("version") === "before" ? "before" : "after"
 
 const SaveEdits = Schema.Struct({ base: Edits, edits: Edits })
+const WebPageInput = Schema.Struct({ address: Schema.String })
 
 const projects = Layer.mergeAll(
   HttpRouter.add("GET", "/api/projects", reply(Effect.gen(function*() {
@@ -226,6 +228,9 @@ const uploads = Layer.mergeAll(
     const attachments = yield* Attachments
     const { page, quote } = yield* pageOf(request)
     return yield* sendFile(yield* attachments.page(yield* param("id"), yield* param("name"), page, quote), "image/jpeg", request.headers["range"])
+  }))),
+  HttpRouter.add("POST", "/api/projects/:id/web-pages", reply(Effect.gen(function*() {
+    return json(yield* (yield* WebPages).save(yield* param("id"), (yield* body(WebPageInput)).address))
   })))
 )
 
