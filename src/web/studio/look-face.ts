@@ -77,6 +77,7 @@ export const lookFace = (projectId: string): LookFace => {
     if (asked !== state.asked) return
     if (state.view !== undefined) show(state.view)
     problem.textContent = error.message
+    pollLater()
   })
 
   const ask = (call: Effect.Effect<RetouchView, Api.Failed>): void => {

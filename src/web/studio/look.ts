@@ -69,7 +69,7 @@ export const lookStep = (projectId: string): LookStep => {
   const next = h("div", { class: "next", hidden: true }, h("a", { class: "btn btn--main", href: stepPath(projectId, "done") }, "Дальше: ролики", icon("right")))
   const body = h("div", { class: "body body--look" },
     h("div", { class: "head" }, h("h1", { tabindex: "-1" }, "Оформление")),
-    empty, work, next)
+    empty, work, next, h("div", { hidden: true }, sound.node))
 
   const paintClock = (): void => {
     const total = formatLength(state.cut?.length ?? 0)

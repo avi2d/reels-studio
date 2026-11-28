@@ -40,7 +40,7 @@ const encodeTrialRun = Effect.fnUntraced(function*(dir: string, clips: ReadonlyA
   const place = trialPlaces(dir)
   const parts = firstSeconds(partsOf(clips), TRIAL_SECONDS)
   const frames = parts.reduce((total, part) => total + part.frames, 0)
-  if (frames < CLOSE_UP_FROM_SECONDS * REEL_RATE) return yield* new TrialFoundNoFace({ why: "short-cut" })
+  if (frames <= CLOSE_UP_FROM_SECONDS * REEL_RATE) return yield* new TrialFoundNoFace({ why: "short-cut" })
   yield* fs.remove(place.work, { recursive: true, force: true })
   yield* fs.makeDirectory(place.work, { recursive: true })
   const before = `${place.work}/before.mp4`
