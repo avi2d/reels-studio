@@ -47,6 +47,7 @@ export interface LookNoise {
 
 export const lookNoise = (projectId: string, onSource: (urlOf: UrlOf) => void): LookNoise => {
   let source = ""
+  let refreshState: "idle" | "requested" | "pending" = "idle"
   const choices = CHOICES.map(([noise, label]) => [noise, button("quiet", label, { "aria-pressed": "false", click: () => { choose(noise) } })] as const)
   const facts = h("div", { class: "look-noise__facts" })
   const status = h("p", { class: "hint", role: "status" })
@@ -60,6 +61,11 @@ export const lookNoise = (projectId: string, onSource: (urlOf: UrlOf) => void): 
       h("p", { class: "hint" }, ABOUT), facts, status, bar, problem, again))
 
   const show = (view: NoiseView): void => {
+    if (!isBusy(view)) {
+      const pending = refreshState === "pending"
+      refreshState = "idle"
+      if (pending && view.job.state === "idle" && view.cleaned === undefined) start()
+    }
     for (const [noise, choice] of choices) {
       const on = view.noise === noise
       choice.className = `btn btn--${on ? "main" : "quiet"}`
@@ -84,6 +90,7 @@ export const lookNoise = (projectId: string, onSource: (urlOf: UrlOf) => void): 
   const start = (): void => {
     requests.stop()
     if (!node.isConnected) return
+    if (refreshState === "idle") refreshState = "requested"
     problem.textContent = ""
     again.hidden = true
     requests.ask(Api.startCleaning(projectId))
@@ -95,5 +102,11 @@ export const lookNoise = (projectId: string, onSource: (urlOf: UrlOf) => void): 
     requests.ask(Api.setNoise(projectId, noise))
   }
 
-  return { node, refresh: start, dispose: requests.stop }
+  const refresh = (): void => {
+    const view = requests.view()
+    if (refreshState !== "idle" || (view !== undefined && isBusy(view))) refreshState = "pending"
+    start()
+  }
+
+  return { node, refresh, dispose: requests.stop }
 }
