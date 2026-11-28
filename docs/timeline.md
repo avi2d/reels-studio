@@ -121,7 +121,7 @@ The originals stay untouched.
 ## Sound in the montage
 
 After each change of the cut, the studio checks the sound of the cut on the home computer, without the picture.
-It cuts the sound of each clip from the original video and levels it with the same gain curve and limiter as the build.
+It cuts the sound of each clip from the original video, cleans it with the chosen «Шум», and levels it with the same gain curve and limiter as the build.
 When the sound of a clip insert is on, the check mixes it under the voice as the build does.
 The check waits while another heavy job runs, and a failed check waits for the next change of the cut.
 Under the player, a line names the verdict of that check in the words of the «Готовый ролик» stage.
@@ -193,6 +193,21 @@ It runs before the inserts and the text go on, so they stay as they are.
 That retouch changes pixels only inside the face, the same way the trial does.
 The «Готовый ролик» stage names the chosen face above its build button and the face of the built file in the file facts.
 After a new choice it says the file no longer matches.
+
+## Room noise
+
+The «Оформление» step sets «Шум» to «Оставить», «Убрать слегка» or «Убрать сильно».
+A reel starts with «Убрать сильно», and a choice stays with its reel.
+«Убрать слегка» cuts the room noise by 8 dB and «Убрать сильно» by 18 dB, both with the ffmpeg `afftdn` filter after a 70 Hz high-pass.
+When the step opens, the studio cleans the preview sound of each video in the cut with both strengths, on the home computer, in the queue of the other heavy jobs.
+The preview picture is copied, and the originals stay untouched.
+While it runs, the step shows the share done, and the player plays the reel as it is.
+When it ends, the player plays the chosen strength, so the person hears the difference on the cut itself.
+A change of the source file or of the filter settings cleans the video again.
+Under the choices, the step shows the noise level of the pauses before and after the cleaning, from 0.1 s windows of the whole source files.
+A pause is a window more than 20 dB below the median window, so a recording with no such window shows no level.
+The build and the sound check apply the chosen strength to the sound of each part before the levelling.
+The «Готовый ролик» stage counts a file built with another choice as no longer matching the cut.
 
 ## Keys
 
@@ -355,10 +370,13 @@ Each video folder holds these next to `plan.json`:
 | `reel/reel-<stamp>.mp4` | The published reel video, named by its build time |
 | `reel/reel-<stamp>-join-<n>-before.jpg`, `reel/reel-<stamp>-join-<n>-after.jpg` | The join of a pair of videos before and after the colour gain |
 | `reel/before-<stamp>.mp4` | The joined reel before levelling, named by its build time |
-| `reel/reel.json` | The build time, the video file it published, the parts, the crop window of each video, the inserts, a hash of the subtitles and key thoughts, the face setting, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
+| `reel/reel.json` | The build time, the video file it published, the parts, the crop window of each video, the inserts, a hash of the subtitles and key thoughts, the face and noise settings, the skin colour and gain of each video, and the measured loudness it holds, so the stage can tell whether the cut changed since |
 | `reel/sound.json` | The parts of the last checked cut with the heard clip inserts, its measured loudness before and after levelling, and the gain of each part over its source time, which the montage plays |
 | `reel/sound-work/` | The sound of each clip and the levelled sound while a check runs, removed when it ends |
-| `looks.json` | The face setting of the reel, `off` or `light`, written when the person picks it |
+| `looks.json` | The face setting of the reel, `off` or `light`, and the noise setting, `off`, `light` or `strong`, written when the person picks one |
+| `noise/<video>.json` | The key of the last cleaning of a video, its source size and time with the filter settings, and the level of each 0.1 s window before and after each strength |
+| `noise/<light or strong>/<video>.mp4` | The preview of a video with its sound cleaned at that strength |
+| `noise/work/` | The cleaned previews while a cleaning runs, removed when it ends |
 | `retouch/trial.json` | The time of the last skin and eye trial, the seconds it retouched and the seconds that took |
 | `retouch/before.jpg`, `retouch/after.jpg` | The face close-up of the trial before and after |
 | `retouch/compare.mp4` | The 20 s of the trial with the original on the left and the retouch on the right |
