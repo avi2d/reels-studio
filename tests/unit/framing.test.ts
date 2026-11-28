@@ -1,22 +1,36 @@
 import { expect, test } from "bun:test"
-import { faceLeft, framedHead, frameToward, inView, VIEW_WIDTH } from "../../src/shared/framing.ts"
+import { faceLeft, framedHead, frameToward, inView, VIEW_WIDTH, zoomLimit } from "../../src/shared/framing.ts"
 
 const middle = VIEW_WIDTH / 2
+const UNKNOWN_SOURCE = zoomLimit(undefined, undefined)
 
 test("a head lower after the join is enlarged until the eyes sit on the earlier line, not left where it fell", () => {
   const target = { x: middle, y: 0.4, size: 0.2 }
-  const frame = frameToward(target, { x: middle, y: 0.45, size: 0.2 })
+  const frame = frameToward(target, { x: middle, y: 0.45, size: 0.2 }, UNKNOWN_SOURCE)
   expect(frame?.scale).toBeCloseTo(0.6 / 0.55, 6)
   expect(frame?.top).toBeCloseTo(0.45 - 0.4 * 0.55 / 0.6, 6)
   expect(framedHead({ x: middle, y: 0.45, size: 0.2 }, frame).y).toBeCloseTo(0.4, 6)
 })
 
 test("a jump that needs more than a slight zoom gets no frame instead of a blurred picture", () => {
-  expect(frameToward({ x: middle, y: 0.4, size: 0.2 }, { x: middle, y: 0.5, size: 0.2 })).toBeUndefined()
+  expect(frameToward({ x: middle, y: 0.4, size: 0.2 }, { x: middle, y: 0.5, size: 0.2 }, UNKNOWN_SOURCE)).toBeUndefined()
+})
+
+test("a vertical 4K source zooms up to twice before the reel has fewer pixels than the 1080 output, not the 1.15 of an unknown source", () => {
+  expect(zoomLimit(2160 / 3840, 3840)).toBeCloseTo(2, 9)
+  expect(frameToward({ x: middle, y: 0.4, size: 0.2 }, { x: middle, y: 0.5, size: 0.2 }, zoomLimit(2160 / 3840, 3840))?.scale).toBeCloseTo(1.2, 9)
+})
+
+test("a horizontal 4K source keeps the least limit, since its 9 by 16 window is only 1215 pixels wide and not 3840", () => {
+  expect(zoomLimit(16 / 9, 2160)).toBe(1.15)
+})
+
+test("a 720 pixel source still gets the least limit instead of no zoom at all", () => {
+  expect(zoomLimit(9 / 16, 1280)).toBe(1.15)
 })
 
 test("a frame never reaches past the picture edge, so no black band shows", () => {
-  const frame = frameToward({ x: 0.1, y: 0.4, size: 0.2 }, { x: 0.12, y: 0.42, size: 0.2 })
+  const frame = frameToward({ x: 0.1, y: 0.4, size: 0.2 }, { x: 0.12, y: 0.42, size: 0.2 }, UNKNOWN_SOURCE)
   expect(frame).toBeDefined()
   if (frame === undefined) return
   expect(frame.left).toBeGreaterThanOrEqual(0)

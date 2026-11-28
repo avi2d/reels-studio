@@ -1,5 +1,5 @@
 import { Effect, FileSystem, Option, Schema } from "effect"
-import { formatSeconds, RuleChange, RulesFile, rulesOf, type RuleId } from "../shared/rules.ts"
+import { changedRules, formatSeconds, movedPins, RuleChange, ruleOf, RulesFile, rulesOf, withoutRule, type RuleId, type Rules } from "../shared/rules.ts"
 import { libraryDir } from "./library.ts"
 
 const RulesJson = Schema.fromJsonString(RulesFile)
@@ -62,17 +62,18 @@ export const readChange = Effect.fnUntraced(function*(dir: string) {
 })
 
 // A pinned rule follows this reel's change and its undo, so the pin never shows off while the old value still starts the next reels.
-const movePin = Effect.fnUntraced(function*(projectsDir: string, id: RuleId, from: number, to: number) {
+const movePins = Effect.fnUntraced(function*(projectsDir: string, from: Rules, to: Rules) {
   const kept = yield* readKeptRules(projectsDir)
-  if (kept[id] === from) yield* writeKeptRules(projectsDir, { ...kept, [id]: to })
+  const moved = movedPins(kept, from, to)
+  if (changedRules(rulesOf(kept), rulesOf(moved)).length > 0) yield* writeKeptRules(projectsDir, moved)
 })
 
 const noteChange = Effect.fnUntraced(function*(dir: string, projectsDir: string, before: OwnRules) {
-  const from = rulesOf(usable(before)).pause
-  const to = (yield* reelRules(dir)).pause
-  if (from === to) return
-  yield* replace(changePath(dir), yield* encodeChange({ id: "pause", from, to, before: usable(before) }))
-  yield* movePin(projectsDir, "pause", from, to)
+  const from = rulesOf(usable(before))
+  const to = yield* reelRules(dir)
+  if (changedRules(from, to).length === 0) return
+  yield* replace(changePath(dir), yield* encodeChange({ before: usable(before), after: to }))
+  yield* movePins(projectsDir, from, to)
 })
 
 // Read before the reply, so a rule the model writes during it is told apart from the one the reel had.
@@ -82,9 +83,15 @@ export const watchRules = Effect.fnUntraced(function*(dir: string, projectsDir: 
   return before
 })
 
-export const rulesLine = (own: OwnRules): string => own === "unreadable"
-  ? "Studio note: rules.json is not valid and must be rewritten as «Rules» in the reels-plan skill says. Until then the studio keeps 0.2 s at each shortened pause."
-  : `Studio note: a shortened pause keeps ${formatSeconds(rulesOf(own).pause)} s now${own.pause === undefined ? ", the studio default" : ""}. This value counts even when an earlier message names another, since the person can return a rule on the page.`
+const ZOOM_NOTES = { off: "no zoom", soft: "a soft zoom", full: "a strong zoom" } satisfies Record<Rules["zoom"], string>
+
+export const rulesLine = (own: OwnRules): string => {
+  if (own === "unreadable") return "Studio note: rules.json is not valid and must be rewritten as «Rules» in the reels-plan skill says. Until then the studio keeps 0.2 s at each shortened pause and gives each key word a strong zoom."
+  const rules = rulesOf(own)
+  const pause = `a shortened pause keeps ${formatSeconds(rules.pause)} s${own.pause === undefined ? ", the studio default" : ""}`
+  const zoom = `each key word gets ${ZOOM_NOTES[rules.zoom]}${own.zoom === undefined ? ", the studio default" : ""}`
+  return `Studio note: ${pause}, and ${zoom}. These values count even when an earlier message names others, since the person can return a rule on the page.`
+}
 
 export const startRules = Effect.fnUntraced(function*(projectsDir: string, dir: string) {
   yield* writeOwnRules(dir, yield* readKeptRules(projectsDir))
@@ -95,7 +102,7 @@ export const undoChange = Effect.fnUntraced(function*(dir: string, projectsDir: 
   const change = yield* readChange(dir)
   if (change !== undefined) {
     yield* writeOwnRules(dir, change.before)
-    yield* movePin(projectsDir, change.id, change.to, change.from)
+    yield* movePins(projectsDir, change.after, rulesOf(change.before))
   }
   yield* fs.remove(changePath(dir), { force: true })
 })
@@ -103,9 +110,9 @@ export const undoChange = Effect.fnUntraced(function*(dir: string, projectsDir: 
 // Unpinning writes the value into this reel first, so only the next reels lose it.
 export const keepRule = Effect.fnUntraced(function*(dir: string, projectsDir: string, id: RuleId, kept: boolean) {
   const own = usable(yield* readOwnRules(dir))
-  const value = rulesOf(own)[id]
-  const { [id]: _dropped, ...others } = yield* readKeptRules(projectsDir)
-  if (kept) return yield* writeKeptRules(projectsDir, { ...others, [id]: value })
-  yield* writeOwnRules(dir, { ...own, [id]: value })
+  const value = ruleOf(rulesOf(own), id)
+  const others = withoutRule(yield* readKeptRules(projectsDir), id)
+  if (kept) return yield* writeKeptRules(projectsDir, { ...others, ...value })
+  yield* writeOwnRules(dir, { ...own, ...value })
   yield* writeKeptRules(projectsDir, others)
 })

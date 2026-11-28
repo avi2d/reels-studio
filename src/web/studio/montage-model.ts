@@ -3,6 +3,7 @@ import { insertPlaces, shownInserts, type InsertPlace, type Shown } from "../../
 import { cutOf, facesByVideo, placesOf, type Join, type Place } from "../../shared/joins.ts"
 import { lengthOf, type Transcript } from "../../shared/plan.ts"
 import { arrange, assemble, clipsOf, type Block, type Clip, type Edits, type Placed, type TimelinePage } from "../../shared/timeline.ts"
+import { zoomedOf, type ZoomPlace } from "../../shared/zooms.ts"
 
 export interface Numbered<T> {
   readonly place: T
@@ -17,6 +18,7 @@ export interface Part {
   readonly joins: ReadonlyArray<Numbered<Place>>
   readonly inserts: ReadonlyArray<Numbered<InsertPlace>>
   readonly texts: ReadonlyArray<Numbered<TextPlace>>
+  readonly zooms: ReadonlyArray<Numbered<ZoomPlace>>
 }
 
 export type Question =
@@ -65,7 +67,9 @@ export const isOpen = (question: Question): boolean => question.place.place.answ
 export const cutOfPage = (view: TimelinePage, timeline: Ready, transcripts: ReadonlyMap<string, Transcript>, edits: Edits): Cut => {
   const placed = assemble(timeline.blocks, edits, transcripts, timeline.rest)
   const faces = facesByVideo(view.faces)
-  const reel = cutOf(clipsOf(placed), faces, transcripts, edits)
+  const zoomed = zoomedOf(cutOf(clipsOf(placed), faces, transcripts, edits), view.zooms.state === "ready" ? view.zooms.planned : [], faces, transcripts, edits, timeline.zoom)
+  const reel = zoomed.clips
+  const zooms = numbered(zoomed.places)
   const joins = numbered(placesOf(clipsOf(placed), faces, transcripts, edits))
   const inserts = numbered(insertPlaces(view.inserts.state === "ready" ? view.inserts.planned : [], reel, transcripts, edits, view.pictures))
   const texts = numbered(textPlaces(view.texts.state === "ready" ? view.texts.planned : [], reel, transcripts))
@@ -84,7 +88,8 @@ export const cutOfPage = (view: TimelinePage, timeline: Ready, transcripts: Read
       length: lengthOf(spans),
       joins: joins.filter(({ place }) => place.join.start.block === one.block.id),
       inserts: inserts.filter((place) => insertPart(place) === one.block.id),
-      texts: texts.filter((place) => textPart(place) === one.block.id)
+      texts: texts.filter((place) => textPart(place) === one.block.id),
+      zooms: zooms.filter(({ place }) => place.block === one.block.id)
     }
     start += part.length
     return part

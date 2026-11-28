@@ -1,7 +1,12 @@
 import type { Frame, Head } from "./timeline.ts"
 
 export const VIEW_WIDTH = 9 / 16
-const MAX_ZOOM = 1.15
+export const REEL_WIDTH = 1080
+const LEAST_ZOOM_LIMIT = 1.15
+
+// The least limit holds for every source, so a source with fewer pixels than the reel still gets the zoom the owner approved.
+export const zoomLimit = (aspect: number | undefined, height: number | undefined): number =>
+  aspect === undefined || height === undefined ? LEAST_ZOOM_LIMIT : Math.max(LEAST_ZOOM_LIMIT, Math.min(aspect, VIEW_WIDTH) * height / REEL_WIDTH)
 
 const centredLeft = (aspect: number): number => Math.max(0, aspect - VIEW_WIDTH) / 2
 
@@ -38,12 +43,12 @@ const atLeast = (wanted: number, have: number): number => wanted <= have ? 1 : h
 const clamp = (value: number, low: number, high: number): number => Math.min(high, Math.max(low, value))
 
 // A frame only enlarges, since a smaller picture or a window past its edge would show black around it.
-export const frameToward = (target: Head, moved: Head): Frame | undefined => {
+export const frameToward = (target: Head, moved: Head, limit: number): Frame | undefined => {
   const scale = Math.max(
     atLeast(target.y, moved.y), atLeast(1 - target.y, 1 - moved.y),
     atLeast(target.x, moved.x), atLeast(VIEW_WIDTH - target.x, VIEW_WIDTH - moved.x)
   )
-  if (scale > MAX_ZOOM) return undefined
+  if (scale > limit) return undefined
   return {
     scale,
     left: clamp(moved.x - target.x / scale, 0, VIEW_WIDTH * (1 - 1 / scale)),

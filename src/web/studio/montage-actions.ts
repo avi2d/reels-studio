@@ -9,11 +9,14 @@ import * as Api from "../api.ts"
 import { h } from "../dom.ts"
 import type { EditHistory } from "../edit-history.ts"
 import { correctSubtitle } from "../timeline-subtitles.ts"
+import { withZoom } from "../../shared/zooms.ts"
 import type { PartActions } from "./montage-part.ts"
 import type { State } from "./montage-screen.ts"
 import { button } from "./ui.ts"
 
 const PAUSE_AROUND_SECONDS = 1.5
+const ZOOM_BEFORE_SECONDS = 1.5
+const ZOOM_AFTER_SECONDS = 3
 
 // The full order keeps a removed part between its neighbours, so a part brought back returns to its place.
 const movedOrder = (blocks: ReadonlyArray<Block>, edits: Edits, id: string, by: -1 | 1): ReadonlyArray<string> => {
@@ -98,6 +101,11 @@ export const partActions = (context: ActionsContext): PartActions => {
       const window = aroundInsert(span)
       hear(reelWithin(state.cut?.reel ?? [], window), shiftedBy(state.shown, window.start))
     },
-    answerInsert: (answer) => { history.change(withInsert(state.edits, answer)) }
+    answerInsert: (answer) => { history.change(withInsert(state.edits, answer)) },
+    setZoom: (id, level) => { history.change(withZoom(state.edits, id, level)) },
+    hearZoom: (place) => {
+      const window = { start: Math.max(0, place.at - ZOOM_BEFORE_SECONDS), end: place.at + ZOOM_AFTER_SECONDS }
+      hear(reelWithin(state.cut?.reel ?? [], window), shiftedBy(state.shown, window.start))
+    }
   }
 }

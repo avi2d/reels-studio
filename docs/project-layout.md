@@ -14,6 +14,8 @@ The studio keeps its code, skills and per-video folders in these places.
 | `src/shared/plan.ts` | The transcript and plan formats and the spans the player skips, used by the server and the page |
 | `src/shared/timeline.ts` | The formats of the gaze samples, the blocks, the takes and the person's choices, and the spans the montage plays |
 | `src/shared/framing.ts` | The zoom that keeps the eyes on one line across a join, used by the page and the reel build |
+| `src/shared/zoom-plan.ts` | The format of `zooms.json`, the zoom strengths and the push a part plays |
+| `src/shared/zooms.ts` | Where each zoom on a key word stands in the cut, its strength and the push curve, used by the page and the reel build |
 | `src/shared/joins.ts` | The places to check at joins and the cuts at answered places, used by the page |
 | `src/shared/face.ts` | The face setting of the reel, off or light, used by the server and the page |
 | `src/shared/retouch.ts` | The state of the skin and eye trial and the time a minute of video takes, used by the server and the page |
