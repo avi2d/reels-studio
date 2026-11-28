@@ -2,6 +2,7 @@ import type { TextPlace } from "../../shared/captions.ts"
 import { lengthOf, type Transcript } from "../../shared/plan.ts"
 import type { PlannedText } from "../../shared/texts.ts"
 import { playedSpans, type Block, type Edits, type Pause, type Placed, type Take } from "../../shared/timeline.ts"
+import type { PageSource } from "../../shared/web-pages.ts"
 import { h } from "../dom.ts"
 import { formatLength, formatPause } from "../format.ts"
 import { whyDropped } from "../text-drops.ts"
@@ -28,6 +29,7 @@ export interface PartData {
   readonly transcripts: ReadonlyMap<string, Transcript>
   readonly edits: Edits
   readonly pictures: ReadonlyArray<string>
+  readonly sources: ReadonlyArray<PageSource>
   readonly words: ReadonlyArray<EditableSubtitle>
   readonly phraseOf: (phrase: { readonly video: string; readonly from: number; readonly to: number }) => string
   readonly textNumber: (planned: PlannedText) => number
@@ -140,7 +142,7 @@ const thoughtItem = ({ place, number }: Numbered<TextPlace>, data: PartData): HT
 export const screenGroup = (part: Pick<Part, "texts" | "inserts">, data: PartData, actions: PartActions, title = "На экране"): ReadonlyArray<HTMLElement> =>
   part.texts.length === 0 && part.inserts.length === 0 ? [] : [group(title,
     ...part.texts.length === 0 ? [] : [h("ul", { class: "thoughts" }, ...part.texts.map((place) => thoughtItem(place, data)))],
-    ...part.inserts.map((place) => insertAsk(place, data.phraseOf(place.place.planned), data.pictures, actions)))]
+    ...part.inserts.map((place) => insertAsk(place, data.phraseOf(place.place.planned), data, actions)))]
 
 export const partDetail = (part: Part, data: PartData, actions: PartActions): HTMLElement => {
   const id = part.one.block.id

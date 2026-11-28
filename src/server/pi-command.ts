@@ -4,9 +4,23 @@ import { promptText } from "./attachment-notes.ts"
 import type { Shown } from "./attachments.ts"
 import type { Effort } from "./projects.ts"
 
+import { WEB_PAGE_TOOL } from "../pi/guard-rules.ts"
+
 export type Session = "person" | "studio"
 
-const TOOLS = "read,grep,find,ls,write,edit"
+const TOOLS = `read,grep,find,ls,write,edit,${WEB_PAGE_TOOL}`
+
+export interface Reach {
+  readonly studio: string
+  readonly project: string
+}
+
+const ANY_ADDRESS = new Set(["0.0.0.0", "::", ""])
+
+export const studioUrl = (host: string, port: number): string => {
+  const local = ANY_ADDRESS.has(host) ? "127.0.0.1" : host
+  return `http://${local.includes(":") ? `[${local}]` : local}:${port}`
+}
 
 export const piCommand = (
   pi: string,
@@ -20,7 +34,8 @@ export const piCommand = (
   effort: Effort,
   known: string,
   asker: Session,
-  turnNote: string
+  turnNote: string,
+  reach: Reach
 ): ReturnType<typeof ChildProcess.make> => {
   const images = files.flatMap((file) => file.images)
   // In the message rather than the system prompt, so the note stands after the earlier replies it overrides.
@@ -40,9 +55,12 @@ export const piCommand = (
     "--no-context-files",
     "--no-prompt-templates",
     "--extension", join(root, "src", "pi", "project-guard.ts"),
+    "--extension", join(root, "src", "pi", "web-page.ts"),
     "--system-prompt", systemPrompt + "\nThe uploaded videos:\n" + known
   ], {
     cwd: dir,
+    env: { REELS_STUDIO_URL: reach.studio, REELS_PROJECT: reach.project },
+    extendEnv: true,
     stdin: Stream.concat(Stream.make(new TextEncoder().encode(prompt + "\n")), Stream.never)
   })
 }

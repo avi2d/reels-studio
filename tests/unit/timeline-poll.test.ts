@@ -30,7 +30,7 @@ const loaded = (blocks: ReadonlyArray<Block>, names: ReadonlyArray<string>, look
       faces: [],
       pictures: [],
       inserts: { state: "none" },
-      texts: { state: "none" },
+      texts: { state: "none" }, sources: [],
       timeline: { state: "ready", blocks: [...blocks], dropped: 0, edits: NO_EDITS, rest: PAUSE_REST },
       gathering: false,
       gatherFailed: false

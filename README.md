@@ -16,6 +16,7 @@ It does not publish a video.
 - Bun, at the version `.bun-version` pins.
 - pi, the agent the chat runs on, signed in to at least one model provider.
 - ffmpeg and ffprobe, built with the `zscale` and `tonemap` filters for HDR video, and libass with the `ass` and `bbox` filters for text.
+- Google Chrome, which saves a page from the internet, such as the text of a law, as a PDF.
 - uv, which installs and runs the speech recognizer in `tools/transcribe/`, the gaze measure in `tools/gaze/` and the PDF reader in `tools/pdf/`.
 - A computer on the home network that keeps running while the studio is in use.
 
@@ -70,6 +71,7 @@ Each setting is an environment variable read at start.
 | `REELS_MODELS` | Claude Opus 5.5, Claude Sonnet 5.5 and GPT 6.1 Sol | The models the page offers, separated by commas, each as `provider/model` |
 | `REELS_HEAVY` | empty | A command, split at spaces, that the studio puts before each ffmpeg, speech recognizer, gaze and PDF run, such as a queue for heavy work |
 | `REELS_ENCODER` | `libx264` | The ffmpeg video encoder, such as `h264_nvenc` on a computer with an NVIDIA card |
+| `REELS_CHROME` | Google Chrome | The Chrome command that saves a page from the internet as a PDF |
 
 ## Keep the studio running
 

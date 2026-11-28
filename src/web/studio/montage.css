@@ -78,6 +78,8 @@
 .insert__art--off { opacity: 0.4; filter: grayscale(1); }
 .insert__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
 .insert__text b { font-weight: 600; }
+.insert__text .hint a { color: inherit; text-decoration: underline; }
+.insert__text .hint--warn { color: var(--red); }
 .chooser > summary { display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--surface); font-weight: 600; font-size: 14px; list-style: none; cursor: pointer; }
 .chooser > summary::-webkit-details-marker { display: none; }
 .chooser.chosen > summary { background: var(--blue); border-color: var(--blue); color: var(--surface); }
