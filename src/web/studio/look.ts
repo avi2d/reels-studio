@@ -48,6 +48,9 @@ const cutOfLoaded = (loaded: Loaded): Cut | undefined => {
   return timeline.state === "ready" && loaded.transcripts.size > 0 ? cutOfPage(loaded.view, timeline, loaded.transcripts, timeline.edits) : undefined
 }
 
+const noiseSources = (cut: Cut | undefined): string =>
+  [...new Set(cut?.reel.map((clip) => clip.video))].sort().join("/")
+
 const row = (label: string, ...control: ReadonlyArray<Node>): HTMLElement =>
   h("div", { class: "look-row" }, h("span", { class: "look-row__label" }, label), h("div", { class: "look-row__control" }, ...control))
 
@@ -111,8 +114,7 @@ export const lookStep = (projectId: string): LookStep => {
   frame.prepend(player.node)
   const { watch } = playback(state, () => state.cut?.reel ?? [], player)
 
-  const draw = (): void => {
-    const cut = state.loaded === undefined ? undefined : cutOfLoaded(state.loaded)
+  const draw = (cut: Cut | undefined): void => {
     state.cut = cut
     state.shown = cut?.shown ?? []
     const first = cut?.reel[0]
@@ -131,8 +133,9 @@ export const lookStep = (projectId: string): LookStep => {
     const drawn = JSON.stringify([loaded.view, [...loaded.transcripts.keys()]])
     if (drawn === state.drawn) return
     state.drawn = drawn
-    noise.refresh()
-    draw()
+    const cut = cutOfLoaded(loaded)
+    if (noiseSources(cut) !== noiseSources(state.cut)) noise.refresh()
+    draw(cut)
   }
 
   go.addEventListener("click", () => {

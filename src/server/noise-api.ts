@@ -28,7 +28,7 @@ export const noiseRoutes = Layer.mergeAll(
     const id = yield* param("id")
     const name = yield* param("name")
     const target = yield* media.cleanedFile(id, strength, name).pipe(
-      Effect.catchTag("ApiError", (error) => error.status === 404 ? Effect.succeed(undefined) : Effect.fail(error))
+      Effect.catchTag("ApiError", (error) => error.status === 404 ? Effect.void : Effect.fail(error))
     )
     if (target === undefined) {
       yield* media.preview(id, name)

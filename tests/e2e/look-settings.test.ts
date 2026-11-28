@@ -88,6 +88,43 @@ const withPage = async (saved: LooksView, save: (route: Route, change: NewLooks)
   }
 }
 
+test("a trim of the same recording does not reload its cleaned preview, but a manual noise switch does", async () => {
+  const page = await browser.newPage()
+  try {
+    const ready = timeline.timeline
+    if (ready.state !== "ready") throw new Error("The fixture needs a ready cut")
+    let trimmed = false
+    await page.route("**/api/projects/review/timeline", (route) => route.fulfill({ json: trimmed
+      ? { ...timeline, timeline: { ...ready, edits: { ...ready.edits, deleted: ["second"] } } }
+      : { ...timeline, gathering: true } }))
+    await page.route("**/api/projects/review/noise", (route) =>
+      route.fulfill({ json: { job: { state: "idle" }, noise: "strong", cleaned: { made: "fixture" } } }))
+    await page.route("**/api/projects/review/noise/choice", (route) =>
+      route.fulfill({ json: { job: { state: "idle" }, noise: "light", cleaned: { made: "fixture" } } }))
+    await page.route("**/noise/*/a.mp4?made=*", (route) =>
+      route.fulfill({ contentType: "video/mp4", path: `${directory}/a.mp4` }))
+    await page.goto(server.url.href)
+    const video = page.locator('video[src*="/noise/strong/"]')
+    await video.waitFor({ state: "attached" })
+    await video.evaluate((node) => {
+      const count = () => {
+        node.dataset.sourceChanges = String(Number(node.dataset.sourceChanges) + 1)
+      }
+      node.dataset.sourceChanges = "0"
+      new MutationObserver((records) => records.forEach(count)).observe(node, { attributeFilter: ["src"] })
+    })
+    trimmed = true
+    await page.getByText("0:00 / 0:04", { exact: true }).waitFor()
+    expect(await video.getAttribute("data-source-changes", { timeout: 2000 })).toBe("0")
+    await page.getByRole("button", { name: "Убрать слегка", exact: true }).click()
+    const light = page.locator('video[src*="/noise/light/"]')
+    await light.waitFor({ state: "attached" })
+    expect(await light.getAttribute("data-source-changes")).toBe("1")
+  } finally {
+    await page.close()
+  }
+}, 15_000)
+
 for (const control of ["style", "size", "plate"] as const) {
   test(`a rejected ${control} save restores confirmed controls and preview instead of showing an unsaved choice`, () =>
     withPage(initial, (route) => route.fulfill({ status: 400, json: { error: rejected } }), async (page) => {
