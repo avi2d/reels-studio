@@ -25,19 +25,8 @@ import { Settings } from "./settings.ts"
 import { sendFile } from "./send-file.ts"
 import * as Tus from "./tus.ts"
 import { WebPages } from "./web-pages.ts"
-
-const reply = <R>(
-  effect: Effect.Effect<HttpServerResponse.HttpServerResponse, ApiError, R>
-): Effect.Effect<HttpServerResponse.HttpServerResponse, never, R> =>
-  effect.pipe(
-    Effect.catchTag("ApiError", (error) =>
-      Effect.succeed(HttpServerResponse.jsonUnsafe({ error: error.message }, { status: error.status })))
-  )
-
-const json = (body: unknown, status = 200) => HttpServerResponse.jsonUnsafe(body, { status })
-
-const param = (name: string) =>
-  Effect.map(HttpRouter.params, (params) => params[name] ?? "")
+import { body, json, param, reply } from "./api-reply.ts"
+import { looksRoutes } from "./looks-api.ts"
 
 const queryOf = (request: HttpServerRequest.HttpServerRequest, name: string): string =>
   new URL(request.url, "http://localhost").searchParams.get(name) ?? ""
@@ -63,9 +52,6 @@ const pageOf = (request: HttpServerRequest.HttpServerRequest) => {
 
 const versionOf = (request: HttpServerRequest.HttpServerRequest): ReelVersion =>
   new URL(request.url, "http://localhost").searchParams.get("version") === "before" ? "before" : "after"
-
-const body = <A>(schema: Schema.ConstraintDecoder<A>) =>
-  HttpServerRequest.schemaBodyJson(schema).pipe(Effect.mapError(() => badRequest("Запрос не разобран")))
 
 const SaveEdits = Schema.Struct({ base: Edits, edits: Edits })
 const WebPageInput = Schema.Struct({ address: Schema.String })
@@ -293,6 +279,7 @@ const reel = Layer.mergeAll(
 
 const NewFace = Schema.Struct({ face: Face })
 
+
 const retouch = Layer.mergeAll(
   HttpRouter.add("GET", "/api/projects/:id/retouch", reply(Effect.gen(function*() {
     const media = yield* Media
@@ -381,4 +368,4 @@ const homeOnly = HttpRouter.middleware(
   { global: true }
 )
 
-export const apiRoutes = Layer.mergeAll(projects, brief, rules, chat, uploads, videos, reel, retouch, homeOnly)
+export const apiRoutes = Layer.mergeAll(projects, brief, rules, chat, uploads, videos, reel, retouch, looksRoutes, homeOnly)
