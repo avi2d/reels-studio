@@ -39,6 +39,47 @@ test("every number in a list after the article word is found, not only the first
   expect(articleMentions(["статьи", "620,", "621", "и", "622"])).toEqual(["620", "621", "622"])
 })
 
+test.each([
+  ["статьи 15 и 16 ФЗ", ["15", "16"]],
+  ["статьи 15 и 16 Закона о защите прав потребителей", ["15", "16"]],
+  ["статьи 620 и 621 настоящего Кодекса", ["620", "621"]],
+  ["статьи 620 и 621 Гражданского кодекса", ["620", "621"]],
+  ["статьи 620 и 621 говорят", ["620", "621"]]
+])("a law name or ordinary prose does not hide the last listed article: %s", (phrase, expected) => {
+  expect(articleMentions(phrase.split(" "))).toEqual(expected)
+})
+
+test.each([
+  ["228 статья УК", ["228"]],
+  ["159 статья — мошенничество", ["159"]],
+  ["по признакам 159 статьи УК", ["159"]],
+  ["11 статья", ["11"]],
+  ["12 статьи", ["12"]],
+  ["13 статьи", ["13"]],
+  ["14 статьи", ["14"]],
+  ["111 статья", ["111"]],
+  ["112 статьи", ["112"]],
+  ["1 статья", []],
+  ["21 статья", []],
+  ["101 статья", []],
+  ["2 статьи", []],
+  ["4 статьи", []],
+  ["22 статьи", []],
+  ["5 статей", []],
+  ["11 статей", []],
+  ["21-я статья", ["21"]],
+  ["22-й статьи", ["22"]]
+])("numeral agreement distinguishes article counts from citations: %s", (phrase, expected) => {
+  expect(articleMentions(phrase.split(" "))).toEqual(expected)
+})
+
+test.each([
+  "лет", "года", "рублей", "раз", "дней", "месяцев", "процентов", "часов",
+  "тысяч", "миллионов", "человек", "штук"
+])("an unrelated quantity does not become a listed article before %s", (unit) => {
+  expect(articleMentions(["статья", "159", "и", "5", unit])).toEqual(["159"])
+})
+
 test("a closing quote before the full stop does not hide the number", () => {
   expect(articleMentions(["статья", "620»."])).toEqual(["620"])
 })

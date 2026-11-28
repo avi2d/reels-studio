@@ -25,12 +25,10 @@ const HEADING = /(?:^|\n)[ \t]*Статья[ \t\u00a0]+(\d+(?:\.\d+)*)/gu
 export const articlesOf = (text: string): ReadonlyArray<string> => [...new Set([...text.matchAll(HEADING)].map((match) => match[1] ?? ""))]
 
 const ARTICLE_WORD = /^(?:стать(?:я|и|е|ю|ей|ёй|ям|ях|ями)|ст)$/u
-// «3 статьи» and «5 статей» count articles, so only these forms name one after a bare number.
-const NAMING_ARTICLE_WORD = /^стать(?:е|ю|ей|ёй)$/u
-const CODE = /^(?:ук|гк|нк|тк|жк|ск|зк|лк|вк|бк|грк|апк|гпк|упк|уик|кас|коап|рф)$/u
+const COUNT_UNIT = /^(?:лет|год(?:а|у|ом|е|ы|ов|ам|ами|ах)?|рубл(?:ь|я|ю|ём|ем|е|и|ей|ям|ями|ях)|раз(?:а|у|ом|е)?|д(?:ень|ня|ню|нём|нем|не|ни|ней|ням|нями|нях)|месяц(?:а|у|ем|е|ы|ев|ам|ами|ах)?|процент(?:а|у|ом|е|ы|ов|ам|ами|ах)?|час(?:а|у|ом|е|ы|ов|ам|ами|ах)?|тысяч(?:а|и|у|ей|е|ам|ами|ах)?|миллион(?:а|у|ом|е|ы|ов|ам|ами|ах)?|человек(?:а|у|ом|е)?|штук(?:а|и|у|ой|е|ам|ами|ах)?)$/u
 const PART_WORD = /^(?:част[а-яё]*|ч|пункт[а-яё]*|подпункт[а-яё]*|п|пп)$/u
 const NUMBER = /^(\d+(?:\.\d+)*)(?:-?[а-яё]{1,3})?$/u
-const BARE_NUMBER = /^\d+(?:\.\d+)*$/u
+const BARE_NUMBER = /^\d+$/u
 const LEADING = /^[«"'([]+/u
 const TRAILING = /[»"')\],;:!?.]+$/u
 const GLUED_ARTICLE = /^(ст\.)(?=\d)/u
@@ -49,15 +47,19 @@ const runOpener = (tokens: ReadonlyArray<string>, at: number): string => {
   return before[before.findIndex((token) => !isInRun(token))] ?? ""
 }
 
-const endsList = (token: string | undefined): boolean => token === undefined || isInRun(token) || CODE.test(token)
-
 const isListedAfterArticleWord = (tokens: ReadonlyArray<string>, at: number): boolean =>
-  ARTICLE_WORD.test(tokens[at - 1] ?? "") || (ARTICLE_WORD.test(runOpener(tokens, at)) && endsList(tokens[at + 1]))
+  ARTICLE_WORD.test(tokens[at - 1] ?? "") || (ARTICLE_WORD.test(runOpener(tokens, at)) && !COUNT_UNIT.test(tokens[at + 1] ?? ""))
 
 const isBeforeArticleWord = (tokens: ReadonlyArray<string>, at: number): boolean => {
   const next = tokens[at + 1] ?? ""
-  const names = BARE_NUMBER.test(tokens[at] ?? "") ? NAMING_ARTICLE_WORD.test(next) : ARTICLE_WORD.test(next)
-  return names && !PART_WORD.test(runOpener(tokens, at))
+  if (!ARTICLE_WORD.test(next) || PART_WORD.test(runOpener(tokens, at))) return false
+  const token = tokens[at] ?? ""
+  if (!BARE_NUMBER.test(token)) return true
+  const lastTwo = Number(token.slice(-2))
+  const last = lastTwo % 10
+  const counts = (next === "статья" && last === 1 && lastTwo !== 11)
+    || (next === "статьи" && last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14))
+  return !counts
 }
 
 export const articleMentions = (words: ReadonlyArray<string>): ReadonlyArray<string> => {
