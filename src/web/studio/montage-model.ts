@@ -1,8 +1,12 @@
-import { textPlaces, type TextPlace } from "../../shared/captions.ts"
+import { textPlaces } from "../../shared/captions.ts"
+import { doubtAnswer, doubtsOf, type DoubtAnswer, type WordDoubt } from "../../shared/doubts.ts"
 import { insertPlaces, shownInserts, type InsertPlace, type Shown } from "../../shared/inserts.ts"
 import { cutOf, facesByVideo, placesOf, type Join, type Place } from "../../shared/joins.ts"
 import { lengthOf, type Transcript } from "../../shared/plan.ts"
+import { bareWord, correctedWord } from "../../shared/subtitles.ts"
 import { arrange, assemble, clipsOf, type Block, type Clip, type Edits, type Placed, type TimelinePage } from "../../shared/timeline.ts"
+import { isAsked, namedTexts, partAt, type NamedText } from "../text-names.ts"
+import { zoomedOf, type ZoomPlace } from "../../shared/zooms.ts"
 
 export interface Numbered<T> {
   readonly place: T
@@ -16,12 +20,22 @@ export interface Part {
   readonly length: number
   readonly joins: ReadonlyArray<Numbered<Place>>
   readonly inserts: ReadonlyArray<Numbered<InsertPlace>>
-  readonly texts: ReadonlyArray<Numbered<TextPlace>>
+  readonly texts: ReadonlyArray<NamedText>
+  readonly zooms: ReadonlyArray<Numbered<ZoomPlace>>
+  readonly words: ReadonlyArray<Numbered<WordPlace>>
+}
+
+export interface WordPlace extends WordDoubt {
+  readonly video: string
+  readonly heard: string
+  readonly answer: DoubtAnswer | undefined
 }
 
 export type Question =
+  | { readonly kind: "word"; readonly part: string; readonly place: Numbered<WordPlace> }
   | { readonly kind: "join"; readonly part: string; readonly place: Numbered<Place> }
   | { readonly kind: "insert"; readonly part: string; readonly place: Numbered<InsertPlace> }
+  | { readonly kind: "text"; readonly part: string; readonly place: NamedText }
 
 export interface Cut {
   readonly parts: ReadonlyArray<Part>
@@ -33,7 +47,7 @@ export interface Cut {
   readonly questions: ReadonlyArray<Question>
   readonly outside: {
     readonly inserts: ReadonlyArray<Numbered<InsertPlace>>
-    readonly texts: ReadonlyArray<Numbered<TextPlace>>
+    readonly texts: ReadonlyArray<NamedText>
   }
 }
 
@@ -41,57 +55,81 @@ type Ready = Extract<TimelinePage["timeline"], { readonly state: "ready" }>
 
 const numbered = <T>(places: ReadonlyArray<T>): ReadonlyArray<Numbered<T>> => places.map((place, index) => ({ place, number: index + 1 }))
 
-const blockAt = (reel: ReadonlyArray<Clip>, time: number): string | undefined => {
-  let start = 0
-  for (const clip of reel) {
-    const end = start + clip.end - clip.start
-    if (time >= start && time < end) return clip.block
-    start = end
-  }
-  return undefined
-}
-
-const saidIn = (placed: ReadonlyArray<Placed>, video: string, word: number): string | undefined =>
-  placed.find((one) => one.take.video === video && word >= one.take.from && word <= one.take.to)?.block.id
-
 export const joinKey = (join: Join): string => `${join.end.video}:${join.end.end}:${join.start.video}:${join.start.start}`
 
-export const questionKey = (question: Question): string => question.kind === "join"
-  ? `join:${joinKey(question.place.place.join)}`
-  : `insert:${question.place.place.planned.id}`
+export const wordKey = (place: Pick<WordPlace, "video" | "index">): string => `${place.video}:${place.index}`
+
+export const questionKey = (question: Question): string => {
+  switch (question.kind) {
+    case "word": return `word:${wordKey(question.place.place)}`
+    case "join": return `join:${joinKey(question.place.place.join)}`
+    case "insert": return `insert:${question.place.place.planned.id}`
+    case "text": return `text:${question.place.place.planned.id}`
+  }
+}
 
 export const isOpen = (question: Question): boolean => question.place.place.answer === undefined
 
-export const cutOfPage = (view: TimelinePage, timeline: Ready, transcripts: ReadonlyMap<string, Transcript>, edits: Edits): Cut => {
+const wordsOf = (one: Placed, transcripts: ReadonlyMap<string, Transcript>, edits: Edits, view: TimelinePage): ReadonlyArray<WordPlace> => {
+  const { video, from, to } = one.take
+  const transcript = transcripts.get(video)
+  if (transcript === undefined) return []
+  const planned = view.doubts.state === "ready" ? view.doubts.planned : []
+  return doubtsOf(transcript, video, planned).flatMap((doubt) => {
+    const word = transcript.words[doubt.index]
+    if (word === undefined || doubt.index < from || doubt.index > to || !one.spans.some((span) => word.end > span.start && word.start < span.end)) return []
+    const heard = bareWord(word.text)
+    const corrections = edits.subtitles ?? []
+    const direct = corrections.find((fix) => fix.block === one.block.id && fix.video === video && fix.index === doubt.index)
+    const shown = correctedWord([one.block], transcripts, corrections, one.block.id, video, doubt.index)
+    const corrected = direct?.text ?? (bareWord(shown) === heard ? undefined : shown)
+    return [{ ...doubt, video, heard, answer: doubtAnswer(heard, doubt.fix, corrected) }]
+  })
+}
+
+export const zoomedReel = (view: TimelinePage, timeline: Ready, transcripts: ReadonlyMap<string, Transcript>, edits: Edits): ReturnType<typeof zoomedOf> & { readonly placed: ReadonlyArray<Placed> } => {
   const placed = assemble(timeline.blocks, edits, transcripts, timeline.rest)
   const faces = facesByVideo(view.faces)
-  const reel = cutOf(clipsOf(placed), faces, transcripts, edits)
+  return { ...zoomedOf(cutOf(clipsOf(placed), faces, transcripts, edits), view.zooms.state === "ready" ? view.zooms.planned : [], faces, transcripts, edits, timeline.zoom), placed }
+}
+
+export const cutOfPage = (view: TimelinePage, timeline: Ready, transcripts: ReadonlyMap<string, Transcript>, edits: Edits): Cut => {
+  const zoomed = zoomedReel(view, timeline, transcripts, edits)
+  const { placed } = zoomed
+  const faces = facesByVideo(view.faces)
+  const reel = zoomed.clips
+  const zooms = numbered(zoomed.places)
   const joins = numbered(placesOf(clipsOf(placed), faces, transcripts, edits))
   const inserts = numbered(insertPlaces(view.inserts.state === "ready" ? view.inserts.planned : [], reel, transcripts, edits, view.pictures))
-  const texts = numbered(textPlaces(view.texts.state === "ready" ? view.texts.planned : [], reel, transcripts))
-  // An insert or a text starts a little before its phrase, so its start can fall in the part before the one that says it.
+  const texts = namedTexts(textPlaces(view.texts.state === "ready" ? view.texts.planned : [], reel, transcripts, edits.texts ?? []), placed, reel)
   const insertPart = ({ place }: Numbered<InsertPlace>): string | undefined =>
-    place.span === undefined ? undefined : saidIn(placed, place.planned.video, place.planned.from) ?? blockAt(reel, place.span.start)
-  const textPart = ({ place }: Numbered<TextPlace>): string | undefined =>
-    saidIn(placed, place.planned.video, place.planned.from) ?? (place.state === "shown" ? blockAt(reel, place.shown.start) : undefined)
+    place.span === undefined ? undefined : partAt(placed, reel, place.planned.video, place.planned.from, place.span.start)
   let start = 0
+  let words = 0
   const parts = placed.map((one, index): Part => {
     const spans = reel.filter((clip) => clip.block === one.block.id)
+    const played = { ...one, spans: spans.map((clip) => ({ start: clip.start, end: clip.end })) }
+    const doubts = wordsOf(played, transcripts, edits, view).map((place, offset) => ({ place, number: words + offset + 1 }))
+    words += doubts.length
     const part = {
-      one: { ...one, spans: spans.map((clip) => ({ start: clip.start, end: clip.end })) },
+      one: played,
       number: index + 1,
       start,
       length: lengthOf(spans),
       joins: joins.filter(({ place }) => place.join.start.block === one.block.id),
       inserts: inserts.filter((place) => insertPart(place) === one.block.id),
-      texts: texts.filter((place) => textPart(place) === one.block.id)
+      texts: texts.filter((text) => text.part === one.block.id),
+      zooms: zooms.filter(({ place }) => place.block === one.block.id),
+      words: doubts
     }
     start += part.length
     return part
   })
   const questions = parts.flatMap((part): ReadonlyArray<Question> => [
+    ...part.words.map((place) => ({ kind: "word" as const, part: part.one.block.id, place })),
     ...part.joins.map((place) => ({ kind: "join" as const, part: part.one.block.id, place })),
-    ...part.inserts.map((place) => ({ kind: "insert" as const, part: part.one.block.id, place }))
+    ...part.inserts.map((place) => ({ kind: "insert" as const, part: part.one.block.id, place })),
+    ...part.texts.filter(({ place }) => isAsked(place)).map((place) => ({ kind: "text" as const, part: part.one.block.id, place }))
   ])
   return {
     parts,
@@ -103,7 +141,7 @@ export const cutOfPage = (view: TimelinePage, timeline: Ready, transcripts: Read
     questions,
     outside: {
       inserts: inserts.filter((place) => insertPart(place) === undefined),
-      texts: texts.filter((place) => textPart(place) === undefined)
+      texts: texts.filter((text) => text.part === undefined)
     }
   }
 }

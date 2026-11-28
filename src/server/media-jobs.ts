@@ -19,12 +19,17 @@ const gazeFailure = (heavy: ReadonlyArray<string>) => (error: ToolFailed | Platf
     : new GazeFailed({ reason: Predicate.isTagged("NotFound")(error.reason) && heavy.length === 0 ? "no-tool" : "tool-failed", detail: error.message })
 
 const Probe = Schema.fromJsonString(Schema.Struct({
-  streams: Schema.Array(Schema.Struct({ color_transfer: Schema.optionalKey(Schema.String) }))
+  streams: Schema.Array(Schema.Struct({
+    color_transfer: Schema.optionalKey(Schema.String),
+    width: Schema.optionalKey(Schema.Int),
+    height: Schema.optionalKey(Schema.Int)
+  }))
 }))
 const decodeProbe = Schema.decodeUnknownEffect(Probe)
 export const decodeTranscript = Schema.decodeUnknownEffect(Schema.fromJsonString(Transcript))
 const decodePlan = Schema.decodeUnknownOption(Schema.fromJsonString(Plan))
 const decodeGaze = Schema.decodeUnknownEffect(Schema.fromJsonString(Gaze))
+const encodeGaze = Schema.encodeEffect(Schema.fromJsonString(Gaze))
 
 export interface Job {
   readonly dir: string
@@ -121,6 +126,19 @@ export const isHdrVideo = Effect.fnUntraced(function*(source: string) {
   return isHdr(probe.streams[0]?.color_transfer)
 })
 
+// The stored sides of a turned phone video are swapped, so the side that stands upright is picked by the aspect of the picture as shown.
+export const shownHeight = (stored: { readonly width?: number; readonly height?: number }, aspect: number | undefined): number | undefined => {
+  const { width, height } = stored
+  if (width === undefined || height === undefined || aspect === undefined) return undefined
+  return aspect < 1 ? Math.max(width, height) : Math.min(width, height)
+}
+
+// The gaze is measured on the smaller preview, so the pixels a zoom may use come from the source.
+const sourceHeight = Effect.fnUntraced(function*(source: string, aspect: number | undefined) {
+  const probe = yield* decodeProbe(yield* tool("ffprobe", probeArgs(source), []))
+  return shownHeight(probe.streams[0] ?? {}, aspect)
+})
+
 export const readTranscript = Effect.fnUntraced(function*(job: Job) {
   const fs = yield* FileSystem.FileSystem
   const transcript = yield* decodeTranscript(yield* fs.readFileString(places(job).transcript))
@@ -188,7 +206,10 @@ export const look = Effect.fn("Media.look")(function*(job: Job) {
     Effect.flatMap(decodeGaze),
     Effect.mapError(() => new GazeFailed({ reason: "tool-failed", detail: measured }))
   )
+  const height = yield* sourceHeight(place.source, gaze.aspect).pipe(Effect.orElseSucceed(() => undefined))
   yield* fs.writeFileString(place.gazeText, gazeText(job.name, yield* readTranscript(job), gaze))
+  const kept = yield* encodeGaze(height === undefined ? gaze : { ...gaze, height }).pipe(Effect.mapError(() => new GazeFailed({ reason: "tool-failed", detail: measured })))
+  yield* fs.writeFileString(measured, kept)
   yield* fs.rename(measured, place.gaze)
   yield* fs.remove(place.work, { recursive: true })
 })

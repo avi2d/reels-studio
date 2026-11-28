@@ -1,22 +1,22 @@
-import type { TextPlace } from "../../shared/captions.ts"
 import { lengthOf, type Transcript } from "../../shared/plan.ts"
-import type { PlannedText } from "../../shared/texts.ts"
+import { bareWord } from "../../shared/subtitles.ts"
 import { playedSpans, type Block, type Edits, type Pause, type Placed, type Take } from "../../shared/timeline.ts"
 import { h } from "../dom.ts"
 import { formatLength, formatPause } from "../format.ts"
-import { whyDropped } from "../text-drops.ts"
+import { isAsked } from "../text-names.ts"
 import type { EditableSubtitle } from "../timeline-row.ts"
 import { icon } from "./icons.ts"
-import { insertAsk, joinAsk, type AskActions } from "./montage-asks.ts"
-import type { Numbered, Part } from "./montage-model.ts"
+import { insertAsk, joinAsk, wordAsk, type AskActions } from "./montage-asks.ts"
+import type { Part } from "./montage-model.ts"
+import { droppedText, textAsk, type TextActions } from "./montage-texts.ts"
+import { zoomGroup, type ZoomActions } from "./montage-zooms.ts"
 import { button, menuButton } from "./ui.ts"
 
-export interface PartActions extends AskActions {
+export interface PartActions extends AskActions, TextActions, ZoomActions {
   readonly choose: (block: string, take: Take) => void
   readonly hearTake: (block: string, take: Take) => void
   readonly hearPause: (one: Placed, pause: Pause) => void
   readonly setPause: (video: string, after: number, removed: boolean) => void
-  readonly fixWord: (block: string, video: string, index: number, text: string) => void
   readonly move: (block: string, by: -1 | 1) => void
   readonly remove: (block: string) => void
   readonly restore: (block: string) => void
@@ -30,7 +30,7 @@ export interface PartData {
   readonly pictures: ReadonlyArray<string>
   readonly words: ReadonlyArray<EditableSubtitle>
   readonly phraseOf: (phrase: { readonly video: string; readonly from: number; readonly to: number }) => string
-  readonly textNumber: (planned: PlannedText) => number
+  readonly textName: (id: string) => string
 }
 
 const group = (title: string, ...children: ReadonlyArray<Node>): HTMLElement =>
@@ -41,20 +41,18 @@ const headOf = (number: number, data: PartData, title: string, ...acts: Readonly
     h("div", {}, h("p", { class: "eyebrow" }, `Часть ${number} из ${data.count}`), h("h2", { id: "part-title", tabindex: "-1" }, title)),
     ...acts)
 
-const isFixed = (edits: Edits, block: string, video: string, index: number): boolean =>
-  (edits.subtitles ?? []).some((one) => one.block === block && one.video === video && one.index === index)
-
-const wordButton = (one: Placed, word: EditableSubtitle, data: PartData, actions: PartActions): HTMLElement => {
+const wordButton = (one: Placed, word: EditableSubtitle, data: PartData, doubtful: boolean, actions: PartActions): HTMLElement => {
   const { block, take } = one
   const key = `word:${block.id}:${take.video}:${word.index}`
-  const fixed = isFixed(data.edits, block.id, take.video, word.index)
+  const heard = bareWord(data.transcripts.get(take.video)?.words[word.index]?.text ?? "")
   const node = h("button", { type: "button", "data-key": key }, word.text)
-  const showWord = (text: string, isFixedNow: boolean): void => {
+  const showWord = (text: string): void => {
+    const fixed = text !== heard
     node.textContent = text
-    node.className = isFixedNow ? "word word--fixed" : "word"
-    node.title = isFixedNow ? "Исправлено. Нажмите, чтобы изменить." : "Исправить слово"
+    node.className = fixed ? "word word--fixed" : doubtful ? "word word--doubt" : "word"
+    node.title = fixed ? "Исправлено. Нажмите, чтобы изменить." : doubtful ? "Студия не уверена в этом слове. Нажмите, чтобы исправить." : "Исправить слово"
   }
-  showWord(word.text, fixed)
+  showWord(word.text)
   node.addEventListener("click", () => {
     const shown = node.textContent
     const field = h("input", { class: "word-field", value: shown, "aria-label": `Исправить слово «${shown}»`, "data-key": key, size: String(Math.max(3, shown.length + 1)) })
@@ -66,7 +64,7 @@ const wordButton = (one: Placed, word: EditableSubtitle, data: PartData, actions
       const text = field.value.trim()
       field.blur()
       const saved = save && text !== "" && text !== shown
-      if (saved) showWord(text, true)
+      if (saved) showWord(text)
       field.replaceWith(node)
       if (focused) node.focus()
       if (saved) actions.fixWord(block.id, take.video, word.index, text)
@@ -84,10 +82,15 @@ const wordButton = (one: Placed, word: EditableSubtitle, data: PartData, actions
   return node
 }
 
-const wordsGroup = (part: Part, data: PartData, actions: PartActions): HTMLElement =>
-  group("Слова",
+const wordsGroup = (part: Part, data: PartData, actions: PartActions): HTMLElement => {
+  const id = part.one.block.id
+  const doubtful = new Set(part.words.filter(({ place }) => place.answer === undefined).map(({ place }) => place.index))
+  const shownOf = (index: number): string => data.words.find((word) => word.index === index)?.text ?? ""
+  return group("Слова",
+    ...part.words.map((place) => wordAsk(id, place, shownOf(place.place.index), actions)),
     h("p", { class: "hint" }, "Так слова встанут в субтитры. Нажмите на слово, которое студия услышала неверно, и исправьте его."),
-    h("p", { class: "transcript" }, ...data.words.flatMap((word) => [wordButton(part.one, word, data, actions), " "])))
+    h("p", { class: "transcript" }, ...data.words.flatMap((word) => [wordButton(part.one, word, data, doubtful.has(word.index), actions), " "])))
+}
 
 const takeItem = (one: Placed, take: Take, data: PartData, actions: PartActions): HTMLElement => {
   const rank = one.block.takes.indexOf(take) + 1
@@ -128,19 +131,14 @@ const joinGroup = (part: Part, data: PartData, actions: PartActions): ReadonlyAr
       h("ul", { class: "pauses" }, ...one.pauses.map((pause) => pauseItem(one, pause, data, actions)))])]
 }
 
-const thoughtItem = ({ place, number }: Numbered<TextPlace>, data: PartData): HTMLElement =>
-  h("li", { class: place.state === "shown" ? "thought" : "thought thought--off" },
-    h("b", {}, `Мысль ${number}`),
-    h("span", { class: "thought__lines" }, ...place.planned.lines.flatMap((line, index) =>
-      [...index === 0 ? [] : [h("br")], line.accent ? h("mark", {}, line.text) : line.text])),
-    h("span", { class: "hint" }, place.state === "shown"
-      ? `на словах «${data.phraseOf(place.planned)}» · ${formatLength(place.shown.start)}`
-      : whyDropped(place, data.textNumber)))
-
-export const screenGroup = (part: Pick<Part, "texts" | "inserts">, data: PartData, actions: PartActions, title = "На экране"): ReadonlyArray<HTMLElement> =>
-  part.texts.length === 0 && part.inserts.length === 0 ? [] : [group(title,
-    ...part.texts.length === 0 ? [] : [h("ul", { class: "thoughts" }, ...part.texts.map((place) => thoughtItem(place, data)))],
+export const screenGroup = (part: Pick<Part, "texts" | "inserts">, data: PartData, actions: PartActions, title = "На экране"): ReadonlyArray<HTMLElement> => {
+  if (part.texts.length === 0 && part.inserts.length === 0) return []
+  const dropped = part.texts.flatMap(({ place, name }) => place.state === "dropped" && !isAsked(place) ? [droppedText(name, place, data.textName)] : [])
+  return [group(title,
+    ...part.texts.flatMap((text) => isAsked(text.place) ? [textAsk(text, data.phraseOf(text.place.planned), actions)] : []),
+    ...dropped.length === 0 ? [] : [h("ul", { class: "thoughts" }, ...dropped)],
     ...part.inserts.map((place) => insertAsk(place, data.phraseOf(place.place.planned), data.pictures, actions)))]
+}
 
 export const partDetail = (part: Part, data: PartData, actions: PartActions): HTMLElement => {
   const id = part.one.block.id
@@ -154,6 +152,7 @@ export const partDetail = (part: Part, data: PartData, actions: PartActions): HT
     wordsGroup(part, data, actions),
     ...part.one.block.takes.length < 2 ? [] : [group("Дубль", h("ul", { class: "takes" }, ...part.one.block.takes.map((take) => takeItem(part.one, take, data, actions))))],
     ...joinGroup(part, data, actions),
+    ...zoomGroup(part.zooms, data.phraseOf, actions),
     ...screenGroup(part, data, actions))
 }
 

@@ -7,8 +7,7 @@ import { Attachments } from "./attachments.ts"
 import { piCommand } from "./pi-command.ts"
 import { Brief } from "./brief.ts"
 import { Media } from "./media.ts"
-import type { VideoView } from "../shared/plan.ts"
-import type { TimelineView } from "../shared/timeline.ts"
+import { videoLines } from "./chat-videos.ts"
 import { toChatEvents } from "./pi-events.ts"
 import { Projects, type Effort } from "./projects.ts"
 import { readOwnRules, rulesLine, watchRules } from "./rules.ts"
@@ -34,48 +33,8 @@ const modelFailed = (reason: string): string => {
 const UNAVAILABLE = "Чат недоступен. Отправьте сообщение ещё раз."
 const LOOKING: ChatEvent = { type: "step", text: "Смотрю приложенные файлы" }
 const INTERRUPTED = "студия остановилась раньше, чем ответила. Отправьте сообщение ещё раз."
-const GATHER_PROMPT = "The studio has heard every uploaded video and asks you to gather the blocks now. Write blocks.json as «Blocks and takes» in the reels-plan skill says, from every heard video. Write no plan and ask nothing. The person does not see this message or your answer."
+const GATHER_PROMPT = "The studio has heard every uploaded video and asks you to gather the blocks now. Write blocks.json as «Blocks and takes» in the reels-plan skill says, from every heard video, and doubts.json as «Doubtful words» there says. Write no plan and ask nothing. The person does not see this message or your answer."
 const YES_NOTE = "\nWith this message the person agrees with the whole plan in plan.md. Follow «After the yes» in the reels-plan skill now, and leave plan.md and texts.json as they are.\n"
-
-const videoLine = (video: VideoView): string =>
-  video.state === "ready" && video.plan === "unreadable"
-    ? `- source/${video.name}: heard, its words are in transcripts/${video.name}.txt, but plan.json is not valid and must be rewritten in the format the skill gives`
-    : video.state === "ready"
-    ? `- source/${video.name}: heard, its words are in transcripts/${video.name}.txt`
-    : video.state === "failed"
-      ? `- source/${video.name}: the studio could not hear it; the person can press «Попробовать ещё раз» under the video to have the studio listen to it again`
-      : `- source/${video.name}: the studio is still listening to it, no transcript yet`
-
-const LOOK_NOTES = {
-  measured: (name: string) => `  Where the speaker looks during each stretch of it is in gaze/${name}.txt.`,
-  waiting: () => "  The studio is still measuring where the speaker looks in it, so rank its takes by speech alone and say so.",
-  failed: () => "  The studio could not measure where the speaker looks in it, so rank its takes by speech alone and say so."
-}
-
-const blocksLine = (timeline: TimelineView["timeline"]): ReadonlyArray<string> => {
-  if (timeline.state === "unreadable") return ["blocks.json is not valid and must be rewritten in the format the skill gives."]
-  if (timeline.state === "ready" && timeline.dropped > 0) {
-    return [`blocks.json names ${timeline.dropped} take(s) with a video or word numbers that do not exist, and the page leaves them out.`]
-  }
-  return []
-}
-
-const insertsLine = (inserts: TimelineView["inserts"]): ReadonlyArray<string> => {
-  if (inserts.state === "unreadable") return ["inserts.json is not valid and must be rewritten in the format the reels-inserts skill gives."]
-  if (inserts.state === "ready" && inserts.dropped > 0) {
-    return [`inserts.json names ${inserts.dropped} insert(s) with a repeated id, a missing picture, clip or document, a quote that is not on its page, a video or word numbers that do not exist, and the page leaves them out.`]
-  }
-  return []
-}
-
-export const videoLines = (videos: ReadonlyArray<VideoView>, view: Pick<TimelineView, "looks" | "timeline" | "inserts">): string => {
-  if (videos.length === 0) return "No video is uploaded yet."
-  const lines = videos.flatMap((video) => {
-    const look = view.looks.find((one) => one.video === video.name)
-    return look === undefined ? [videoLine(video)] : [videoLine(video), LOOK_NOTES[look.state](video.name)]
-  })
-  return [...lines, ...blocksLine(view.timeline), ...insertsLine(view.inserts)].join("\n")
-}
 
 const orBroken = orUnavailable("the chat failed", UNAVAILABLE)
 

@@ -8,6 +8,12 @@ type Kind = "main" | "quiet" | "plain" | "danger"
 export const button = (kind: Kind, label: string, props: Props = {}, lead?: IconName): HTMLButtonElement =>
   h("button", { class: `btn btn--${kind}`, type: "button", ...props }, ...lead === undefined ? [] : [icon(lead)], label)
 
+export const choice = (label: string, does: string, on: boolean, key: string, run: () => void): HTMLButtonElement =>
+  button(on ? "main" : "quiet", label, { title: does, "aria-pressed": String(on), "data-key": key, click: run })
+
+export const card = (open: boolean, key: string, ...children: ReadonlyArray<Node>): HTMLElement =>
+  h("section", { class: open ? "ask ask--open" : "ask", "data-ask": key, tabindex: "-1" }, ...children)
+
 export interface MenuItem {
   readonly label: string
   readonly icon: IconName
