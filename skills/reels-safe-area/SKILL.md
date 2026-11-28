@@ -8,7 +8,7 @@ description: The parts of a 1080 by 1920 frame that the Instagram, YouTube Short
 The frame is 1080 by 1920 pixels.
 The player covers a strip at the top, the name and the caption at the bottom, a column of buttons on the right, and on a tall phone both sides.
 [src/shared/zones.ts](../../src/shared/zones.ts) holds the numbers the studio checks, and these tables repeat them.
-The studio checks every text against the ordinary Instagram box.
+The studio checks the text in each app’s file against that app’s box.
 
 ## How the numbers were taken
 
