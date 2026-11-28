@@ -1,11 +1,9 @@
-import { Effect } from "effect"
 import type { Noise, NoiseView, PauseNoise } from "../../shared/noise.ts"
 import * as Api from "../api.ts"
 import { h } from "../dom.ts"
 import type { UrlOf } from "../montage.ts"
+import { queued } from "./queued.ts"
 import { button } from "./ui.ts"
-
-const POLL_MS = 1000
 
 const ABOUT = "Нажмите «Смотреть ролик», чтобы услышать выбранный вариант. Исходные видео не меняются."
 const FAILED = "Звук очистить не получилось. Подробности в журнале студии."
@@ -48,7 +46,7 @@ export interface LookNoise {
 }
 
 export const lookNoise = (projectId: string, onSource: (urlOf: UrlOf) => void): LookNoise => {
-  const state: { timer: number; asked: number; view: NoiseView | undefined; source: string } = { timer: 0, asked: 0, view: undefined, source: "" }
+  let source = ""
   const choices = CHOICES.map(([noise, label]) => [noise, button("quiet", label, { "aria-pressed": "false", click: () => { choose(noise) } })] as const)
   const facts = h("div", { class: "look-noise__facts" })
   const status = h("p", { class: "hint", role: "status" })
@@ -62,7 +60,6 @@ export const lookNoise = (projectId: string, onSource: (urlOf: UrlOf) => void): 
       h("p", { class: "hint" }, ABOUT), facts, status, bar, problem, again))
 
   const show = (view: NoiseView): void => {
-    state.view = view
     for (const [noise, choice] of choices) {
       const on = view.noise === noise
       choice.className = `btn btn--${on ? "main" : "quiet"}`
@@ -77,54 +74,26 @@ export const lookNoise = (projectId: string, onSource: (urlOf: UrlOf) => void): 
     problem.textContent = view.job.state === "failed" ? FAILED : ""
     again.hidden = view.job.state !== "failed"
     const key = sourceKey(view)
-    if (key === state.source) return
-    state.source = key
+    if (key === source) return
+    source = key
     onSource(sourceOf(projectId, view))
   }
 
-  const pollLater = (): void => {
-    globalThis.clearTimeout(state.timer)
-    if (node.isConnected && state.view !== undefined && isBusy(state.view)) state.timer = Number(globalThis.setTimeout(refresh, POLL_MS))
-  }
-
-  const apply = (asked: number) => (view: NoiseView): void => {
-    if (asked !== state.asked) return
-    show(view)
-    pollLater()
-  }
-
-  const fail = (asked: number) => (error: Api.Failed) => Effect.sync(() => {
-    if (asked !== state.asked) return
-    if (state.view !== undefined) show(state.view)
-    problem.textContent = error.message
-    pollLater()
-  })
-
-  const ask = (call: Effect.Effect<NoiseView, Api.Failed>): void => {
-    state.asked += 1
-    const asked = state.asked
-    Effect.runFork(call.pipe(Effect.map(apply(asked)), Effect.catchTag("Failed", fail(asked))))
-  }
-
-  function refresh(): void {
-    globalThis.clearTimeout(state.timer)
-    if (!node.isConnected) return
-    ask(Api.getNoise(projectId))
-  }
+  const requests = queued({ node, problem, isBusy, show, load: Api.getNoise(projectId) })
 
   const start = (): void => {
-    globalThis.clearTimeout(state.timer)
+    requests.stop()
     if (!node.isConnected) return
     problem.textContent = ""
     again.hidden = true
-    ask(Api.startCleaning(projectId))
+    requests.ask(Api.startCleaning(projectId))
   }
 
   const choose = (noise: Noise): void => {
-    if (state.view?.noise === noise) return
+    if (requests.view()?.noise === noise) return
     problem.textContent = ""
-    ask(Api.setNoise(projectId, noise))
+    requests.ask(Api.setNoise(projectId, noise))
   }
 
-  return { node, refresh: start, dispose: () => { globalThis.clearTimeout(state.timer) } }
+  return { node, refresh: start, dispose: requests.stop }
 }

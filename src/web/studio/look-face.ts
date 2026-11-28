@@ -1,12 +1,10 @@
-import { Effect } from "effect"
 import type { Face, NoFace } from "../../shared/face.ts"
 import { CLOSE_UP_FROM_SECONDS, TRIAL_SECONDS, type RetouchView } from "../../shared/retouch.ts"
 import * as Api from "../api.ts"
 import { h } from "../dom.ts"
 import { costText, trialStatus } from "../retouch.ts"
+import { queued } from "./queued.ts"
 import { button } from "./ui.ts"
-
-const POLL_MS = 1000
 
 const ABOUT = `«Мягче» выравнивает тон кожи и осветляет белки глаз. Выбрать его можно после пробы: студия проверит первые ${TRIAL_SECONDS} секунд ролика.`
 const FAILED = "Проба не получилась. Подробности в журнале студии. Нажмите «Сделать пробу», чтобы попробовать ещё раз."
@@ -27,7 +25,6 @@ export interface LookFace {
 }
 
 export const lookFace = (projectId: string): LookFace => {
-  const state: { timer: number; asked: number; view: RetouchView | undefined } = { timer: 0, asked: 0, view: undefined }
   const asIs = button("quiet", "Как есть", { "aria-pressed": "false", click: () => { choose("off") } })
   const softer = button("quiet", "Мягче", { "aria-pressed": "false", "aria-describedby": "look-face-about", click: () => { choose("light") } })
   const about = h("p", { class: "hint", id: "look-face-about" }, ABOUT)
@@ -42,7 +39,6 @@ export const lookFace = (projectId: string): LookFace => {
       about, h("div", { class: "look-trial" }, start), status, bar, problem))
 
   const show = (view: RetouchView): void => {
-    state.view = view
     const busy = isBusy(view)
     const tried = view.trial !== undefined
     for (const [choice, face] of [[asIs, "off"], [softer, "light"]] as const) {
@@ -62,47 +58,19 @@ export const lookFace = (projectId: string): LookFace => {
     problem.textContent = failureText(view.job)
   }
 
-  const pollLater = (): void => {
-    globalThis.clearTimeout(state.timer)
-    if (node.isConnected && state.view !== undefined && isBusy(state.view)) state.timer = Number(globalThis.setTimeout(refresh, POLL_MS))
-  }
-
-  const apply = (asked: number) => (view: RetouchView): void => {
-    if (asked !== state.asked) return
-    show(view)
-    pollLater()
-  }
-
-  const fail = (asked: number) => (error: Api.Failed) => Effect.sync(() => {
-    if (asked !== state.asked) return
-    if (state.view !== undefined) show(state.view)
-    problem.textContent = error.message
-    pollLater()
-  })
-
-  const ask = (call: Effect.Effect<RetouchView, Api.Failed>): void => {
-    state.asked += 1
-    const asked = state.asked
-    Effect.runFork(call.pipe(Effect.map(apply(asked)), Effect.catchTag("Failed", fail(asked))))
-  }
-
-  function refresh(): void {
-    globalThis.clearTimeout(state.timer)
-    if (!node.isConnected) return
-    ask(Api.getRetouch(projectId))
-  }
+  const requests = queued({ node, problem, isBusy, show, load: Api.getRetouch(projectId) })
 
   const startTrial = (): void => {
     start.disabled = true
     problem.textContent = ""
-    ask(Api.startRetouch(projectId))
+    requests.ask(Api.startRetouch(projectId))
   }
 
   const choose = (face: Face): void => {
-    if (state.view?.face === face) return
+    if (requests.view()?.face === face) return
     problem.textContent = ""
-    ask(Api.setFace(projectId, face))
+    requests.ask(Api.setFace(projectId, face))
   }
 
-  return { node, refresh, dispose: () => { globalThis.clearTimeout(state.timer) } }
+  return { node, refresh: requests.poll, dispose: requests.stop }
 }

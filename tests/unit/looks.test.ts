@@ -6,10 +6,10 @@ import { Deferred, Effect, Fiber, FileSystem } from "effect"
 import { readFace, readNoise, writeFace, writeNoise } from "../../src/server/face.ts"
 
 const cases = [
-  { name: "face then noise", first: (dir: string) => writeFace(dir, "light"), second: (dir: string) => writeNoise(dir, "light"), expected: { face: "light", noise: "light" } },
-  { name: "noise then face", first: (dir: string) => writeNoise(dir, "light"), second: (dir: string) => writeFace(dir, "light"), expected: { face: "light", noise: "light" } },
-  { name: "face then face", first: (dir: string) => writeFace(dir, "light"), second: (dir: string) => writeFace(dir, "off"), expected: { face: "off", noise: "strong" } },
-  { name: "noise then noise", first: (dir: string) => writeNoise(dir, "light"), second: (dir: string) => writeNoise(dir, "off"), expected: { face: "off", noise: "off" } }
+  { name: "face then noise", first: (dir: string) => writeFace(dir, "light"), second: (dir: string) => writeNoise(dir, "light"), expected: { face: "light", noise: "light" } as const },
+  { name: "noise then face", first: (dir: string) => writeNoise(dir, "light"), second: (dir: string) => writeFace(dir, "light"), expected: { face: "light", noise: "light" } as const },
+  { name: "face then face", first: (dir: string) => writeFace(dir, "light"), second: (dir: string) => writeFace(dir, "off"), expected: { face: "off", noise: "strong" } as const },
+  { name: "noise then noise", first: (dir: string) => writeNoise(dir, "light"), second: (dir: string) => writeNoise(dir, "off"), expected: { face: "off", noise: "off" } as const }
 ]
 
 for (const scenario of cases) {
