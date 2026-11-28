@@ -3,24 +3,20 @@ kind: reference
 ---
 # Upload, play, reuse and delete a video
 
-The «Загрузить видео» link next to «Новый ролик» on the main page opens the «Загруженные видео» page at `/videos`.
-That page shows each uploaded video as a card with its name and size, and its «Загрузить видео» button uploads a video.
-
-The reel list at `/new` has the same «Загрузить видео» button.
-On `/new`, a picked video whose cleaned name and size the library already lists is not uploaded again, unless the studio could not hear it.
+The reel list at `/` lists the uploaded videos under «Загруженные записи», and its «Загрузить видео» button uploads any number of them.
+A picked video whose cleaned name and size the library already lists is not uploaded again, unless the studio could not hear it.
 A neutral notice names every skipped recording and points to the «Записи» step.
-The «Записи» step of a reel at `/new` only picks videos that are already uploaded: tick any number of them and press «Добавить в ролик».
 The reel list shows the videos uploaded since the page loaded at the top of page 1, above the older ones in name order, until the page reloads.
-A video the studio has heard also shows its first frame and length, and its play button plays the video in place in the browser's player.
-A video the studio is still hearing, or could not hear, shows that state instead.
 The uploaded videos go into one shared list in `projects/.library`, and the studio hears each of them there.
-Inside a reel, the «Выбрать видео» button of the «Видео» card offers the heard videos from that list and from other video folders.
+The «Записи» step of a reel only picks videos that are already uploaded.
+Its list «Загружены раньше» offers the heard videos from that list and from other video folders: tick any number of them and press «Добавить в ролик».
+The step lists the recordings of the reel, and pressing a word of a recording plays it from that word.
 A picked video joins the folder at once with its text and preview, without a second upload or transcription.
 The studio adds a hard link to the original and to the preview, so the bytes of a video stay on disk once.
 It copies the two transcript files, which are small.
-In «Выбрать видео» two uploads of one recording count as one video, matched by size and the SHA-256 of the first megabyte.
+In «Загружены раньше» two uploads of one recording count as one video, matched by size and the SHA-256 of the first megabyte.
 
-The cross on a card deletes the uploaded video after a confirm step: its original, preview, transcripts and gaze files leave `projects/.library`.
+«Удалить запись» deletes the uploaded video after a confirm step: its original, preview, transcripts and gaze files leave `projects/.library`.
 A reel that already picked the video keeps it, because the reel holds its own hard link and transcript copies.
 
 Deleting a video folder first stops the chat turn and the transcription running for it, then removes the folder.

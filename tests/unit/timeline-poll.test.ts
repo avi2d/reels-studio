@@ -1,42 +1,10 @@
 import { expect, test } from "bun:test"
-import { NO_EDITS, PAUSE_REST, soundBlocks, withChoice, withManualPauses, withPauses, type Block, type Blocks, type Edits } from "../../src/shared/timeline.ts"
-import type { Transcript } from "../../src/shared/plan.ts"
-import { playedKey, takeServer, type Ticket } from "../../src/web/timeline.ts"
-import type { Loaded } from "../../src/web/timeline-draw.ts"
+import { NO_EDITS, withChoice, withManualPauses, withPauses, type Edits } from "../../src/shared/timeline.ts"
+import { takeServer, type Ticket } from "../../src/web/timeline-save.ts"
 
 const idle: Ticket = { changes: 5, busy: false }
 
-const wordsA = [
-  { start: 0, end: 1, text: "раз" },
-  { start: 1, end: 2, text: "два" },
-  { start: 4, end: 5, text: "три" }
-]
-const transcriptA: Transcript = { duration: 6, words: wordsA }
-const transcriptB: Transcript = { duration: 2, words: [{ start: 0.5, end: 1.5, text: "ага" }] }
-
-const takeA = { video: "a", from: 0, to: 2, reason: "clean" }
 const takeB = { video: "b", from: 0, to: 0, reason: "clean" }
-const first: Block = { id: "first", title: "Первый", takes: [takeA] }
-const either: Block = { id: "first", title: "Первый", takes: [takeA, takeB] }
-
-const loaded = (blocks: ReadonlyArray<Block>, names: ReadonlyArray<string>, looks: "waiting" | "measured"): Loaded => {
-  const transcripts = new Map<string, Transcript>()
-  if (names.includes("a")) transcripts.set("a", transcriptA)
-  if (names.includes("b")) transcripts.set("b", transcriptB)
-  return {
-    transcripts,
-    view: {
-      looks: names.map((video) => ({ video, state: looks })),
-      faces: [],
-      pictures: [],
-      inserts: { state: "none" },
-      texts: { state: "none" }, zooms: { state: "none" }, doubts: { state: "none" },
-      timeline: { state: "ready", blocks: [...blocks], dropped: 0, edits: NO_EDITS, rest: PAUSE_REST, zoom: "full" },
-      gathering: false,
-      gatherFailed: false
-    }
-  }
-}
 
 const removedPause: Edits = withPauses(NO_EDITS, [{ video: "a", after: 1 }], true)
 const chosenB: Edits = withChoice(removedPause, "first", takeB)
@@ -73,28 +41,4 @@ test("a returned pause stays out of the server check instead of being overwritte
   expect(takeServer(kept, NO_EDITS, kept, idle, 5, false)).toBe(true)
   expect(takeServer(NO_EDITS, NO_EDITS, kept, idle, 5, false)).toBe(true)
   expect(takeServer(kept, NO_EDITS, NO_EDITS, idle, 5, false)).toBe(false)
-})
-
-test("a measured gaze does not change the played clips", () => {
-  const written: Blocks = { blocks: [{ id: "first", title: "Первый", takes: [{ video: "a", from: 0, to: 2, reason: "clean" }] }] }
-  const transcripts = new Map<string, Transcript>([["a", transcriptA]])
-  const before = soundBlocks(written, transcripts, new Map()).blocks
-  const after = soundBlocks(written, transcripts, new Map([["a", { step: 5, samples: ["camera"] }]])).blocks
-  expect(after[0]?.takes[0]).toEqual({ video: "a", from: 0, to: 2, reason: "clean", camera: 1 })
-  expect(playedKey(loaded(after, ["a"], "measured"), NO_EDITS)).toBe(playedKey(loaded(before, ["a"], "waiting"), NO_EDITS))
-})
-
-test("new head measurements change playback content instead of leaving the centred preview playing", () => {
-  const base = loaded([first], ["a"], "measured")
-  const measured: Loaded = { ...base, view: { ...base.view, faces: [{ video: "a", step: 0.2, gaze: ["camera"], heads: [{ x: 1.4, y: 0.4, size: 0.2 }], aspect: 16 / 9 }] } }
-  expect(playedKey(measured, NO_EDITS)).not.toBe(playedKey(base, NO_EDITS))
-})
-
-test("the played content moves when a pause is removed, a take is chosen, or a video is heard", () => {
-  const base = loaded([first], ["a", "b"], "measured")
-  const key = playedKey(base, NO_EDITS)
-  expect(playedKey(base, removedPause)).not.toBe(key)
-  expect(playedKey(loaded([either], ["a", "b"], "measured"), chosenB)).not.toBe(key)
-  expect(playedKey(loaded([{ id: "first", title: "Первый", takes: [takeB] }], ["a"], "measured"), NO_EDITS))
-    .not.toBe(playedKey(loaded([{ id: "first", title: "Первый", takes: [takeB] }], ["a", "b"], "measured"), NO_EDITS))
 })

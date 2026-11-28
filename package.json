@@ -15,7 +15,6 @@
     "test:e2e": "checks-test --tier=e2e"
   },
   "dependencies": {
-    "@awesome.me/webawesome": "3.15.0",
     "@effect/platform-bun": "4.0.0",
     "effect": "4.0.0",
     "lucide-static": "1.75.0"

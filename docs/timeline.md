@@ -3,22 +3,19 @@ kind: reference
 ---
 # Takes and blocks
 
-The page of one video folder shows the speech of every heard video as a row of blocks, each with its takes.
+The step «Монтаж» of a reel shows the speech of every heard video as a row of blocks, each with its takes.
+The page calls a block «Часть».
 
-## The working screen
+## The five steps
 
-Five stages work: «Видео и задание», «Дубли и блоки», «Паузы и склейки», «Готовый ролик» and «Внешность».
-A bar at the top holds the way back, the title, the undo and redo buttons and the chat.
-The player stands next to the stage tabs, the row of blocks and the open stage.
-The row of blocks sits between the tabs and the open stage, with the text, the clip and the pauses of each block.
-The round button under the player starts playback from the open block.
-Click the stop icon on that button to stop playback.
-The chat opens as a drawer over the page.
-On a phone the player sits above the tabs.
-The take list scrolls without moving the player or the tabs.
-The pause and place lists scroll with the stage.
-On a phone the tabs read «Видео», «Дубли», «Паузы», «Ролик» and «Лицо».
-The open tab scrolls into view.
+The reel list opens at `/`.
+Each reel opens at `/p/<reel>/<step>` with five steps: «Записи», «План», «Монтаж», «Оформление» and «Ролики».
+An address under `/new` or `/videos` from before opens the matching screen at `/`.
+The top bar holds «Студия», which returns to the reel list, and the title of the reel.
+The rail lists the five steps, marks a step that is done with a check and names the open step, such as «3 из 5 · Монтаж».
+The chat opens from every step.
+On «Монтаж», the player stands next to the parts of the reel.
+«Смотреть с этой части» plays the cut from a part, and «Остановить» stops it.
 
 ## Terms
 
@@ -33,7 +30,7 @@ The open tab scrolls into view.
 As soon as the studio has heard every uploaded video, it asks the chat model by itself to write `blocks.json`, without waiting for the plan, the gaze or the yes.
 The first gathering ranks the takes by speech alone.
 When the gaze of every heard video is settled, the studio gathers once more, so the takes stand by speech and gaze.
-The stages «Дубли и блоки» and «Паузы и склейки» say that the studio is gathering the blocks meanwhile.
+The step «Монтаж» says that the studio is gathering the parts meanwhile.
 Once the blocks are written, the page shows the take ranked first in every block the person has not chosen, and the studio shortens every pause of the shown takes to the seconds of the pause rule, except the pauses the person returned.
 After any change to `blocks.json`, whoever wrote it, the studio shortens the pauses of the shown takes once more without a new model run.
 After the yes the pinned takes stay while they still exist.
@@ -42,7 +39,7 @@ The studio keeps the heard videos and the settled gaze it last asked about in `g
 When a gathering ends without a ready row of blocks, or the model run reports an error, the studio keeps the attempt with a failed mark and the hash of the `blocks.json` it saw in `gathered.json`.
 `gathered.json` also keeps the hash of the `blocks.json` the studio last shortened pauses for, so only different blocks trigger one more shortening.
 A clean run that leaves `blocks.json` unchanged is a success.
-The stage «Дубли и блоки» shows that the studio could not gather the blocks and keeps the «Собрать блоки» button while the mark is set and `blocks.json` still matches that hash, also over ready blocks.
+While the mark is set and `blocks.json` still matches that hash, the step «Монтаж» with no parts says that the studio could not gather them and offers «Собрать части».
 Different blocks clear the note without new state.
 The next heard video or the next settled gaze tries again.
 The request and the answer do not show in the chat.
@@ -58,16 +55,16 @@ The model judges a stumble from the transcript.
 A stumble is a repeated word, a word cut off, a sentence started again, a filler or a pause inside the take.
 Each take carries a short reason in Russian.
 
-The person chooses a take, drags and deletes blocks, and removes pauses on the page.
+On the step «Монтаж», the person chooses a take with «Взять», moves a part with «Выше» and «Ниже», removes it with «Убрать часть» and removes pauses.
 The studio keeps these choices in `timeline.json`, which the chat model cannot write.
 Each page save carries the edits the page started from next to its new edits.
 The server applies only the person's changes since that base on top of the current `timeline.json` under one per-project lock, and the page adopts the merged edits.
 The gathering and the yes write `timeline.json` under the same lock on top of the file as it stands.
 A pause the person returns stays in the `kept` list of `timeline.json`, and the studio never shortens it by itself, neither after a gathering nor after the yes.
 Removing the pause by hand drops it from that list.
-A deleted block and a removed pause stay listed on the page, and one tap returns each.
+A removed part stays listed with «Вернуть», and a removed pause stays listed with «Оставить», which returns it.
 The player shows the chosen takes in order and skips the removed pauses and the cuts at answered places.
-The subtitle row shows the words of those takes, and each word can be corrected by typing over it.
+«Слова» shows the words of those takes, and pressing a word opens «Исправить слово».
 A correction stays with its original word and appears in another take of the same block only when that word occurs once in each take.
 If more than one correction matches the same word, the other take keeps its transcript spelling.
 The player shows the corrected words over the picture as the reel plays.
@@ -77,16 +74,12 @@ The old preview stays playable until the new one is complete.
 A removed pause leaves the seconds of the pause rule in its place, 0.2 s by default.
 The sound fades over 0.06 s on each side of a cut.
 «Послушать» next to a pause plays 1.5 s before it and 1.5 s after it.
-The undo button in the bar takes back the last change of the cut, and the redo button brings it back.
-A new change after an undo clears what redo could bring back.
-The buttons carry icons, and a tooltip names each when the mouse rests on it or the keyboard focuses it.
-The numbered buttons under the player have equal widths.
-Scroll the strip to reach more blocks, or click a number to open the block.
-During playback, a play mark shows the current block in the numbered strip and the row of clips.
+«Отменить» takes back the last change of the cut, and «Повторить» brings it back.
+A new change after an undo clears what «Повторить» could bring back.
 
 ## The built reel
 
-«Собрать ролик» on the «Готовый ролик» stage builds one file from the original videos, not from the previews.
+«Собрать ролик» on the step «Ролики» builds one file from the original videos, not from the previews.
 The file holds the chosen takes in row order, without removed pauses, with the same 0.06 s sound fade at each cut.
 It is 1080 by 1920 at 30 frames a second, H.264 High with AAC sound in an MP4.
 For a source wider than 9:16, the studio centres the crop on the median horizontal face position and keeps it inside the source edges.
@@ -113,8 +106,8 @@ The studio draws a long subtitle word smaller to fit the Instagram box.
 A key thought that leaves the box stops the build.
 The joined file before levelling stays beside the reel as `before-<stamp>.mp4`.
 The download always serves the levelled file.
-A bar follows the parts, the levelling, the inserts and the text.
-«Остановить сборку» stops a waiting or running build, ends its ffmpeg and removes the half-built parts, and the last finished reel stays.
+The step shows the progress of the parts, the levelling, the inserts and the text.
+«Остановить» stops a waiting or running build, ends its ffmpeg and removes the half-built parts, and the last finished reel stays.
 The build waits while the computer hears another video, because the studio runs one heavy job at a time.
 The originals stay untouched.
 
@@ -124,7 +117,7 @@ After each change of the cut, the studio checks the sound of the cut on the home
 It cuts the sound of each clip from the original video and levels it with the same gain curve and limiter as the build.
 When the sound of a clip insert is on, the check mixes it under the voice as the build does.
 The check waits while another heavy job runs, and a failed check waits for the next change of the cut.
-Under the player, a line names the verdict of that check in the words of the «Готовый ролик» stage.
+Under the player of «Монтаж», a line names the verdict of that check in the words of the step «Ролики».
 So the owner knows the sound before the build and the download.
 The line opens to the same notes on jumps, average loudness and peaks.
 While the check runs, the line says so with its share done.
@@ -142,24 +135,22 @@ The first video of the cut with a face, in cut order, keeps its colour.
 Each other video gets a gain per channel that brings its skin colour to that one, between 0.8 and 1.25.
 A video with no face in its gaze samples keeps its colour.
 For each joined pair of videos, the build saves two pictures of their first join, before and after the gain.
-The «Внешность» stage shows them side by side under the skin and eye trial.
+The step «Оформление» says that the studio brings the skin colour of every video to the first video with a face.
 
-The stage plays the built file and offers «Скачать».
-The stage names the measured loudness of the built file with a plain verdict word.
-It says when the peaks stay clean.
-A chart shows the 3 s short-term loudness over time before and after the levelling, with the target as a line and the jumps marked.
-The first ~1.5 s of the chart has no short-term reading, because the 3 s window has not filled yet.
-The numbers sit under the «Цифры» toggle.
-When at least two parts run 1 s or more, the quietest and the loudest passages each offer «До» and «После», so the owner can hear the change.
+## The built file
+
+The step «Ролики» plays the built file and offers «Скачать».
+One line under the file names the measured loudness after and before the levelling with a plain verdict word.
+«Послушать до и после» switches the player between «До», the file before the levelling, and «После».
 A reel built before the levelling keeps playing.
-The stage asks for a rebuild to level its sound.
-On an iPhone, save the downloaded file to «Фото», and the Instagram reel screen finds it there.
-After a change of the cut, the stage says the file no longer matches the cut, and «Собрать заново» builds it again.
+The step asks for a rebuild to level its sound.
+On an iPhone, open the downloaded file and choose «Сохранить видео», and Instagram finds the reel in «Фото».
+After a change of the reel, the step reads «Ролики устарели» and keeps showing the earlier file, and «Собрать заново» builds it again.
 A server restart forgets a build in progress, and the person presses the button again.
 
 ## The skin and eye trial
 
-The «Внешность» stage holds the edits to how the speaker looks.
+The part «Лицо» of the step «Оформление» holds the edits to how the speaker looks.
 Its «Сделать пробу» tries a retouch on the first 20 s of the cut, on the home computer.
 The trial runs only when the person presses that button, and a reel build never runs it.
 The studio builds those 20 s the way it builds the reel, but without the skin colour gain, then `tools/gaze/retouch.py` reads them frame by frame.
@@ -167,9 +158,7 @@ In each frame, the Face Landmarker model finds the face, and the retouch changes
 It evens the skin tone and lightens the eye whites, and it draws no new frame.
 Skin evening removes small tone steps between fine detail and broad shading, so pores, the nose and the cheekbones stay.
 Eye lightening lifts and whitens only the light pixels of each eye outside the iris.
-The stage shows a close-up of the face before and after.
-It also shows a clip with the original on the left and the retouch on the right.
-It also shows how long the retouch of the 20 s took and how long a minute of video would take.
+The step says how long the retouch of the 20 s took and how long a minute of video would take.
 The trial waits in the same queue as the other heavy jobs, and a new trial replaces the last one.
 The close-up comes from the first frame with a face from 3 s on, the `CLOSE_UP_FROM_SECONDS` constant that the studio passes to `retouch.py` as `--close-up-from`.
 Without such a frame the trial fails, and the last trial stays.
@@ -179,32 +168,26 @@ Both causes are logged as info, not as an error, and the «Оформление�
 
 ## The face in the reel
 
-The trial shows one face close-up as a single frame, with the left side before and the right side after.
-The person drags the line between them.
-Holding «Держите, чтобы увидеть до» shows the whole frame before, and «Крупнее» zooms to the face.
-Under the trial, the switch «Выровнять кожу и белки глаз в готовом ролике» sets how the face goes into the reel.
-Each reel starts with the switch off, and the studio keeps no choice from one reel for the next.
-The switch turns on only after a trial, so the person sets it after comparing the close-ups.
-A line under the switch says whether the built file already has the chosen face.
-When it does not, the button «Собрать ролик с выровненным лицом» or «Собрать ролик заново» opens the «Готовый ролик» stage and starts the build there.
-With the switch off, the build is the same as without the setting, and no step touches the frames.
-With the switch on, the build runs `tools/gaze/retouch.py` on the whole levelled reel.
+Under «Лицо», «Как есть» and «Мягче» set how the face goes into the reel.
+Each reel starts with «Как есть», and the studio keeps no choice from one reel for the next.
+«Мягче» opens only after a trial.
+With «Как есть», the build is the same as without the setting, and no step touches the frames.
+With «Мягче», the build runs `tools/gaze/retouch.py` on the whole levelled reel.
 It runs before the inserts and the text go on, so they stay as they are.
 That retouch changes pixels only inside the face, the same way the trial does.
-The «Готовый ролик» stage names the chosen face above its build button and the face of the built file in the file facts.
-After a new choice it says the file no longer matches.
+After a new choice, the step «Ролики» reads «Ролики устарели».
 
 ## Keys
 
+The step «Монтаж» answers two keys.
+
 | Key | What it does |
 | --- | --- |
-| Space | Plays the cut from the open block, or stops it |
-| Arrow keys | Open the block before or after |
-| 1 to 9 | Choose that take of the open block |
-| Delete | Deletes the open block |
-| Z | Takes back the last change |
+| Space | Plays the cut from the open part, or stops it |
+| Ctrl+Z or ⌘+Z | Takes back the last change |
 
-The keys do nothing while the person types in a field.
+Space does nothing while the focus is on a field, a button, a link or a player.
+Ctrl+Z and ⌘+Z do nothing while the focus is on a field, which keeps its own undo.
 
 ## Where the speaker looks
 
@@ -227,9 +210,9 @@ It also writes how tall the face is, from brow to chin.
 For each join, the studio takes two faces within 0.4 s of the join.
 One is the last face at or before the join, and the other is the first face at or after it.
 It sums the shift of the eyes and the change of the face height, and divides that by the mean face height.
-A join whose sum is above 0.08 becomes a place to check in the «Паузы и склейки» stage.
+A join whose sum is above 0.08 becomes a place to check on the step «Монтаж», such as «Склейка 1».
 A join with no face on one side is not a place.
-The tab of that stage shows how many places are left unanswered.
+«Вопросы» shows how many places are left unanswered and walks to each.
 «Посмотреть» plays 1.5 s before the join and 1.5 s after it, as the reel plays it.
 Any answer takes the place off the count:
 
@@ -278,8 +261,7 @@ A clip is silent until the person turns its sound on, and it does not grow.
 A PDF page is rendered 1800 px wide, its quoted lines are marked in yellow, and it is cropped around the marked lines as wide as the text of the page, at most square and no taller than the text, so it stands as a card.
 The marked page and the clip preview the page plays are kept in `attached-views/<file>/`.
 
-The row of blocks shows each insert as a mark under the blocks it covers, and the mark plays it.
-The «Паузы и склейки» stage lists every insert as a place to check, with what it shows, its words and the reason the model gave.
+The step «Монтаж» lists every insert as a place to check, with its number, its kind and its words.
 «Посмотреть» plays 1 s before the insert, the insert and 1 s after it, with the insert over the player as the reel shows it.
 «Оставить» keeps it, «Со звуком» keeps a clip with its sound, «Заменить» puts another attached picture in its place, and «Убрать» takes it out of the reel.
 Each answer takes the place off the count, and `timeline.json` keeps it by the insert id.
@@ -321,14 +303,13 @@ A video heard before the recognizer gave the share has no marked words.
 The «Монтаж» step asks about every doubtful word the cut plays, above the words of its part, and «Вопросы» walks to it.
 The word is marked in the words of the part until it is answered.
 «Послушать» plays 1 s before the word, the word and 1 s after it.
-«Взять» puts the proposed word into the subtitles, and «Оставить» keeps the word as heard.
+«Взять» with the proposed word puts it into the subtitles, and «Оставить» with the heard word keeps it.
 Both are kept as a subtitle correction in `timeline.json`, so a word the person corrects in the words of the part counts as answered too.
 
 ## Key thoughts
 
 The chat model writes the key thoughts to `texts.json`, each tied to the words of one phrase.
-The «Паузы и склейки» stage lists every key thought of `texts.json` under «Ключевые мысли», with its lines and, when the studio knows them, its words and its time in the cut.
-The step «Монтаж» lists the first shown text of the first part as «Заголовок» and the rest as «Мысль 1», «Мысль 2» and so on, and the stage list uses the same names.
+The step «Монтаж» lists the first shown text of the first part as «Заголовок» and the rest as «Мысль 1», «Мысль 2» and so on.
 Each shown text on that step is a place to check.
 It shows its lines, its words and its time, and «Посмотреть» plays 1 s before it, the text and 1 s after it.
 «Оставить» keeps the wording, «Исправить» opens a field for each line to retype it, and «Убрать» takes the text out of the reel.
@@ -337,7 +318,7 @@ A line holds at most 20 characters, or 8 in an accent line, and a text holds at 
 The page does not save a longer or empty wording, and the server refuses it with «Надпись не помещается на экране».
 The built file carries the retyped lines or leaves out a removed text.
 
-A key thought the reel cannot show stays in the list, marked «не встанет в ролик», with its reason:
+A key thought the reel cannot show stays on the step with its reason, and says it will not go into the reel:
 
 | Reason | What the list says |
 | --- | --- |
@@ -348,7 +329,7 @@ A key thought the reel cannot show stays in the list, marked «не встане
 | The person removed it | The person removed it from the reel |
 | An earlier thought in time already stands for the whole phrase | The list names that thought and says it holds the screen |
 
-When `texts.json` does not read, the list says so.
+When `texts.json` does not read, the step says so.
 
 ## Rules
 

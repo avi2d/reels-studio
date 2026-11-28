@@ -33,8 +33,7 @@ export const SERIES_STEP = 0.5
 const LRA_LIMIT = 11
 const PEAK_LIMIT = -1.5
 
-export const Series = Schema.Struct({ before: Schema.Array(Schema.Finite), after: Schema.Array(Schema.Finite) })
-export type Series = typeof Series.Type
+const Series = Schema.Struct({ before: Schema.Array(Schema.Finite), after: Schema.Array(Schema.Finite) })
 
 export const Sound = Schema.Struct({ lufs: Schema.Finite, lra: Schema.Finite, truePeak: Schema.Finite })
 export type Sound = typeof Sound.Type
@@ -57,14 +56,13 @@ export const judgeSound = (sound: Sound): Verdict => {
   return { level, issues }
 }
 
-export const Passage = Schema.Struct({
+const Passage = Schema.Struct({
   name: Schema.Literals(["quiet", "loud"]),
   from: Schema.Finite,
   to: Schema.Finite,
   before: Schema.Finite,
   after: Schema.Finite
 })
-export type Passage = typeof Passage.Type
 
 export interface Jump {
   readonly from: number

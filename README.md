@@ -34,10 +34,9 @@ To start the studio:
 1. Open `http://<address of the computer>:8765` in a browser on the same Wi-Fi.
 
 The log prints `Listening on http://0.0.0.0:8765`.
-The page shows the videos as tiles with covers and a button that starts the next one.
-The new screens open at `/new` beside the old page.
+The reel list at `/` shows reels and uploaded takes five to a page, uploads takes and resumes an interrupted upload.
 Each reel card shows its status, and the reel's top bar menu lets you rename it.
-The reel list at `/new` shows reels and uploaded takes five to a page, uploads takes and resumes an interrupted upload.
+A reel walks through five steps: «Записи», «План», «Монтаж», «Оформление» and «Ролики».
 Step 1, «Записи», adds the uploaded takes you tick to the reel at once and plays a recording from a word you press.
 Step 2, «План», saves the task with its apps and files, shows the plan and takes the yes, and the chat on every step streams its reply and has «Остановить».
 Step 3, «Монтаж», lists the parts of the reel with their takes, pauses, words, texts and inserts.

@@ -1,19 +1,9 @@
 import { Effect } from "effect"
 import { ACCEPTED_FILES, type FileKind, kindOfName, MAX_FILES } from "../shared/chat.ts"
 import * as Api from "./api.ts"
-import { icon, iconButton } from "./controls.ts"
 import { h } from "./dom.ts"
 import { formatSize } from "./format.ts"
-import type { IconName } from "./kit.ts"
 import { attachmentShelf, upload } from "./upload.ts"
-
-const KIND_ICONS: Readonly<Record<FileKind, IconName>> = {
-  picture: "picture",
-  document: "document",
-  video: "video",
-  sound: "sound",
-  other: "file"
-}
 
 export const KIND_NAMES: Readonly<Record<FileKind, string>> = {
   picture: "Картинка",
@@ -30,12 +20,6 @@ interface AttachmentControls {
   readonly pick: () => HTMLElement
   readonly remove: (label: string) => HTMLElement
   readonly changed?: () => void
-}
-
-const standardControls: AttachmentControls = {
-  icon: (kind) => icon(KIND_ICONS[kind]),
-  pick: () => iconButton("plain", "attach", "Приложить файлы", { class: "attach" }),
-  remove: (label) => iconButton("plain", "close", label, { class: "remove" })
 }
 
 export const thumb = (kind: FileKind, source: string | undefined, draw: AttachmentControls["icon"]): HTMLElement => {
@@ -57,7 +41,7 @@ const fileItem = (name: string, source: string | undefined, draw: AttachmentCont
 const fileList = (items: ReadonlyArray<HTMLElement>): HTMLElement =>
   h("ul", { class: "attached", "aria-label": "Приложенные файлы" }, ...items)
 
-export const sentFiles = (projectId: string, names: ReadonlyArray<string>, draw: AttachmentControls["icon"] = standardControls.icon): HTMLElement =>
+export const sentFiles = (projectId: string, names: ReadonlyArray<string>, draw: AttachmentControls["icon"]): HTMLElement =>
   fileList(names.map((name) => fileItem(name, HAS_COVER.has(kindOfName(name)) ? Api.coverUrl(projectId, name) : undefined, draw)))
 
 interface Picked {
@@ -109,7 +93,7 @@ const makePreviews = (isDisposed: () => boolean): Previews => {
   return { previewOf, release, dispose }
 }
 
-export const attachTray = (projectId: string, onProblem: (message: string) => void, controls = standardControls): Tray => {
+export const attachTray = (projectId: string, onProblem: (message: string) => void, controls: AttachmentControls): Tray => {
   const list = h("ul", { class: "tray", "aria-label": "Файлы к сообщению", hidden: true })
   const input = h("input", { class: "visually-hidden", type: "file", accept: ACCEPTED_FILES, multiple: true, tabindex: "-1", "aria-hidden": "true" })
   const opener = controls.pick()

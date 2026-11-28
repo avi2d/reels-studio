@@ -1,10 +1,10 @@
 import { Effect } from "effect"
-import { STUDIO_PATH, isStep, stepPath, type Step } from "../../shared/page.ts"
+import { HOME_PATH, PROJECT_PREFIX, isStep, stepPath, type Step } from "../../shared/page.ts"
 import * as Api from "../api.ts"
 import { h } from "../dom.ts"
 import { run } from "../run.ts"
 import { studioChat, type StudioChat } from "./chat.ts"
-import { rail, stepBody, stepName, topBar } from "./frame.ts"
+import { rail, stepName, topBar } from "./frame.ts"
 import { listView } from "./list.ts"
 import { doneStep } from "./done.ts"
 import { lookStep } from "./look.ts"
@@ -37,10 +37,10 @@ const chatFor = (project: Api.ProjectView): StudioChat => {
 }
 
 const pageAt = (pathname: string): Page | undefined => {
-  const path = pathname.replace(/\/+$/u, "")
-  if (path === STUDIO_PATH) return { kind: "list" }
-  if (!path.startsWith(`${STUDIO_PATH}/`)) return undefined
-  const [id = "", step, ...rest] = path.slice(STUDIO_PATH.length + 1).split("/")
+  const path = pathname === HOME_PATH ? HOME_PATH : pathname.replace(/\/+$/u, "")
+  if (path === HOME_PATH) return { kind: "list" }
+  if (!path.startsWith(PROJECT_PREFIX)) return undefined
+  const [id = "", step, ...rest] = path.slice(PROJECT_PREFIX.length).split("/")
   if (!/^[a-z0-9-]+$/u.test(id) || rest.length > 0) return undefined
   if (step === undefined) return { kind: "reel", id, step: undefined }
   return isStep(step) ? { kind: "reel", id, step } : undefined
@@ -56,7 +56,7 @@ const showFailure = (message: string): void => {
   document.title = TITLE
   show("home", topBar(), h("main", { class: "main" }, h("div", { class: "body" },
     h("p", { class: "error", role: "alert" }, message),
-    h("a", { class: "btn btn--quiet btn--start", href: STUDIO_PATH }, "К роликам"))))
+    h("a", { class: "btn btn--quiet btn--start", href: HOME_PATH }, "К роликам"))))
 }
 
 const listPage = (): Effect.Effect<void, Api.Failed> =>
@@ -65,9 +65,6 @@ const listPage = (): Effect.Effect<void, Api.Failed> =>
     const onCreated = (id: string): void => { navigate(stepPath(id, "records")) }
     show("home", topBar(), h("main", { class: "main" }, listView(list.projects, onCreated, uploaderSection(uploaded.videos))))
   })
-
-const stepView = (project: Api.ProjectView, step: Step, onProject: (project: Api.ProjectView) => void): Effect.Effect<HTMLElement, Api.Failed> =>
-  step === "records" ? recordsStep(project, onProject) : Effect.succeed(stepBody(project, step))
 
 const reelPage = (id: string, step: Step): Effect.Effect<void, Api.Failed> =>
   Effect.gen(function*() {
@@ -101,7 +98,7 @@ const reelPage = (id: string, step: Step): Effect.Effect<void, Api.Failed> =>
       body = view.body
       leaveStep = view.dispose
     } else {
-      body = yield* stepView(project, step, (now) => {
+      body = yield* recordsStep(project, (now) => {
         if (now.stage === stage) return
         const fresh = rail(now, step)
         steps.replaceWith(fresh)
@@ -123,7 +120,7 @@ const reelPage = (id: string, step: Step): Effect.Effect<void, Api.Failed> =>
     show("reel",
       topBar({ project, chat: chat.opener, renamed: setPageTitle, removed: () => {
         drafts.delete(id)
-        navigate(STUDIO_PATH)
+        navigate(HOME_PATH)
       } }),
       steps,
       h("main", { class: "main" }, body))

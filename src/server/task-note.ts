@@ -1,7 +1,7 @@
 import type { BriefView } from "../shared/brief.ts"
 
 const briefNote = (brief: string): string => brief === ""
-  ? "\nThe person has not written a brief yet. The page holds it in the field «Задание» of the stage «Видео и задание».\n"
+  ? "\nThe person has not written a brief yet. The page holds it in the field «Задание» of the step «План».\n"
   : `\nThe brief the person wrote in the field «Задание», also kept in brief.md:\n${brief}`
 
 const filesNote = (files: ReadonlyArray<string>): string => files.length === 0

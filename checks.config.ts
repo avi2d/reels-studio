@@ -5,7 +5,6 @@ export default defineConfig({
   reach: { "tools/ci/{provide-media,test}.sh": ["tests/e2e/*.test.ts"] },
   browserRoutes: {
     "src/index.ts": ["/"],
-    "src/web/app.ts": ["/"],
     "src/web/studio/main.ts": ["/"],
     "tools/ci/provide-media.sh": ["/"],
     "tools/ci/test.sh": [],

@@ -4,7 +4,7 @@ import { playedSpans, type Block, type Edits, type Pause, type Placed, type Take
 import { h } from "../dom.ts"
 import { formatLength, formatPause } from "../format.ts"
 import { isAsked } from "../text-names.ts"
-import type { EditableSubtitle } from "../timeline-row.ts"
+import type { EditableSubtitle } from "../timeline-subtitles.ts"
 import { icon } from "./icons.ts"
 import { insertAsk, joinAsk, wordAsk, type AskActions } from "./montage-asks.ts"
 import type { Part } from "./montage-model.ts"

@@ -26,7 +26,7 @@ The studio decides the shape, the fade, the movement and the crop, so never ask 
    Choose the phrase by meaning, not by a shared word.
    Choose it inside a take that the reel plays, the first take of its block unless `timeline.json` shows another chosen.
 4. Write every insert to `inserts.json`.
-5. Tell the person in the chat, for each file, the words it stands over and why, and that the stage «Паузы и склейки» lists every insert to check.
+5. Tell the person in the chat, for each file, the words it stands over and why, and that the step «Монтаж» lists every insert to check.
    For a PDF, also say which line is marked. For a clip, say it plays without sound and that the page can turn the sound on.
    When a file fits no phrase, say so and leave it out.
 
@@ -91,7 +91,7 @@ Each insert names exactly one of `picture`, `clip` or `document`.
 
 ## What the person does on the page
 
-The page shows every insert as a mark on the row of blocks and as a place to check.
+The step «Монтаж» shows every insert as a place to check.
 The person watches it, keeps it, turns the sound of a clip on, replaces it with another attached picture, or removes it.
 The person can also cover a join where the head jumps with a picture.
 You never write those choices. `timeline.json` holds them.

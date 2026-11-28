@@ -138,13 +138,6 @@ export const withInsert = (edits: Edits, answer: InsertAnswer): Edits => ({
   inserts: [...edits.inserts.filter((one) => one.id !== answer.id), answer]
 })
 
-export const insertsWithin = (shown: ReadonlyArray<Shown>, window: Span): ReadonlyArray<Shown> =>
-  shown.flatMap((one) => {
-    const start = Math.max(one.start, window.start)
-    const end = Math.min(one.end, window.end)
-    return end > start ? [{ ...one, start: start - window.start, end: end - window.start }] : []
-  })
-
 export const reelWithin = (clips: ReadonlyArray<Clip>, window: Span): ReadonlyArray<Clip> => {
   const starts = startsOf(clips)
   return clips.flatMap((clip, index) => {
