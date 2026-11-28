@@ -38,12 +38,12 @@ export const progressOf = (job: Busy): { readonly text: string; readonly done: n
 }
 
 const NO_FACE = {
-  "short-cut": "Ролик не собрался: он слишком короткий, чтобы студия нашла лицо. На шаге «Оформление» выберите для лица «Не трогать» и соберите ролик заново.",
-  unseen: "Ролик не собрался: студия не нашла лицо. На шаге «Оформление» выберите для лица «Не трогать» и соберите ролик заново."
+  "short-cut": "Ролик не собрался: он слишком короткий, чтобы студия нашла лицо. На шаге «Оформление» выберите для лица «Как есть» и соберите ролик заново.",
+  unseen: "Ролик не собрался: студия не нашла лицо. На шаге «Оформление» выберите для лица «Как есть» и соберите ролик заново."
 } satisfies Record<NoFace, string>
 
 export const failureText = (failure: Failure): string =>
-  failure.noFace === undefined ? "Ролик не собрался. Подробности в журнале студии. Нажмите «Собрать ролик», чтобы попробовать ещё раз." : NO_FACE[failure.noFace]
+  failure.noFace === undefined ? "Ролик не собрался. Подробности в журнале студии. Попробуйте собрать ролик ещё раз." : NO_FACE[failure.noFace]
 
 const madeAt = (iso: string): string =>
   new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }).format(new Date(iso))

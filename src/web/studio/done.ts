@@ -74,7 +74,7 @@ export const doneStep = (projectId: string): DoneStep => {
   }
 
   // A reply to an older request would paint a state the person has already moved past.
-  const ask = (run: Effect.Effect<ReelView, Api.Failed>): Effect.Effect<void> => {
+  const ask = (run: Effect.Effect<ReelView, Api.Failed>, source: "poll" | "action"): Effect.Effect<void> => {
     const ticket = (state.asked += 1)
     return run.pipe(
       Effect.map((view) => {
@@ -83,7 +83,7 @@ export const doneStep = (projectId: string): DoneStep => {
         paint(view)
       }),
       Effect.catchTag("Failed", (error) => Effect.sync(() => {
-        if (ticket > state.shown) problem.textContent = error.message
+        if (source === "action" && ticket > state.shown) problem.textContent = error.message
       }))
     )
   }
@@ -91,7 +91,7 @@ export const doneStep = (projectId: string): DoneStep => {
   function refresh(): void {
     globalThis.clearTimeout(state.timer)
     if (!body.isConnected) return
-    Effect.runFork(ask(Api.getReel(projectId)).pipe(Effect.ensuring(Effect.sync(() => {
+    Effect.runFork(ask(Api.getReel(projectId), "poll").pipe(Effect.ensuring(Effect.sync(() => {
       globalThis.clearTimeout(state.timer)
       if (body.isConnected) state.timer = Number(globalThis.setTimeout(refresh, state.busy ? POLL_MS : IDLE_MS))
     }))))
@@ -100,7 +100,7 @@ export const doneStep = (projectId: string): DoneStep => {
   const act = (run: Effect.Effect<ReelView, Api.Failed>, control: HTMLButtonElement): void => {
     control.disabled = true
     problem.textContent = ""
-    Effect.runFork(ask(run).pipe(Effect.ensuring(Effect.sync(() => {
+    Effect.runFork(ask(run, "action").pipe(Effect.ensuring(Effect.sync(() => {
       control.disabled = false
       refresh()
     }))))
