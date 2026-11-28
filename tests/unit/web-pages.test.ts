@@ -102,6 +102,29 @@ test("part numbers listed before статьи are not mistaken for article numbe
   expect(articleMentions(["пунктами", "1", "и", "2", "статьи", "450", "ГК"])).toEqual(["450"])
 })
 
+test.each([
+  ["по 2 части 159 статьи", ["159"]],
+  ["2 часть 159 статьи", ["159"]],
+  ["по 3 части 228 статьи УК", ["228"]],
+  ["по 2-й части 159-й статьи", ["159"]],
+  ["2 ч. 159 ст.", ["159"]],
+  ["2 пункт 159 статьи", ["159"]],
+  ["2 подпункт 159.1 статьи", ["159.1"]],
+  ["части 2 статьи 159", ["159"]],
+  ["по частям 1 и 2 статьи 159", ["159"]]
+])("a part citation does not hide the article or turn its part into an article: %s", (phrase, expected) => {
+  expect(articleMentions(phrase.split(" "))).toEqual(expected)
+})
+
+test.each([
+  ["нарушение статей 15 и 16 Закона", ["15", "16"]],
+  ["статей 158 и 159", ["158", "159"]],
+  ["5 статей", []],
+  ["в законе 3 статьи", []]
+])("genitive plural citations are not missed or confused with article counts: %s", (phrase, expected) => {
+  expect(articleMentions(phrase.split(" "))).toEqual(expected)
+})
+
 test("a count of articles is not an article number", () => {
   expect(articleMentions(["в", "законе", "3", "статьи"])).toEqual([])
 })
