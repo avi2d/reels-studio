@@ -152,7 +152,7 @@ test("a late success of an older save becomes the confirmed view after a newer s
     release?.()
     await page.locator('button[aria-pressed="true"]', { hasText: "Крупные" }).waitFor()
     expect(await page.getByRole("radio", { name: /Ваш стиль$/u }).getAttribute("aria-checked")).toBe("true")
-    expect(await page.getByRole("alert").textContent()).toBe(rejected)
+    expect(await page.getByRole("alert").filter({ hasText: rejected }).textContent()).toBe(rejected)
   })
 })
 
