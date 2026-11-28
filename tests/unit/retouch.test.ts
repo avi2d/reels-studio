@@ -88,5 +88,5 @@ test("the reel retouch writes no face close-ups, while the trial still asks for 
   expect(retouchArgs("/g", { before: "/w/in.mp4", folder: "/w/face", closeUp: false }, "libx264")).toEqual(
     ["run", "--project", "/g", "python", "/g/retouch.py", "--encoder", "libx264", "--no-close-up", "/w/in.mp4", "/w/face"])
   expect(retouchArgs("/g", { before: "/w/in.mp4", folder: "/w/trial", closeUp: true }, "libx264")).toEqual(
-    ["run", "--project", "/g", "python", "/g/retouch.py", "--encoder", "libx264", "/w/in.mp4", "/w/trial"])
+    ["run", "--project", "/g", "python", "/g/retouch.py", "--encoder", "libx264", "--close-up-from", "3", "/w/in.mp4", "/w/trial"])
 })
