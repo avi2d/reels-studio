@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { mkdir, mkdtemp, rm } from "node:fs/promises"
 import { BunServices } from "@effect/platform-bun"
-import { Effect, FileSystem, PlatformError } from "effect"
+import { Effect, FileSystem, Layer, PlatformError } from "effect"
 import { readChecks } from "../../src/server/reel-checks.ts"
 import { Settings } from "../../src/server/settings.ts"
 import type { Cut } from "../../src/server/timeline-files.ts"
@@ -23,7 +23,7 @@ const cutOf = (title: "top" | "middle"): Cut => ({
 const measure = (dir: string, cut: Cut) => readChecks(dir, cut, undefined, 2, undefined)
 
 const run = <A, E>(work: Effect.Effect<A, E, Settings | BunServices.BunServices>) =>
-  Effect.runPromise(work.pipe(Effect.provide(Settings.layer), Effect.provide(BunServices.layer)))
+  Effect.runPromise(work.pipe(Effect.provide(Settings.layer.pipe(Layer.provideMerge(BunServices.layer)))))
 
 for (const method of ["makeTempDirectory", "writeFileString"] as const) {
   test(`a failed ${method} yields an unmeasured check and does not poison the next poll`, async () => {
