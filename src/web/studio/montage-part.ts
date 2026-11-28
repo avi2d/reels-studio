@@ -1,19 +1,18 @@
-import type { TextPlace } from "../../shared/captions.ts"
 import { lengthOf, type Transcript } from "../../shared/plan.ts"
 import { bareWord } from "../../shared/subtitles.ts"
-import type { PlannedText } from "../../shared/texts.ts"
 import { playedSpans, type Block, type Edits, type Pause, type Placed, type Take } from "../../shared/timeline.ts"
 import { h } from "../dom.ts"
 import { formatLength, formatPause } from "../format.ts"
-import { whyDropped } from "../text-drops.ts"
+import { isAsked } from "../text-names.ts"
 import type { EditableSubtitle } from "../timeline-row.ts"
 import { icon } from "./icons.ts"
 import { insertAsk, joinAsk, wordAsk, type AskActions } from "./montage-asks.ts"
-import type { Numbered, Part } from "./montage-model.ts"
+import type { Part } from "./montage-model.ts"
+import { droppedText, textAsk, type TextActions } from "./montage-texts.ts"
 import { zoomGroup, type ZoomActions } from "./montage-zooms.ts"
 import { button, menuButton } from "./ui.ts"
 
-export interface PartActions extends AskActions, ZoomActions {
+export interface PartActions extends AskActions, TextActions, ZoomActions {
   readonly choose: (block: string, take: Take) => void
   readonly hearTake: (block: string, take: Take) => void
   readonly hearPause: (one: Placed, pause: Pause) => void
@@ -31,7 +30,7 @@ export interface PartData {
   readonly pictures: ReadonlyArray<string>
   readonly words: ReadonlyArray<EditableSubtitle>
   readonly phraseOf: (phrase: { readonly video: string; readonly from: number; readonly to: number }) => string
-  readonly textNumber: (planned: PlannedText) => number
+  readonly textName: (id: string) => string
 }
 
 const group = (title: string, ...children: ReadonlyArray<Node>): HTMLElement =>
@@ -132,19 +131,14 @@ const joinGroup = (part: Part, data: PartData, actions: PartActions): ReadonlyAr
       h("ul", { class: "pauses" }, ...one.pauses.map((pause) => pauseItem(one, pause, data, actions)))])]
 }
 
-const thoughtItem = ({ place, number }: Numbered<TextPlace>, data: PartData): HTMLElement =>
-  h("li", { class: place.state === "shown" ? "thought" : "thought thought--off" },
-    h("b", {}, `Мысль ${number}`),
-    h("span", { class: "thought__lines" }, ...place.planned.lines.flatMap((line, index) =>
-      [...index === 0 ? [] : [h("br")], line.accent ? h("mark", {}, line.text) : line.text])),
-    h("span", { class: "hint" }, place.state === "shown"
-      ? `на словах «${data.phraseOf(place.planned)}» · ${formatLength(place.shown.start)}`
-      : whyDropped(place, data.textNumber)))
-
-export const screenGroup = (part: Pick<Part, "texts" | "inserts">, data: PartData, actions: PartActions, title = "На экране"): ReadonlyArray<HTMLElement> =>
-  part.texts.length === 0 && part.inserts.length === 0 ? [] : [group(title,
-    ...part.texts.length === 0 ? [] : [h("ul", { class: "thoughts" }, ...part.texts.map((place) => thoughtItem(place, data)))],
+export const screenGroup = (part: Pick<Part, "texts" | "inserts">, data: PartData, actions: PartActions, title = "На экране"): ReadonlyArray<HTMLElement> => {
+  if (part.texts.length === 0 && part.inserts.length === 0) return []
+  const dropped = part.texts.flatMap(({ place, name }) => place.state === "dropped" && !isAsked(place) ? [droppedText(name, place, data.textName)] : [])
+  return [group(title,
+    ...part.texts.flatMap((text) => isAsked(text.place) ? [textAsk(text, data.phraseOf(text.place.planned), actions)] : []),
+    ...dropped.length === 0 ? [] : [h("ul", { class: "thoughts" }, ...dropped)],
     ...part.inserts.map((place) => insertAsk(place, data.phraseOf(place.place.planned), data.pictures, actions)))]
+}
 
 export const partDetail = (part: Part, data: PartData, actions: PartActions): HTMLElement => {
   const id = part.one.block.id

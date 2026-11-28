@@ -40,7 +40,7 @@ export const readCaptions = Effect.fnUntraced(function*(dir: string, clips: Read
   const approval = yield* readApproval(dir)
   if (approval.plan.state !== "approved") return NO_CAPTIONS
   const texts = yield* textsOf(approval.texts, dir)
-  return { words: subtitleWords(clips, transcripts, (clip, index) => correctedWord(blocks, transcripts, edits.subtitles ?? [], clip.block, clip.video, index)), texts: texts.state === "ready" ? shownTexts(texts.planned, clips, transcripts) : [] } satisfies Captions
+  return { words: subtitleWords(clips, transcripts, (clip, index) => correctedWord(blocks, transcripts, edits.subtitles ?? [], clip.block, clip.video, index)), texts: texts.state === "ready" ? shownTexts(texts.planned, clips, transcripts, edits.texts ?? []) : [] } satisfies Captions
 })
 
 // Two levels: the option value inside the filter, then the filter inside the graph.

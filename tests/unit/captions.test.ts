@@ -98,7 +98,7 @@ const heard = new Map([["a.mov", said]])
 const withoutPercent = [{ block: "a", video: "a.mov", start: 0, end: 2 }, { block: "a", video: "a.mov", start: 3, end: 4 }]
 const thought = (id: string, video: string, from: number, to: number) => ({ id, video, from, to, lines: [{ text: id, accent: false }] })
 const reasons = (planned: ReadonlyArray<ReturnType<typeof thought>>) =>
-  textPlaces(planned, withoutPercent, heard).map((place) => place.state === "shown" ? place.state : place.reason)
+  textPlaces(planned, withoutPercent, heard, []).map((place) => place.state === "shown" ? place.state : place.reason)
 
 test("a broken texts.json reads as unreadable rather than as a project without key thoughts", async () => {
   await mkdir("node_modules/.cache", { recursive: true })
@@ -136,11 +136,11 @@ test("a key thought with only blank lines, or wholly under the one before it, is
 
 test("a covered key thought names the thought that holds the screen, not the one listed before it", () => {
   const planned = [thought("late", "a.mov", 3, 3), thought("middle", "a.mov", 1, 1), thought("early", "a.mov", 0, 0)]
-  const covered = textPlaces(planned, withoutPercent, heard).flatMap((place) => place.state === "dropped" && place.reason === "covered" ? [[place.planned.id, place.by.id]] : [])
+  const covered = textPlaces(planned, withoutPercent, heard, []).flatMap((place) => place.state === "dropped" && place.reason === "covered" ? [[place.planned.id, place.by.id]] : [])
   expect(covered).toEqual([["late", "middle"]])
 })
 
 test("a key thought kept beside dropped ones stands from its first word for 2.5 s, not shifted by the dropped ones", () => {
   const planned = [thought("gone", "b.mov", 0, 0), thought("kept", "a.mov", 0, 0), thought("cut", "a.mov", 2, 2)]
-  expect(shownTexts(planned, withoutPercent, heard)).toEqual([{ id: "kept", lines: [{ text: "kept", accent: false }], start: 0, end: 2.5 }])
+  expect(shownTexts(planned, withoutPercent, heard, [])).toEqual([{ id: "kept", lines: [{ text: "kept", accent: false }], start: 0, end: 2.5 }])
 })
