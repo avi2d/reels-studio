@@ -3,8 +3,12 @@ import { shiftedBy, type Shown } from "../shared/inserts.ts"
 import { lengthOf } from "../shared/plan.ts"
 import type { Clip, Edits, Placed } from "../shared/timeline.ts"
 import type { Montage } from "./montage.ts"
-import type { Loaded } from "./timeline-draw.ts"
-import type { EditableSubtitle } from "./timeline-row.ts"
+import type { Loaded } from "./timeline-load.ts"
+
+export interface EditableSubtitle {
+  readonly index: number
+  readonly text: string
+}
 
 export const playback = (
   state: { loaded: Loaded | undefined; edits: Edits; base: number | undefined; shown: ReadonlyArray<Shown>; overlay: ReadonlyArray<Shown>; words: ReadonlyArray<ShownWord> },

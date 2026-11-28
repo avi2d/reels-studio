@@ -23,5 +23,3 @@ Each video folder holds these, named after the video:
 | `plan.json` | The words the chat model plans to remove, by their numbers |
 
 The shared list of uploaded videos in `projects/.library` holds the same `source/`, `transcripts/` and `preview/` folders.
-
-The player on the page skips each run of removed words, from the start of its first word to the end of its last.

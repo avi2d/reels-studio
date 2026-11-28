@@ -24,7 +24,7 @@ A video with no sound fails again.
 To have the studio listen to the video again:
 
 1. Run `journalctl --user -u reels-studio.service` to read the log.
-1. Press «Попробовать ещё раз» under the video.
+1. Press «Ещё раз» next to the video on the step «Записи».
 
 ## The chat answers «Ответ не дошёл»
 

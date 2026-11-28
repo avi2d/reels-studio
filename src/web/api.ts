@@ -5,10 +5,10 @@ import { Message } from "../shared/chat.ts"
 import { Offer, type Pick, UploadedVideo } from "../shared/library.ts"
 import { VideoView } from "../shared/plan.ts"
 import { ProjectView, type Effort } from "../shared/project.ts"
-import { APP_FILE_NAME, ReelView, SoundCheck, type PictureSide } from "../shared/reel.ts"
+import { APP_FILE_NAME, ReelView, SoundCheck } from "../shared/reel.ts"
 import { type Post, Posts } from "../shared/posts.ts"
 import type { Face } from "../shared/face.ts"
-import { RetouchView, type RetouchPicture } from "../shared/retouch.ts"
+import { RetouchView } from "../shared/retouch.ts"
 import { NoiseView, type Cleaned, type Noise } from "../shared/noise.ts"
 import { LooksView, type NewLooks } from "../shared/looks.ts"
 import { Edits, TimelinePage } from "../shared/timeline.ts"
@@ -18,8 +18,6 @@ export class Failed extends Data.TaggedError("Failed")<{ readonly message: strin
 export class Offline extends Data.TaggedError("Offline")<{}> {}
 
 export type { Effort, ProjectView } from "../shared/project.ts"
-
-export type { Message } from "../shared/chat.ts"
 
 const ErrorBody = Schema.Struct({ error: Schema.String })
 const decodeError = Schema.decodeUnknownOption(ErrorBody)
@@ -134,9 +132,6 @@ const appQuery = (app: App | undefined): string => app === undefined ? "" : `&ap
 export const reelUrl = (id: string, made: string, version: "after" | "before", app?: App): string =>
   `/api/projects/${id}/reel/file?made=${encodeURIComponent(made)}&version=${version}${appQuery(app)}`
 
-export const reelPictureUrl = (id: string, made: string, join: number, side: PictureSide): string =>
-  `/api/projects/${id}/reel/picture?made=${encodeURIComponent(made)}&join=${join}&side=${side}`
-
 export const reelDownloadUrl = (id: string, made: string, app?: App): string =>
   `/api/projects/${id}/reel/download?made=${encodeURIComponent(made)}${appQuery(app)}`
 
@@ -160,9 +155,6 @@ export const getLooks = (id: string): Effect.Effect<LooksView, Failed> =>
 
 export const setLooks = (id: string, change: NewLooks): Effect.Effect<LooksView, Failed> =>
   call(LooksView, `/api/projects/${id}/looks`, { ...post(change), method: "PUT" })
-
-export const retouchUrl = (id: string, name: RetouchPicture, made: string): string =>
-  `/api/projects/${id}/retouch/${name}?made=${encodeURIComponent(made)}`
 
 export const getNoise = (id: string): Effect.Effect<NoiseView, Failed> =>
   call(NoiseView, `/api/projects/${id}/noise`)

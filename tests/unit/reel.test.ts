@@ -3,7 +3,6 @@ import { attachment } from "../../src/server/api.ts"
 import { videoChain } from "../../src/server/reel.ts"
 import { videoOf } from "../../src/server/reel-record.ts"
 import { joinList, partArgs, partsOf, progressSeconds, sameParts, secondsOf } from "../../src/server/media-commands.ts"
-import { faceFact, faceSetting, staleText, statusOf } from "../../src/web/reel.ts"
 
 const clip = (video: string, start: number, end: number) => ({ block: "a", video, start, end })
 
@@ -78,11 +77,6 @@ test("an app's download names its app, so three downloads of one reel do not ove
   expect(attachment("", "YouTube Shorts")).toBe("attachment; filename=\"reel-youtube.mp4\"; filename*=UTF-8''reel%20YouTube%20Shorts.mp4")
 })
 
-test("the status shows whole percent while building, not a fraction", () => {
-  expect(statusOf({ job: { state: "running", done: 0.426 }, cut: 30, face: "off" })).toBe("Студия собирает ролик: 42%")
-  expect(statusOf({ job: { state: "idle" }, cut: 0, face: "off" })).toBe("В монтаже нет ни одного блока. Соберите блоки, и ролик можно будет собрать.")
-})
-
 test("with her face off and nothing drawn every app's file is the levelled reel itself, with no step that re-encodes her frames", () => {
   expect(videoChain("/w", "off", false, ["Instagram", "TikTok"])).toEqual({
     levelled: "/w/levelled.mp4",
@@ -114,21 +108,4 @@ test("with her face light the face is retouched once before the texts go on, so 
       { kind: "finish", app: "TikTok", from: "/w/retouched.mp4", to: "/w/reel-tiktok.mp4" }
     ]
   })
-})
-
-test("the reel facts say which face setting the file was built with, not the one chosen since", () => {
-  expect(faceFact("off")).toBe("лицо не тронуто")
-  expect(faceFact("light")).toBe("лицо слегка выровнено")
-})
-
-test("a file built with another face setting says the face differs, not that the cut changed", () => {
-  const file = { made: "m", seconds: 30, apps: [{ app: "Instagram" as const, size: 1 }] as const, fresh: false, face: "off" as const }
-  expect(staleText({ job: { state: "idle" }, cut: 30, face: "light", file }, false)).toBe("На вкладке «Внешность» выбрано другое лицо, чем в файле. Соберите ролик заново, чтобы файл совпал с выбором.")
-  expect(staleText({ job: { state: "idle" }, cut: 30, face: "off", file }, false)).toBe("Монтаж изменился после сборки. Соберите ролик заново, чтобы файл совпал с монтажом.")
-  expect(staleText({ job: { state: "idle" }, cut: 30, face: "light", file }, true)).toBe("Монтаж изменился после сборки. Соберите ролик заново, чтобы файл совпал с монтажом.")
-})
-
-test("the reel tab names the face choice, not a face the file may not have yet, and where to change it", () => {
-  expect(faceSetting("light")).toBe("Лицо в ролике: выровнять кожу и белки глаз. Выключить можно на вкладке «Внешность».")
-  expect(faceSetting("off")).toBe("Лицо в ролике: не трогать. Выровнять кожу и белки глаз можно на вкладке «Внешность».")
 })

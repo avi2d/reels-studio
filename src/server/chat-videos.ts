@@ -7,7 +7,7 @@ const videoLine = (video: VideoView): string =>
     : video.state === "ready"
     ? `- source/${video.name}: heard, its words are in transcripts/${video.name}.txt`
     : video.state === "failed"
-      ? `- source/${video.name}: the studio could not hear it; the person can press «Попробовать ещё раз» under the video to have the studio listen to it again`
+      ? `- source/${video.name}: the studio could not hear it; the person can press «Ещё раз» next to the video on the step «Записи» to have the studio listen to it again`
       : `- source/${video.name}: the studio is still listening to it, no transcript yet`
 
 const LOOK_NOTES = {

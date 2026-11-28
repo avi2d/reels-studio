@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { STEPS, STUDIO_PATH, projectPath, stepPath, type Step } from "../../shared/page.ts"
+import { HOME_PATH, STEPS, stepPath, type Step } from "../../shared/page.ts"
 import * as Api from "../api.ts"
 import { h } from "../dom.ts"
 import { REEL_REMOVAL } from "../remove.ts"
@@ -30,7 +30,7 @@ interface ReelBar {
 }
 
 export const topBar = (reel?: ReelBar): HTMLElement => {
-  const home = h("a", { class: "top__home", href: STUDIO_PATH }, ...reel === undefined ? [] : [icon("left")], "Студия")
+  const home = h("a", { class: "top__home", href: HOME_PATH }, ...reel === undefined ? [] : [icon("left")], "Студия")
   const header = h("header", { class: "top" }, home)
   if (reel === undefined) return header
 
@@ -69,9 +69,3 @@ export const rail = (project: Api.ProjectView, current: Step): HTMLElement =>
   h("nav", { class: "rail", "aria-label": "Шаги" },
     h("ol", { class: "steps" }, ...STEPS.map(stepLink(project, current))),
     h("p", { class: "steps__now" }, `${STEPS.indexOf(current) + 1} из ${STEPS.length} · `, h("b", {}, STEP_NAMES[current])))
-
-export const stepBody = (project: Api.ProjectView, step: Step): HTMLElement =>
-  h("div", { class: "body" },
-    h("h1", { tabindex: "-1" }, STEP_NAMES[step]),
-    h("p", { class: "hint" }, "Этот шаг пока работает в прежней студии."),
-    h("a", { class: "btn btn--quiet btn--start", href: projectPath(project.id) }, "Открыть в прежней студии"))

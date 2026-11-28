@@ -32,9 +32,8 @@ const studioReady = async (server: Bun.Subprocess, studioUrl: string): Promise<v
 }
 
 const snapshotHome = async (directory: string, studioUrl: string): Promise<void> => {
-  const paths = ["/", "/app.css", "/app.js", "/api/projects", "/api/library",
-    "/fonts/onest-cyrillic.woff2", "/fonts/onest-latin.woff2",
-    "/fonts/unbounded-cyrillic.woff2", "/fonts/unbounded-latin.woff2"]
+  const paths = ["/", "/studio.css", "/studio.js", "/api/projects", "/api/library",
+    "/fonts/onest-cyrillic.woff2", "/fonts/onest-latin.woff2", "/fonts/subtitle.ttf"]
   await Promise.all(paths.map(async (path) => {
     const response = await fetch(new URL(path, studioUrl))
     assert(response.ok, `Cannot copy ${path} from the studio: ${response.status}`)

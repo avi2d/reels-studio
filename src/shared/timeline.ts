@@ -7,7 +7,7 @@ import { PlannedZooms, ZoomAnswer, ZoomLevel, type Push } from "./zoom-plan.ts"
 
 export { Push } from "./zoom-plan.ts"
 
-export const MIN_PAUSE = 0.5
+const MIN_PAUSE = 0.5
 export const PAUSE_REST = 0.2
 
 // A rest longer than the shortest pause would make that pause longer than its own silence.

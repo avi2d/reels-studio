@@ -1,5 +1,5 @@
 import { h } from "../dom.ts"
-import type { Loaded } from "../timeline-draw.ts"
+import type { Loaded } from "../timeline-load.ts"
 import { button } from "./ui.ts"
 
 const status = (text: string): HTMLElement => h("p", { class: "hint", role: "status" }, text)

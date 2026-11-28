@@ -1,8 +1,13 @@
 import { Effect } from "effect"
+import type { Transcript } from "../shared/plan.ts"
+import type { Edits, TimelinePage } from "../shared/timeline.ts"
 import * as Api from "./api.ts"
-import type { Loaded } from "./timeline-draw.ts"
-import type { Edits } from "../shared/timeline.ts"
 import { POLL_MS, takeServer, type Ticket } from "./timeline-save.ts"
+
+export interface Loaded {
+  readonly transcripts: ReadonlyMap<string, Transcript>
+  readonly view: TimelinePage
+}
 
 export interface Adopting {
   loaded: Loaded | undefined

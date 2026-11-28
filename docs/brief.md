@@ -7,7 +7,7 @@ Each reel keeps a brief the person writes, one plan the chat model answers it wi
 
 ## The brief
 
-The stage «Видео и задание» holds the field «Задание».
+The step «План» holds the field «Задание».
 «Составить план» saves the text to `brief.md` and asks the chat model for one plan of the whole reel.
 The chat model reads the brief with every message and cannot write it.
 A brief holds at most 4,000 characters.
@@ -18,7 +18,7 @@ The chat model writes the plan to `plan.md`.
 On step «План», the card «План ролика» hides a repeated first line of «План ролика», with or without a colon.
 It turns dash lines into a bulleted list and keeps indented items nested.
 The plan covers every stage the studio can do, the takes, the pauses, the chosen apps, the task files and the open questions.
-The person agrees by pressing «Согласна» under the plan, or by writing «Согласна» or «Согласен» as the whole message.
+The person agrees by pressing «Да, делайте» under the plan, or by writing «Согласна» or «Согласен» as the whole message.
 After the chat model answers that message, or the request is cut, the studio works in the background without another question:
 
 - When a gathering runs or is due, the studio is still hearing a video, or the gaze of a heard video has not settled yet, the yes waits for it to finish, then pins the takes and writes the list.
@@ -30,14 +30,14 @@ The pause rule is 0.2 s unless the reel's rules say another, as [docs/timeline.m
 - It saves the yes with the plan text, the `texts.json` contents captured at the yes, and a list of what it did to `approval.json`.
 Removing a reel stops this work the same way it stops a gathering.
 
-While the studio works after the yes, the card hides «Согласна» and updates itself when the list is ready.
+While the studio works after the yes, the card hides «Да, делайте» and updates itself when the list is ready.
 The card then lists every chosen take with its reason and every shortened pause in them, whenever it was shortened, with the seconds the pauses took off.
-Every change stays undoable on the stages «Дубли и блоки» and «Паузы и склейки».
+Every change stays undoable on the step «Монтаж».
 A change to `plan.md` or `texts.json` after the yes makes the plan wait for a new yes.
 Adding or removing `texts.json` also requires a new yes.
 An approval saved without a text snapshot stays valid while the project has no `texts.json`.
 
-## The new studio at `/new`
+## The task, the apps and the chat
 
 On step «План», «Как в прошлый раз» fills an empty task with the last task from another reel.
 Under the task, «Куда» holds a button for each app: Instagram, YouTube Shorts and TikTok.

@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test"
 import { lastFrameOf, partArgs } from "../../src/server/media-commands.ts"
 import { colourJoins, coloursOf, gainTo, skinCrop, skinOf, skinSamples } from "../../src/server/skin.ts"
-import { colourNote } from "../../src/web/reel.ts"
 
 const filterOf = (args: ReadonlyArray<string>): string => args[args.indexOf("-filter_complex") + 1] ?? ""
 
@@ -66,10 +65,4 @@ test("a matched video is scaled per channel in RGB, and the first video is encod
   expect(matched).toContain("colorchannelmixer=rr=1.1000:gg=1.0000:bb=0.9000")
   expect(matched.indexOf("colorchannelmixer")).toBeLessThan(matched.indexOf("crop=1080:1920"))
   expect(filterOf(partArgs("a.mov", one, { hdr: false, gain: undefined }, "off", "libx264", "p.mov"))).not.toContain("colorchannelmixer")
-})
-
-test("the colour note speaks only when a video was matched or had no face, not for a reel of one video", () => {
-  expect(colourNote({ joins: 0, matched: 0, unmeasured: 0 })).toBeUndefined()
-  expect(colourNote({ joins: 1, matched: 1, unmeasured: 0 })).toContain("подогнала остальные видео к первому")
-  expect(colourNote({ joins: 0, matched: 0, unmeasured: 1 })).toBe("Студия не нашла лицо хотя бы в одном видео, и цвет этого видео остался как есть.")
 })

@@ -3,8 +3,7 @@ kind: reference
 ---
 # Studio screens
 
-The old page shows videos as tiles with covers and a button to start the next reel.
-The studio screens open at `/new`.
+The studio screens open at `/`.
 Each reel card shows its status, and the reel's top bar menu lets you rename it.
 The reel list shows reels and uploaded takes five to a page.
 You can upload takes and resume an interrupted upload from that list.

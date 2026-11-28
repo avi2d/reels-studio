@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { pickOf } from "../../shared/library.ts"
-import { STUDIO_PATH, stepPath } from "../../shared/page.ts"
+import { HOME_PATH, stepPath } from "../../shared/page.ts"
 import * as Api from "../api.ts"
 import { h } from "../dom.ts"
 import { formatLength } from "../format.ts"
@@ -37,7 +37,7 @@ const layout = (id: string) => {
   const listening = h("p", { class: "hint" })
   const empty = h("div", { class: "pick" },
     h("p", { class: "hint" }, "Загруженных записей пока нет. Загрузите дубли на странице «Ролики», и они появятся здесь."),
-    h("a", { class: "btn btn--quiet", href: STUDIO_PATH }, icon("upload"), "К загрузке видео"))
+    h("a", { class: "btn btn--quiet", href: HOME_PATH }, icon("upload"), "К загрузке видео"))
   const next = h("a", { class: "btn btn--main btn--start", href: stepPath(id, "plan") }, "Дальше: план", icon("right"))
   const body = h("div", { class: "body" }, heading, mine.node, problem, loadProblem, earlierTitle, choose, sending, listening, empty, next)
   return { heading, mine, problem, loadProblem, earlierTitle, earlier, add, all, choose, sending, listening, empty, next, body }
