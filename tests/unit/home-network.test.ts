@@ -23,6 +23,9 @@ test("192.168/16 and 10/8 are home, 192.169 and 11 are not", () => {
 test("an IPv4-mapped IPv6 address is judged by its IPv4 part, not passed as IPv6", () => {
   expect(isHomeAddress("::ffff:192.168.1.5")).toBe(true)
   expect(isHomeAddress("::ffff:8.8.8.8")).toBe(false)
+  expect(isHomeAddress("::ffff:c0a8:105")).toBe(true)
+  expect(isHomeAddress("0:0:0:0:0:ffff:c0a8:105")).toBe(true)
+  expect(isHomeAddress("::ffff:808:808")).toBe(false)
 })
 
 test("loopback, unique local fc00::/7 and link-local fe80::/10 are home", () => {

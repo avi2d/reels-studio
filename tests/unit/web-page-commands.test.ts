@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { checkedAddress, isOutside, licenceOf, pageName, printArgs } from "../../src/server/web-page-commands.ts"
+import { checkedAddress, isOutside, licenceOf, pageName } from "../../src/server/web-page-commands.ts"
 
 test("only http and https addresses are opened, not file, javascript or ftp", () => {
   expect(checkedAddress("file:///etc/passwd")).toBeUndefined()
@@ -26,15 +26,19 @@ test("home-network, loopback and unspecified addresses are not outside", () => {
   expect(isOutside("8.8.8.8")).toBe(true)
 })
 
-test("the saved file is named by its site and digest, not by the path a page chooses", () => {
-  expect(pageName(new URL("https://WWW.Example.com/../../etc/passwd"), "abcdef0123456789")).toBe("web-example.com-abcdef0123.pdf")
+test("mapped, carrier-grade and NAT64 home addresses cannot pass as outside", () => {
+  for (const address of [
+    "::ffff:c0a8:101", "::ffff:7f00:1", "0:0:0:0:0:ffff:c0a8:101",
+    "::ffff:192.168.1.1", "100.64.0.0", "100.100.100.100", "100.127.255.255",
+    "::ffff:6440:1", "64:ff9b::c0a8:101", "::ffff:0:1", "0:0:0:0:0:0:0:1"
+  ]) expect(isOutside(address)).toBe(false)
+  for (const address of ["100.63.255.255", "100.128.0.0", "::ffff:808:808", "2001:4860:4860::8888"]) {
+    expect(isOutside(address)).toBe(true)
+  }
 })
 
-test("Chrome prints the named address last, so a page address is never read as a flag", () => {
-  const args = printArgs("https://example.com/", "/tmp/profile", "/tmp/out.pdf")
-  expect(args.at(-1)).toBe("https://example.com/")
-  expect(args).toContain("--print-to-pdf=/tmp/out.pdf")
-  expect(args).toContain("--headless")
+test("the saved file is named by its site and digest, not by the path a page chooses", () => {
+  expect(pageName(new URL("https://WWW.Example.com/../../etc/passwd"), "abcdef0123456789")).toBe("web-example.com-abcdef0123.pdf")
 })
 
 test("a rel=license link gives its text, and an empty link gives its address", () => {

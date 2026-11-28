@@ -10,6 +10,7 @@ import type { EditableSubtitle } from "../timeline-row.ts"
 import { icon } from "./icons.ts"
 import { insertAsk, joinAsk, type AskActions } from "./montage-asks.ts"
 import type { Numbered, Part } from "./montage-model.ts"
+import { articleWarnings } from "./page-source.ts"
 import { button, menuButton } from "./ui.ts"
 
 export interface PartActions extends AskActions {
@@ -40,7 +41,7 @@ const group = (title: string, ...children: ReadonlyArray<Node>): HTMLElement =>
 
 const headOf = (number: number, data: PartData, title: string, ...acts: ReadonlyArray<Node>): HTMLElement =>
   h("div", { class: "detail__head" },
-    h("div", {}, h("p", { class: "eyebrow" }, `Часть ${number} из ${data.count}`), h("h2", { id: "part-title", tabindex: "-1" }, title)),
+    h("div", {}, h("p", { class: "eyebrow" }, `Часть ${number} из ${data.count}`), h("h2", { id: "part-title", tabindex: "-1" }, title), ...articleWarnings(data.sources, title)),
     ...acts)
 
 const isFixed = (edits: Edits, block: string, video: string, index: number): boolean =>
@@ -89,7 +90,8 @@ const wordButton = (one: Placed, word: EditableSubtitle, data: PartData, actions
 const wordsGroup = (part: Part, data: PartData, actions: PartActions): HTMLElement =>
   group("Слова",
     h("p", { class: "hint" }, "Так слова встанут в субтитры. Нажмите на слово, которое студия услышала неверно, и исправьте его."),
-    h("p", { class: "transcript" }, ...data.words.flatMap((word) => [wordButton(part.one, word, data, actions), " "])))
+    h("p", { class: "transcript" }, ...data.words.flatMap((word) => [wordButton(part.one, word, data, actions), " "])),
+    ...articleWarnings(data.sources, data.words.map((word) => word.text).join(" ")))
 
 const takeItem = (one: Placed, take: Take, data: PartData, actions: PartActions): HTMLElement => {
   const rank = one.block.takes.indexOf(take) + 1
@@ -137,7 +139,8 @@ const thoughtItem = ({ place, number }: Numbered<TextPlace>, data: PartData): HT
       [...index === 0 ? [] : [h("br")], line.accent ? h("mark", {}, line.text) : line.text])),
     h("span", { class: "hint" }, place.state === "shown"
       ? `на словах «${data.phraseOf(place.planned)}» · ${formatLength(place.shown.start)}`
-      : whyDropped(place, data.textNumber)))
+      : whyDropped(place, data.textNumber)),
+    ...articleWarnings(data.sources, place.planned.lines.map((line) => line.text).join(" ")))
 
 export const screenGroup = (part: Pick<Part, "texts" | "inserts">, data: PartData, actions: PartActions, title = "На экране"): ReadonlyArray<HTMLElement> =>
   part.texts.length === 0 && part.inserts.length === 0 ? [] : [group(title,
@@ -163,7 +166,7 @@ export const goneDetail = (block: Block, take: Take, data: PartData, actions: Pa
   const words = data.transcripts.get(take.video)?.words.slice(take.from, take.to + 1).map((word) => word.text).join(" ") ?? ""
   return h("div", { class: "detail detail--gone" },
     h("div", { class: "detail__head" },
-      h("div", {}, h("p", { class: "eyebrow" }, "Убрана из ролика"), h("h2", { id: "part-title", tabindex: "-1" }, block.title)),
+      h("div", {}, h("p", { class: "eyebrow" }, "Убрана из ролика"), h("h2", { id: "part-title", tabindex: "-1" }, block.title), ...articleWarnings(data.sources, block.title)),
       button("quiet", "Вернуть", { "data-key": `restore:${block.id}`, click: () => { actions.restore(block.id) } }, "retry")),
-    h("p", { class: "quote" }, words))
+    h("p", { class: "quote" }, words), ...articleWarnings(data.sources, words))
 }

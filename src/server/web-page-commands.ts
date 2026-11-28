@@ -1,7 +1,7 @@
+import { BlockList, isIP } from "node:net"
 import { isHomeAddress } from "./home-network.ts"
 
 const LONGEST_ADDRESS = 2000
-const LOAD_MS = 20000
 const LONGEST_LICENCE = 200
 
 export const checkedAddress = (address: string): URL | undefined => {
@@ -14,26 +14,26 @@ export const checkedAddress = (address: string): URL | undefined => {
   return url
 }
 
-const UNSPECIFIED = /^(?:0\.\d{1,3}\.\d{1,3}\.\d{1,3}|::|::ffff:0\.\d{1,3}\.\d{1,3}\.\d{1,3})$/iu
+const unroutable = new BlockList()
+unroutable.addSubnet("0.0.0.0", 8, "ipv4")
+unroutable.addAddress("::", "ipv6")
+unroutable.addSubnet("64:ff9b::", 96, "ipv6")
+unroutable.addSubnet("64:ff9b:1::", 48, "ipv6")
 
-// A page on the home network, such as the router or the studio itself, is never sent to the chat model.
-export const isOutside = (address: string): boolean => !isHomeAddress(address) && !UNSPECIFIED.test(address)
+export const isOutside = (address: string): boolean =>
+  isIP(address) !== 0 && !isHomeAddress(address) && !unroutable.check(address, isIP(address) === 6 ? "ipv6" : "ipv4")
 
 export const pageName = (url: URL, digest: string): string =>
   `web-${url.hostname.toLowerCase().replace(/^www\./u, "").replace(/[^a-z0-9.-]/gu, "-")}-${digest.slice(0, 10)}.pdf`
 
 // Chrome upgrades an http address to https and refuses the load when the site answers only over http, as an official law site can.
-const chromeArgs = (profile: string): ReadonlyArray<string> => [
+export const browserArgs = (profile: string): ReadonlyArray<string> => [
   "--headless", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--hide-scrollbars",
-  `--user-data-dir=${profile}`, `--timeout=${LOAD_MS}`,
+  `--user-data-dir=${profile}`, "--remote-debugging-pipe", "--no-startup-window",
+  "--disable-background-networking", "--disable-quic", "--disable-extensions", "--block-new-web-contents",
+  "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
   "--disable-features=HttpsUpgrades,HttpsFirstBalancedModeAutoEnable,HttpsFirstModeV2ForTypicallySecureUsers"
 ]
-
-export const printArgs = (address: string, profile: string, output: string): ReadonlyArray<string> =>
-  [...chromeArgs(profile), "--no-pdf-header-footer", `--print-to-pdf=${output}`, address]
-
-export const domArgs = (address: string, profile: string): ReadonlyArray<string> =>
-  [...chromeArgs(profile), "--dump-dom", address]
 
 const ENTITIES: Readonly<Record<string, string>> = { amp: "&", quot: "\"", apos: "'", lt: "<", gt: ">", nbsp: " ", copy: "©" }
 

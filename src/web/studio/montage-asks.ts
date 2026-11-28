@@ -68,7 +68,7 @@ export const insertAsk = ({ place, number }: Numbered<InsertPlace>, phrase: stri
         ...source === undefined ? [] : sourceLines(source),
         h("span", { class: "hint" }, facts.join(" · ")),
         ...planned.reason === "" ? [] : [h("span", { class: "hint" }, planned.reason)],
-        ...articleWarnings(source, phrase),
+        ...articleWarnings(source === undefined ? [] : [source], phrase),
         ...span === undefined ? [h("span", { class: "hint" }, "Этой фразы сейчас нет в ролике, поэтому вставку не видно.")] : [])),
     h("div", { class: "ask__acts" },
       button("quiet", "Посмотреть", {

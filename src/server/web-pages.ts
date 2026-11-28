@@ -1,28 +1,20 @@
-import { lookup } from "node:dns/promises"
 import { Context, Crypto, DateTime, Effect, FileSystem, Layer, Semaphore } from "effect"
 import type { ChildProcessSpawner } from "effect/process"
 import type { WebPage } from "../shared/web-pages.ts"
 import { ApiError, badRequest } from "./api-error.ts"
 import { Attachments } from "./attachments.ts"
-import { tool } from "./media-jobs.ts"
 import { Projects } from "./projects.ts"
 import { Settings } from "./settings.ts"
-import { checkedAddress, domArgs, isOutside, licenceOf, pageName, printArgs } from "./web-page-commands.ts"
+import { NOT_OPENED, WebPageAddress } from "./web-page-access.ts"
+import { capturePage } from "./web-page-browser.ts"
+import { checkedAddress, pageName } from "./web-page-commands.ts"
 import { readWebPages, writeWebPages } from "./web-page-files.ts"
 
 const NOT_AN_ADDRESS = "Это не адрес страницы в интернете. Нужен адрес, который начинается с http:// или https://."
-const AT_HOME = "Этот адрес ведёт в домашнюю сеть. Студия открывает только страницы в интернете."
-const NOT_OPENED = "Страница не открылась. Проверьте адрес или попробуйте позже."
 
 export interface SavedPage extends WebPage {
   readonly about: string
 }
-
-const outsideHost = Effect.fnUntraced(function*(host: string) {
-  const bare = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host
-  const found = yield* Effect.tryPromise(() => lookup(bare, { all: true, order: "verbatim" })).pipe(Effect.mapError(() => badRequest(NOT_OPENED)))
-  if (found.length === 0 || !found.every((one) => isOutside(one.address))) return yield* badRequest(AT_HOME)
-})
 
 const digestOf = Effect.fnUntraced(function*(text: string) {
   const digest = yield* (yield* Crypto.Crypto).digest("SHA-256", new TextEncoder().encode(text))
@@ -36,12 +28,12 @@ const printed = Effect.fnUntraced(function*(dir: string, address: string, name: 
   yield* fs.makeDirectory(`${work}/profile`, { recursive: true })
   return yield* Effect.gen(function*() {
     const pdf = `${work}/${name}`
-    yield* tool(settings.chrome, printArgs(address, `${work}/profile`, pdf), [])
-    if (!(yield* fs.exists(pdf)) || Number((yield* fs.stat(pdf)).size) === 0) return yield* badRequest(NOT_OPENED)
-    const dom = yield* tool(settings.chrome, domArgs(address, `${work}/profile`), []).pipe(Effect.orElseSucceed(() => ""))
+    const captured = yield* capturePage(settings.chrome, `${work}/profile`, address)
+    if (captured.pdf.length === 0) return yield* badRequest(NOT_OPENED)
+    yield* fs.writeFile(pdf, captured.pdf)
     yield* fs.makeDirectory(`${dir}/attached`, { recursive: true })
     yield* fs.rename(pdf, `${dir}/attached/${name}`)
-    return licenceOf(dom)
+    return captured.licence
   }).pipe(Effect.ensuring(fs.remove(work, { recursive: true }).pipe(Effect.orElseSucceed(() => undefined))))
 })
 
@@ -70,7 +62,7 @@ export class WebPages extends Context.Service<WebPages, {
       const save = Effect.fn("WebPages.save")(function*(id: string, address: string) {
         const url = checkedAddress(address)
         if (url === undefined) return yield* badRequest(NOT_AN_ADDRESS)
-        yield* outsideHost(url.hostname)
+        yield* (yield* WebPageAddress)(url.hostname)
         const dir = yield* projects.folder(id)
         const page = yield* Semaphore.withPermit(writing)(saveIn(dir, url))
         return { ...page, about: yield* attachments.describe(dir, page.file) }
