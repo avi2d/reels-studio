@@ -39,7 +39,7 @@ test("54 seconds of work on 20 seconds of video come to 2 min 42 s a minute, not
 test("the trial status names the queue, the share done and an empty cut, and says nothing when idle", () => {
   expect(trialStatus({ job: { state: "waiting" }, cut: 30, face: "off" })).toBe("Проба ждёт своей очереди: компьютер занят другой тяжёлой работой.")
   expect(trialStatus({ job: { state: "running", done: 0.456 }, cut: 30, face: "off" })).toBe("Студия делает пробу: 45%")
-  expect(trialStatus({ job: { state: "idle" }, cut: 0, face: "off" })).toBe("В монтаже нет ни одного блока. Соберите блоки, и пробу можно будет сделать.")
+  expect(trialStatus({ job: { state: "idle" }, cut: 0, face: "off" })).toBe("В монтаже нет ни одной части. Соберите части, и пробу можно будет сделать.")
   expect(trialStatus({ job: { state: "idle" }, cut: 30, face: "off" })).toBe("")
 })
 

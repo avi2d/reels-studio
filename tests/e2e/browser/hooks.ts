@@ -17,6 +17,8 @@ const address = (path: string): string => new URL(path, setting("REELS_BROWSER_U
 const folderExists = (id: string): Promise<boolean> =>
   stat(join(setting("REELS_BROWSER_DIR"), "projects", id)).then(() => true, () => false)
 
+const montageHeading = (page: Page) => page.getByRole("heading", { name: /^Монтаж(?: \d+:\d{2})?$/u, level: 1 })
+
 const reelId = (page: Page): string => {
   const id = /^\/p\/([a-z0-9-]+)\/records$/u.exec(new URL(page.url()).pathname)?.[1]
   assert(id !== undefined, `Creating a reel must open its first step, it opened ${page.url()}`)
@@ -195,7 +197,7 @@ const approvePlan = async (page: Page, id: string): Promise<void> => {
   await page.getByRole("list", { name: "Файлы к заданию" }).getByText(TASK_FILE, { exact: true }).waitFor()
   await page.getByRole("button", { name: "Да, делайте", exact: true }).click()
   await page.waitForURL(address(stepPath(id, "montage")), { timeout })
-  await page.getByRole("heading", { name: "Монтаж", exact: true, level: 1 }).waitFor()
+  await montageHeading(page).waitFor()
   await page.getByRole("link", { name: "Шаг 2: План", exact: true }).click()
   const work = page.getByRole("region", { name: "Что сделала студия" })
   await work.getByRole("listitem").filter({ hasText: "«Конец»" }).waitFor()
@@ -392,7 +394,7 @@ const streamingChat: ProductCheck = {
     const title = "Ролик с остановленным ответом"
     const id = await createReel(page, title)
     await page.getByRole("link", { name: "Шаг 3: Монтаж", exact: true }).click()
-    await page.getByRole("heading", { name: "Монтаж", exact: true, level: 1 }).waitFor()
+    await montageHeading(page).waitFor()
     await page.getByRole("button", { name: "Чат", exact: true }).click()
     const chat = page.getByRole("dialog", { name: "Чат", exact: true })
     const send = chat.getByRole("button", { name: "Отправить", exact: true })

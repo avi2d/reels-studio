@@ -1,6 +1,6 @@
 import { minuteTakes, type RetouchView } from "../shared/retouch.ts"
 
-const NO_CUT = "В монтаже нет ни одного блока. Соберите блоки, и пробу можно будет сделать."
+const NO_CUT = "В монтаже нет ни одной части. Соберите части, и пробу можно будет сделать."
 
 export const spentText = (seconds: number): string => {
   const whole = Math.max(1, Math.round(seconds))
