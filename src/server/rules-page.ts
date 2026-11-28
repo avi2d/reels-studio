@@ -15,8 +15,8 @@ export const rulesPage = Effect.fnUntraced(function*(id: string) {
   const settings = yield* Settings
   const dir = yield* store.folder(id)
   const saved = yield* Effect.all({ rules: reelRules(dir), kept: readKeptRules(settings.projectsDir), change: readChange(dir) }).pipe(orRules)
-  const { timeline, zooms } = yield* media.timeline(id)
+  const { timeline, zooms, faces } = yield* media.timeline(id)
   const planned = zooms.state === "ready" ? zooms.planned : []
-  const cut = timeline.state === "ready" ? { blocks: timeline.blocks, edits: timeline.edits, transcripts: readyTranscripts(yield* media.videos(id)), zooms: planned } : undefined
+  const cut = timeline.state === "ready" ? { blocks: timeline.blocks, edits: timeline.edits, transcripts: readyTranscripts(yield* media.videos(id)), zooms: planned, faces } : undefined
   return rulesView(saved.rules, saved.kept, saved.change, cut)
 })
