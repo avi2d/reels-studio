@@ -3,7 +3,7 @@ import { lastFrameOf, partArgs } from "../../src/server/media-commands.ts"
 import { colourJoins, coloursOf, gainTo, skinCrop, skinOf, skinSamples } from "../../src/server/skin.ts"
 import { colourNote } from "../../src/web/reel.ts"
 
-const filterOf = (args: ReadonlyArray<string>): string => args[args.indexOf("-vf") + 1] ?? ""
+const filterOf = (args: ReadonlyArray<string>): string => args[args.indexOf("-filter_complex") + 1] ?? ""
 
 test("the skin colour is the median of each channel, not the mean a bright highlight drags up", () => {
   const pixels = new Uint8Array([10, 20, 30, 200, 100, 50, 100, 60, 40])

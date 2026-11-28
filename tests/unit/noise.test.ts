@@ -17,8 +17,9 @@ test("«Оставить» leaves the sound with its fades only, not a cleaning 
 })
 
 test("the build and the sound check clean the voice with the same filter, so the check hears the built sound", () => {
-  const built = filterOf(partArgs("a.mov", part, { hdr: false, gain: undefined }, "strong", "libx264", "p.mov"))
-  expect(filterOf(soundPartArgs("a.mov", part, "strong", "p.wav"))).toBe(built)
+  const args = partArgs("a.mov", part, { hdr: false, gain: undefined }, "strong", "libx264", "p.mov")
+  const checked = filterOf(soundPartArgs("a.mov", part, "strong", "p.wav"))
+  expect(args[args.indexOf("-filter_complex") + 1]).toContain(`[0:a:0]${checked}[sound]`)
 })
 
 test("a project with no noise choice is cleaned at the strong setting, not left with its room noise", () => {

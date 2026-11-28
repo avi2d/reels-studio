@@ -202,8 +202,9 @@ export const partArgs = (source: string, part: Part, look: Look, noise: Noise, e
   return [
     "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y",
     "-ss", part.start.toFixed(4), "-i", source,
-    "-map", "0:v:0", "-map", "0:a:0", "-frames:v", String(part.frames), "-t", seconds.toFixed(6),
-    "-vf", partVideo(part, look), "-af", partSoundFilter(seconds, noise),
+    // FFmpeg 8.0.1 can stall with apad and afftdn when picture and sound use separate filter graphs.
+    "-filter_complex", `[0:v:0]${partVideo(part, look)}[picture];[0:a:0]${partSoundFilter(seconds, noise)}[sound]`,
+    "-map", "[picture]", "-map", "[sound]", "-frames:v", String(part.frames), "-t", seconds.toFixed(6),
     "-c:v", encoder, "-profile:v", "high", "-b:v", "10M", "-maxrate", "12M", "-bufsize", "24M", "-g", String(REEL_RATE * 2),
     "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
     "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2", "-map_metadata", "-1", "-f", "mov", output
