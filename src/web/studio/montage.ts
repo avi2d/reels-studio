@@ -20,9 +20,9 @@ export interface MontageStep {
   readonly dispose: () => void
 }
 
-const isEditingWord = (screen: Screen): boolean => screen.detail.querySelector(".word-field") !== null
+const isEditingWord = (screen: Screen): boolean => screen.detail.querySelector(".word-field, .text-edit") !== null
 
-// A redraw while a word field is open would throw away what the person is typing, so a load waits until the field closes.
+// A redraw while a word or text field is open would throw away what the person is typing, so a load waits until the field closes.
 const shower = (screen: Screen, state: State, busy: () => boolean, draw: () => void) => {
   const show = (loaded: Loaded, ticket: Ticket): void => {
     if (isEditingWord(screen)) {
