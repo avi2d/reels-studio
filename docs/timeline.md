@@ -211,7 +211,7 @@ The person picks one of three look cards and one of two sizes, «Обычные�
 «Как в примере» opens only while `example.json` exists, and the server refuses to save it before.
 When the example is removed later, the build falls back to the style profile.
 The card lists the lines the chat model took from the example, and the plan quotes the same lines.
-The title place of the example, `top` or `middle`, moves the titles and key thoughts: `middle` centres them in the clear zone of the Instagram box, not on the face.
+The title place of the example, `top` or `middle`, moves the titles and key thoughts: `middle` centres them in the clear zone of the box of the app, not on the face.
 The preview on the step draws the same look the build burns.
 
 The name plate is a line such as a name and a job, up to 40 characters.
