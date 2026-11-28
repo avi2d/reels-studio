@@ -27,8 +27,8 @@ beforeAll(async () => {
 }, 15_000)
 
 afterAll(async () => {
-  await browser?.close()
-  await server?.stop(true)
+  await browser.close()
+  await server.stop(true)
 })
 
 const withPage = async (run: (page: Page) => Promise<void>): Promise<void> => {
