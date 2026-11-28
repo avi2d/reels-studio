@@ -50,7 +50,7 @@ export const postPanel = (projectId: string): PostPanel => {
   const copy = (part: Part): void => {
     const control = controls[part]
     if (control.value === "") return
-    navigator.clipboard.writeText(control.value).then(() => { say(COPIED) }, () => {
+    Promise.resolve().then(() => navigator.clipboard.writeText(control.value)).then(() => { say(COPIED) }, () => {
       control.focus()
       control.select()
       say(SELECTED)

@@ -54,7 +54,7 @@ const positionsOf = (ass: string): ReadonlyArray<{ readonly x: number; readonly 
   [...ass.matchAll(/\\pos\((\d+),(\d+)\)/gu)].map((match) => ({ x: Number(match[1]), y: Number(match[2]) }))
 
 test("each app's file puts its subtitle and key thought by that app's bands, not all by Instagram's", () => {
-  const captions = { words: [{ text: "аванс", start: 0, end: 1 }], texts: [{ id: "a", start: 0, end: 1, lines: [{ text: "Аванс", accent: false }] }] }
+  const captions = { ...NO_CAPTIONS, words: [{ text: "аванс", start: 0, end: 1 }], texts: [{ id: "a", start: 0, end: 1, lines: [{ text: "Аванс", accent: false }] }] }
   const [instagramText, instagramWord] = positionsOf(assOf(captions, "Instagram"))
   const [youtubeText, youtubeWord] = positionsOf(assOf(captions, "YouTube Shorts"))
   const [tiktokText, tiktokWord] = positionsOf(assOf(captions, "TikTok"))

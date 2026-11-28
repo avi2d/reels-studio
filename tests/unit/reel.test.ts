@@ -79,8 +79,8 @@ test("an app's download names its app, so three downloads of one reel do not ove
 })
 
 test("the status shows whole percent while building, not a fraction", () => {
-  expect(statusOf({ job: { state: "running", done: 0.426 }, cut: 30, face: "off", apps: ["Instagram"] })).toBe("Студия собирает ролик: 42%")
-  expect(statusOf({ job: { state: "idle" }, cut: 0, face: "off", apps: ["Instagram"] })).toBe("В монтаже нет ни одного блока. Соберите блоки, и ролик можно будет собрать.")
+  expect(statusOf({ job: { state: "running", done: 0.426 }, cut: 30, face: "off" })).toBe("Студия собирает ролик: 42%")
+  expect(statusOf({ job: { state: "idle" }, cut: 0, face: "off" })).toBe("В монтаже нет ни одного блока. Соберите блоки, и ролик можно будет собрать.")
 })
 
 test("with her face off and nothing drawn every app's file is the levelled reel itself, with no step that re-encodes her frames", () => {
@@ -123,10 +123,9 @@ test("the reel facts say which face setting the file was built with, not the one
 
 test("a file built with another face setting says the face differs, not that the cut changed", () => {
   const file = { made: "m", seconds: 30, apps: [{ app: "Instagram" as const, size: 1 }] as const, fresh: false, face: "off" as const }
-  const apps = ["Instagram"] as const
-  expect(staleText({ job: { state: "idle" }, cut: 30, face: "light", apps, file }, false)).toBe("На вкладке «Внешность» выбрано другое лицо, чем в файле. Соберите ролик заново, чтобы файл совпал с выбором.")
-  expect(staleText({ job: { state: "idle" }, cut: 30, face: "off", apps, file }, false)).toBe("Монтаж изменился после сборки. Соберите ролик заново, чтобы файл совпал с монтажом.")
-  expect(staleText({ job: { state: "idle" }, cut: 30, face: "light", apps, file }, true)).toBe("Монтаж изменился после сборки. Соберите ролик заново, чтобы файл совпал с монтажом.")
+  expect(staleText({ job: { state: "idle" }, cut: 30, face: "light", file }, false)).toBe("На вкладке «Внешность» выбрано другое лицо, чем в файле. Соберите ролик заново, чтобы файл совпал с выбором.")
+  expect(staleText({ job: { state: "idle" }, cut: 30, face: "off", file }, false)).toBe("Монтаж изменился после сборки. Соберите ролик заново, чтобы файл совпал с монтажом.")
+  expect(staleText({ job: { state: "idle" }, cut: 30, face: "light", file }, true)).toBe("Монтаж изменился после сборки. Соберите ролик заново, чтобы файл совпал с монтажом.")
 })
 
 test("the reel tab names the face choice, not a face the file may not have yet, and where to change it", () => {

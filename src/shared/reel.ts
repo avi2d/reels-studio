@@ -135,7 +135,6 @@ export const ReelView = Schema.Struct({
   job: ReelJob,
   cut: Schema.Finite,
   face: Face,
-  apps: Schema.NonEmptyArray(App),
   file: Schema.optionalKey(Schema.Struct({
     made: Schema.String,
     seconds: Schema.Finite,

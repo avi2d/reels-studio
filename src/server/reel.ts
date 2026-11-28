@@ -231,7 +231,7 @@ const retouchStep = Effect.fnUntraced(function*(work: string, step: Step, frames
 })
 
 const finishApps = Effect.fnUntraced(function*(
-  work: string, steps: ReadonlyArray<AppStep>, cut: Cut, pictures: ReadonlyArray<InsertLayer>, total: number, progress: { readonly from: number; readonly share: number },
+  work: string, steps: ReadonlyArray<AppStep>, captions: ReadonlyMap<App, string | undefined>, pictures: ReadonlyArray<InsertLayer>, total: number, progress: { readonly from: number; readonly share: number },
   onDone: (share: number) => Effect.Effect<void>
 ) {
   const fs = yield* FileSystem.FileSystem
@@ -242,9 +242,8 @@ const finishApps = Effect.fnUntraced(function*(
       yield* fs.link(step.from, step.to)
       continue
     }
-    const captions = yield* placeCaptions(work, cut.captions, total, step.app, APP_FILE_NAME[step.app])
     const before = progress.from + appShare * index
-    yield* tool("ffmpeg", finishArgs(step.from, pictures, captions, settings.encoder, step.to), settings.heavy, (line) => {
+    yield* tool("ffmpeg", finishArgs(step.from, pictures, captions.get(step.app), settings.encoder, step.to), settings.heavy, (line) => {
       const seconds = progressSeconds(line)
       return seconds === undefined ? Effect.void : onDone(before + appShare * Math.min(1, seconds / total))
     })
@@ -271,6 +270,8 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
   const faceShare = face === "light" ? FACE_SHARE : 0
   const partsShare = 1 - SOUND_SHARE - faceShare - insertsShare
   yield* freshWork(dir)
+  const captions = new Map(yield* Effect.forEach(apps, (app) =>
+    Effect.map(placeCaptions(place.work, cut.captions, total, app, APP_FILE_NAME[app]), (filter) => [app, filter] as const)))
   const colours = yield* measureColours(dir, parts, place.work)
   const crops = yield* renderParts(dir, parts, colours, place.work, `${place.work}/joined.mp4`, (share) => onDone(share * partsShare))
   const joins = yield* makePictures(dir, parts, colours, new Map(), crops)
@@ -279,7 +280,7 @@ const encodeReel = Effect.fnUntraced(function*(dir: string, cut: Cut, onDone: (s
   const { levelling } = yield* levelSound(place.work, rendered, chain.levelled, "picture-and-sound", (step) => onDone(partsShare + SOUND_SHARE * step / SOUND_STEPS), pictures)
   const frames = parts.reduce((sum, part) => sum + part.frames, 0)
   if (chain.face !== undefined) yield* retouchStep(place.work, chain.face, frames, (share) => onDone(partsShare + SOUND_SHARE + faceShare * share))
-  yield* finishApps(place.work, chain.apps, cut, pictures, total, { from: 1 - insertsShare, share: insertsShare }, onDone)
+  yield* finishApps(place.work, chain.apps, captions, pictures, total, { from: 1 - insertsShare, share: insertsShare }, onDone)
   const made = DateTime.formatIso(yield* DateTime.now)
   const record = {
     made,
@@ -321,11 +322,11 @@ export const readReel = Effect.fnUntraced(function*(dir: string, cut: Cut, job: 
   const seconds = secondsOf(parts)
   const published = yield* publishedReel(dir)
   const face = yield* readFace(dir)
-  const apps = yield* readApps(dir)
-  if (published === undefined) return { job, cut: seconds, face, apps } satisfies ReelView
+  if (published === undefined) return { job, cut: seconds, face } satisfies ReelView
   const sizes = yield* Effect.forEach(published.targets, ({ app, target }) => Effect.map(fs.stat(target), (info) => ({ app, size: Number(info.size) }) satisfies AppSize))
   const { record } = published
   const crops = yield* readCrops(dir, parts)
+  const apps = yield* readApps(dir)
   const sameApps = apps.length === record.files.length && apps.every((app, index) => record.files[index]?.app === app)
   const file = {
     made: record.made,
@@ -336,5 +337,5 @@ export const readReel = Effect.fnUntraced(function*(dir: string, cut: Cut, job: 
     ...(record.colour === undefined ? {} : { colour: colourView(record.colour) }),
     ...(record.levelling === undefined ? {} : { levelling: record.levelling })
   }
-  return { job, cut: seconds, face, apps, file } satisfies ReelView
+  return { job, cut: seconds, face, file } satisfies ReelView
 })
