@@ -215,9 +215,12 @@ const screenOf = (projectId: string, events: ScreenEvents, facesFor: (video: str
   return screen
 }
 
-const sourceFor = (screen: Screen, isWatching: () => boolean, start: (node: HTMLVideoElement) => void) => (urlOf: UrlOf): void => {
-  const playing = isWatching() ? screen.shown : undefined
-  screen.source(urlOf, (node) => { if (node === playing && isWatching() && screen.shown === node) start(node) })
+const sourceFor = (screen: Screen, playingVideo: () => string | undefined, start: (node: HTMLVideoElement) => void) => (urlOf: UrlOf): void => {
+  const shown = screen.shown
+  const playing = shown?.dataset.video === playingVideo() ? shown : undefined
+  screen.source(urlOf, (node) => {
+    if (node === playing && node === screen.shown && node.dataset.video === playingVideo()) start(node)
+  })
 }
 
 const followClip = (node: HTMLVideoElement, clip: Clip, levelling: Levelling, screen: Screen): void => {
@@ -323,5 +326,5 @@ export const montage = (projectId: string, onChange: (playing: Playing | undefin
     if (screen.shown === undefined || node === screen.shown || hasFrame(node)) reveal(node)
     else state.awaited = node
   }
-  return { node: screen.node, play, show, stop, source: sourceFor(screen, () => state.clips.length > 0, start) }
+  return { node: screen.node, play, show, stop, source: sourceFor(screen, () => state.clips[state.index]?.video, start) }
 }
