@@ -1,5 +1,6 @@
 import type { Transcript } from "../shared/plan.ts"
 import { SILENCE_LUFS } from "../shared/reel.ts"
+import { CLOSE_UP_FROM_SECONDS } from "../shared/retouch.ts"
 import type { Rgb } from "../shared/reel.ts"
 import { cameraShare, FADE, type Clip, type Frame, type Gaze } from "../shared/timeline.ts"
 
@@ -147,7 +148,7 @@ export const firstSeconds = (parts: ReadonlyArray<Part>, seconds: number): Reado
 }
 
 export const retouchArgs = (looker: string, video: { readonly before: string; readonly folder: string; readonly closeUp: boolean }, encoder: string): ReadonlyArray<string> => [
-  "run", "--project", looker, "python", `${looker}/retouch.py`, "--encoder", encoder, ...(video.closeUp ? [] : ["--no-close-up"]), video.before, video.folder
+  "run", "--project", looker, "python", `${looker}/retouch.py`, "--encoder", encoder, ...(video.closeUp ? ["--close-up-from", String(CLOSE_UP_FROM_SECONDS)] : ["--no-close-up"]), video.before, video.folder
 ]
 
 export const retouchedFrames = (line: string): number | undefined => {
