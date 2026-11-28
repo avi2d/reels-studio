@@ -1,5 +1,5 @@
 import { Array as Arr, Effect, FileSystem, Option, Path, Schema } from "effect"
-import { EVERY_APP, inAppOrder, type NewTask, TaskChoices } from "../shared/brief.ts"
+import { APPS, EVERY_APP, inAppOrder, type NewTask, TaskChoices } from "../shared/brief.ts"
 import { MAX_FILES } from "../shared/chat.ts"
 import { badRequest, notFound } from "./api-error.ts"
 import { readText } from "./approval.ts"
@@ -22,6 +22,11 @@ export const readChoices = Effect.fnUntraced(function*(dir: string) {
   if (choices !== undefined) return choices
   yield* Effect.logError("the task choices are unreadable", dir)
   return EVERY_APP
+})
+
+export const readApps = Effect.fnUntraced(function*(dir: string) {
+  const { apps } = yield* readChoices(dir)
+  return Arr.isReadonlyArrayNonEmpty(apps) ? apps : APPS
 })
 
 const fileNames = Effect.fnUntraced(function*(dir: string, files: NonNullable<NewTask["files"]>) {

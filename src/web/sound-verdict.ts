@@ -3,7 +3,7 @@ import { formatLength } from "./format.ts"
 
 const lufs = (value: number): string => `${String(Math.round(value)).replace("-", "−")}\u00a0LUFS`
 
-export const SOUND_LABEL = { good: "Звук хороший", check: "Звук можно публиковать, но есть замечания", bad: "Звук плохой" } as const
+const SOUND_LABEL = { good: "Звук хороший", check: "Звук можно публиковать, но есть замечания", bad: "Звук плохой" } as const
 const ISSUE_NOTE = {
   uneven: "Громкость меняется: тихие и громкие места звучат по-разному.",
   "over-peak": "Пики выше −1,5 dBTP.",

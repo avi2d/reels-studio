@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, expect, test } from "bun:test"
-import { chromium, type Browser, type Page } from "playwright-core"
+import { chromium, type Browser, type Locator, type Page } from "playwright-core"
 import type { ReelView } from "../../src/shared/reel.ts"
 
 let browser: Browser
 let server: ReturnType<typeof Bun.serve>
 
-const file = { made: "2026-01-01T00:00:00.000Z", seconds: 7, size: 1000, fresh: true, face: "off" } satisfies NonNullable<ReelView["file"]>
+const file = { made: "2026-01-01T00:00:00.000Z", seconds: 7, apps: [{ app: "Instagram", size: 1000 }], fresh: true, face: "off" } satisfies NonNullable<ReelView["file"]>
 const unbuilt = { job: { state: "idle" }, cut: 7, face: "off" } satisfies ReelView
 const ready = { ...unbuilt, file } satisfies ReelView
 const offline = "Нет связи со студией. Проверьте Wi-Fi."
@@ -41,7 +41,12 @@ const withPage = async (run: (page: Page) => Promise<void>): Promise<void> => {
   }
 }
 
-const open = (page: Page): Promise<unknown> => page.goto(server.url.href)
+const open = async (page: Page): Promise<unknown> => {
+  await page.route("**/api/projects/review/posts", (route) => route.fulfill({ json: { posts: [] } }))
+  return page.goto(server.url.href)
+}
+
+const stepAlert = (page: Page): Locator => page.locator(".body--done > [role=alert]")
 
 test("an offline idle poll does not leave an alert after the built reel reconnects", () => withPage(async (page) => {
   let polls = 0
@@ -54,7 +59,7 @@ test("an offline idle poll does not leave an alert after the built reel reconnec
   await page.getByRole("heading", { name: "Ролики готовы", exact: true }).waitFor()
   await page.getByRole("heading", { name: "Ролики устарели", exact: true }).waitFor({ timeout: 10_000 })
   expect(polls).toBeGreaterThanOrEqual(3)
-  expect(await page.getByRole("alert").textContent()).toBe("")
+  expect(await stepAlert(page).textContent()).toBe("")
 }), 15_000)
 
 for (const kept of [false, true]) {
@@ -74,9 +79,9 @@ for (const kept of [false, true]) {
     const refreshed = page.waitForResponse((response) => response.request().method() === "GET" && response.url().endsWith("/reel"))
     await build.click()
     await refreshed
-    await page.getByRole("alert").filter({ hasText: offline }).waitFor()
+    await stepAlert(page).filter({ hasText: offline }).waitFor()
     expect(refreshes).toBeGreaterThanOrEqual(2)
-    expect(await page.getByRole("alert").textContent()).toBe(offline)
+    expect(await stepAlert(page).textContent()).toBe(offline)
   }))
 
   for (const noFace of ["short-cut", "unseen"] as const) {
@@ -84,7 +89,7 @@ for (const kept of [false, true]) {
       const view: ReelView = { ...(kept ? ready : unbuilt), job: { state: "failed", noFace } }
       await page.route("**/api/projects/review/reel", (route) => route.fulfill({ json: view }))
       await open(page)
-      const alert = page.getByRole("alert")
+      const alert = stepAlert(page)
       await alert.filter({ hasText: "Ролик не собрался" }).waitFor()
       const message = await alert.textContent()
       expect(message).toContain("выберите для лица «Как есть»")
@@ -96,7 +101,7 @@ for (const kept of [false, true]) {
     const view: ReelView = { ...(kept ? ready : unbuilt), job: { state: "failed" } }
     await page.route("**/api/projects/review/reel", (route) => route.fulfill({ json: view }))
     await open(page)
-    const alert = page.getByRole("alert")
+    const alert = stepAlert(page)
     await alert.filter({ hasText: "Ролик не собрался" }).waitFor()
     await page.getByRole("button", { name: kept ? "Собрать заново" : "Собрать ролик", exact: true }).waitFor()
     expect(await alert.textContent()).toBe("Ролик не собрался. Подробности в журнале студии. Попробуйте собрать ролик ещё раз.")
@@ -117,5 +122,5 @@ test("a failed cancel keeps its action error after an idle refresh instead of hi
   await cancel.waitFor()
   await cancel.click()
   await page.getByRole("heading", { name: "Ролики готовы", exact: true }).waitFor()
-  expect(await page.getByRole("alert").textContent()).toBe(offline)
+  expect(await stepAlert(page).textContent()).toBe(offline)
 }))

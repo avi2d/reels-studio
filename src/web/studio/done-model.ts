@@ -1,7 +1,7 @@
+import type { App } from "../../shared/brief.ts"
 import type { NoFace } from "../../shared/face.ts"
-import { judgeSound, type ReelJob, type ReelView } from "../../shared/reel.ts"
+import type { ReelJob, ReelView } from "../../shared/reel.ts"
 import { formatLength, formatSize } from "../format.ts"
-import { SOUND_LABEL } from "../sound-verdict.ts"
 
 export type File = NonNullable<ReelView["file"]>
 export type Busy = { readonly state: "waiting" } | Extract<ReelJob, { readonly state: "running" }>
@@ -48,13 +48,15 @@ export const failureText = (failure: Failure): string =>
 const madeAt = (iso: string): string =>
   new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }).format(new Date(iso))
 
-export const factsOf = (file: File): string => `${formatLength(file.seconds)} · ${formatSize(file.size)} · собран ${madeAt(file.made)}`
+// The app chosen before stays chosen while its file exists; otherwise the first file is shown.
+export const appOf = (file: File, chosen: App | undefined): App =>
+  file.apps.find((one) => one.app === chosen)?.app ?? file.apps[0].app
 
-// Whole numbers would print a small change, such as −14.3 to −14.0, as no change at all.
-const lufs = (value: number): string => `${value.toFixed(1).replace("-", "−").replace(".", ",")}\u00a0LUFS`
+const sizeOf = (file: File, app: App): number => file.apps.find((one) => one.app === app)?.size ?? file.apps[0].size
 
-export const soundLineOf = (file: File): string => {
-  if (file.levelling === undefined) return "Этот ролик собран до выравнивания громкости. Соберите его заново, чтобы выровнять звук."
-  const { after, before } = file.levelling
-  return `${SOUND_LABEL[judgeSound(after).level]}: громкость ${lufs(after.lufs)}, до выравнивания ${lufs(before)}.`
-}
+export const factsOf = (file: File, app: App): string => `${formatLength(file.seconds)} · ${formatSize(sizeOf(file, app))} · собран ${madeAt(file.made)}`
+
+export const downloadLabel = (file: File, app: App): string => file.apps.length > 1 ? `Скачать для ${app}` : "Скачать"
+
+export const saveHintOf = (app: App): string =>
+  `На айфоне откройте скачанный файл и выберите «Сохранить видео»: ролик появится в «Фото», и ${app} его найдёт.`

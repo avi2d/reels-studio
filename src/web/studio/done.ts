@@ -51,7 +51,7 @@ export const doneStep = (projectId: string): DoneStep => {
   const stale = h("div", { class: "ask ask--open", hidden: true }, h("p", {}, STALE))
   const file = reelFile(projectId)
   const build = button("main", "Собрать ролик")
-  const actions = h("div", { class: "done-actions" }, build)
+  const actions = h("div", { class: "done-actions" }, file.downloadAll, build)
   const body = h("div", { class: "body body--done" },
     h("div", { class: "head" }, title), progress.node, problem, empty, stale, file.node, actions)
 
@@ -64,6 +64,7 @@ export const doneStep = (projectId: string): DoneStep => {
     stale.hidden = !(phase.kind === "built" && phase.stale)
     file.node.hidden = phase.kind !== "built"
     actions.hidden = phase.kind === "building" || phase.kind === "empty"
+    if (phase.kind !== "built") file.downloadAll.hidden = true
     if (phase.kind === "building") {
       progress.paint(phase.job, phase.kept)
       problem.textContent = ""
@@ -117,7 +118,7 @@ export const doneStep = (projectId: string): DoneStep => {
     body,
     dispose: () => {
       globalThis.clearTimeout(state.timer)
-      file.pause()
+      file.dispose()
     }
   }
 }

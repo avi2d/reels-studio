@@ -1,4 +1,5 @@
 import check from "lucide-static/icons/check.svg" with { type: "text" }
+import copy from "lucide-static/icons/copy.svg" with { type: "text" }
 import left from "lucide-static/icons/chevron-left.svg" with { type: "text" }
 import right from "lucide-static/icons/chevron-right.svg" with { type: "text" }
 import down from "lucide-static/icons/chevron-down.svg" with { type: "text" }
@@ -23,7 +24,7 @@ import redo from "lucide-static/icons/redo-2.svg" with { type: "text" }
 import up from "lucide-static/icons/arrow-up.svg" with { type: "text" }
 import lower from "lucide-static/icons/arrow-down.svg" with { type: "text" }
 
-const ICONS = { attach, chat, check, close, down, download, file, film, left, lower, more, pencil, pin, play, plus, redo, retry, right, send, stop, trash, undo, up, upload }
+const ICONS = { attach, chat, check, close, copy, down, download, file, film, left, lower, more, pencil, pin, play, plus, redo, retry, right, send, stop, trash, undo, up, upload }
 
 export type IconName = keyof typeof ICONS
 

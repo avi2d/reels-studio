@@ -4,7 +4,7 @@ import type { Transcript } from "../shared/plan.ts"
 import { correctedWord, subtitleWords } from "../shared/subtitles.ts"
 import { TextsFile, type PlannedTexts } from "../shared/texts.ts"
 import type { Block, Clip, Edits } from "../shared/timeline.ts"
-import { fitsArea, textAreaOf } from "../shared/zones.ts"
+import { fitsArea, textAreaOf, type Platform } from "../shared/zones.ts"
 import { REEL_RATE } from "./media-commands.ts"
 import { run } from "./media-jobs.ts"
 import { Settings } from "./settings.ts"
@@ -79,16 +79,16 @@ const fontsDir = Effect.fnUntraced(function*() {
 })
 
 // The next try after the ink of a part left the area, or undefined when shrinking cannot help.
-const refit = (part: CaptionPart, placed: Captions, outside: ReadonlyArray<Ink>): Captions | undefined => {
+const refit = (part: CaptionPart, placed: Captions, outside: ReadonlyArray<Ink>, platform: Platform): Captions | undefined => {
   const first = outside[0]
   if (first === undefined || part === "texts") return undefined
   if (part === "plate") {
-    const plate = placed.plate === undefined ? undefined : fitPlate(placed.plate, first.rect)
+    const plate = placed.plate === undefined ? undefined : fitPlate(placed.plate, first.rect, platform)
     return plate === undefined || plate.size === placed.plate?.size ? undefined : { ...placed, plate }
   }
   const words = placed.words.map((word) => {
     const ink = outside.find((one) => one.at >= Math.round(word.start * 100) / 100 && one.at < Math.round(word.end * 100) / 100)
-    return ink === undefined ? word : fitWord(word, ink.rect, placed.look.size)
+    return ink === undefined ? word : fitWord(word, ink.rect, placed.look.size, platform)
   })
   return words.every((word, index) => word.size === placed.words[index]?.size) ? undefined : { ...placed, words }
 }
@@ -97,29 +97,29 @@ const present = (captions: Captions): Readonly<Record<CaptionPart, boolean>> =>
   ({ words: captions.words.length > 0, texts: captions.texts.length > 0, plate: captions.plate !== undefined })
 
 // Each part is measured apart, because the box around two at once can reach the button column neither touches.
-export const placeCaptions = Effect.fnUntraced(function*(work: string, captions: Captions, seconds: number) {
+export const placeCaptions = Effect.fnUntraced(function*(work: string, captions: Captions, seconds: number, platform: Platform, name: string) {
   if (!hasCaptions(captions)) return undefined
   const fs = yield* FileSystem.FileSystem
   const fonts = yield* fontsDir()
-  const area = textAreaOf("Instagram")
+  const area = textAreaOf(platform)
   const { heavy } = yield* Settings
   const parts = present(captions)
   let placed = captions
   for (const part of ["words", "texts", "plate"] as const) {
     if (!parts[part]) continue
-    const file = `${work}/ink-${part}.ass`
+    const file = `${work}/ink-${name}-${part}.ass`
     for (;;) {
-      yield* fs.writeFileString(file, assOf(placed, [part]))
+      yield* fs.writeFileString(file, assOf(placed, platform, [part]))
       const { stderr } = yield* run("ffmpeg", inkArgs(file, fonts, seconds), heavy)
       const outside = inkOf(stderr).filter((ink) => !fitsArea(ink.rect, area))
       const first = outside[0]
       if (first === undefined) break
-      const next = refit(part, placed, outside)
+      const next = refit(part, placed, outside, platform)
       if (next === undefined) return yield* new TextOutside({ part, ink: first })
       placed = next
     }
   }
-  const file = `${work}/captions.ass`
-  yield* fs.writeFileString(file, assOf(placed))
+  const file = `${work}/captions-${name}.ass`
+  yield* fs.writeFileString(file, assOf(placed, platform))
   return captionFilter(file, fonts)
 })

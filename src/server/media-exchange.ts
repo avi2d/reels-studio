@@ -1,4 +1,4 @@
-import { type Crypto, Context, Effect, type FileSystem, Ref, Semaphore } from "effect"
+import { type Crypto, Context, Effect, type FileSystem, type Path, Ref, Semaphore } from "effect"
 import type { ChildProcessSpawner } from "effect/process"
 import { linesProblem } from "../shared/texts.ts"
 import { mergeEdits as joinEdits, type Edits } from "../shared/timeline.ts"
@@ -6,7 +6,7 @@ import { type ApiError, badRequest, orUnavailable } from "./api-error.ts"
 import type { Projects } from "./projects.ts"
 import type { Settings } from "./settings.ts"
 import { readEdits, writeEdits } from "./timeline-files.ts"
-export type Needs = FileSystem.FileSystem | Crypto.Crypto | Settings | ChildProcessSpawner.ChildProcessSpawner
+export type Needs = FileSystem.FileSystem | Path.Path | Crypto.Crypto | Settings | ChildProcessSpawner.ChildProcessSpawner
 export const makeExchange = (
   projects: Projects["Service"],
   context: Context.Context<Needs>
