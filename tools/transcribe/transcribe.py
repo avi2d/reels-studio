@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 import wave
 from pathlib import Path
 
@@ -15,7 +16,7 @@ def is_punctuation(token: str) -> bool:
 def words_of(segment) -> list[dict]:
     words: list[dict] = []
     opens_word = True
-    for token, offset in zip(segment.tokens, segment.timestamps):
+    for token, offset, logprob in zip(segment.tokens, segment.timestamps, segment.logprobs):
         if token.startswith(" "):
             opens_word = True
         text = token.strip()
@@ -23,10 +24,12 @@ def words_of(segment) -> list[dict]:
             continue
         joins_previous = is_punctuation(text) and text not in ("«", "(") and words
         if opens_word and not joins_previous:
-            words.append({"start": segment.start + offset, "text": text})
+            words.append({"start": segment.start + offset, "text": text, "logprob": 0.0})
             opens_word = False
         elif words:
             words[-1]["text"] += text
+        if words and not is_punctuation(text):
+            words[-1]["logprob"] += logprob
     # The recognizer times only the first sound of a word, so inside one stretch of speech
     # a word ends where the next one starts and the last one ends with the stretch.
     for word, following in zip(words, words[1:]):
@@ -53,7 +56,7 @@ def main() -> None:
     model = onnx_asr.load_model(args.model, providers=providers).with_vad(vad, min_silence_duration_ms=150, speech_pad_ms=30).with_timestamps()
     segments = list(model.recognize(args.audio))
     words = [
-        {"start": round(word["start"], 3), "end": round(word["end"], 3), "text": word["text"]}
+        {"start": round(word["start"], 3), "end": round(word["end"], 3), "text": word["text"], "sure": round(math.exp(word["logprob"]), 2)}
         for segment in segments
         for word in words_of(segment)
     ]

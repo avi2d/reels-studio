@@ -171,8 +171,11 @@ The stage shows a close-up of the face before and after.
 It also shows a clip with the original on the left and the retouch on the right.
 It also shows how long the retouch of the 20 s took and how long a minute of video would take.
 The trial waits in the same queue as the other heavy jobs, and a new trial replaces the last one.
-The close-up comes from the first frame with a face from 3 s on.
+The close-up comes from the first frame with a face from 3 s on, the `CLOSE_UP_FROM_SECONDS` constant that the studio passes to `retouch.py` as `--close-up-from`.
 Without such a frame the trial fails, and the last trial stays.
+When the trial part of the cut is 3 s or shorter, the studio fails the trial before it renders anything and names the short cut as the cause.
+When the cut is longer and `retouch.py` exits with 66 because no face shows after 3 s, the studio names that as the cause.
+Both causes are logged as info, not as an error, and the «Оформление» step shows each as its own text.
 
 ## The face in the reel
 
@@ -297,6 +300,30 @@ A zoom with no answer follows the zoom rule.
 «Смотреть» plays 1.5 s before the words and 3 s after them, with the push.
 The page and the built reel use the same push.
 
+## Doubtful words
+
+The subtitles show each word as the studio heard it, so a misheard law term, name or number goes on screen as heard.
+The recognizer gives each word a share of how sure it is, which `transcripts/<video>.json` keeps as `sure`.
+A low share alone marks many words the recognizer heard right, so the studio marks a word by itself only in three cases:
+
+| Word | Marked below |
+| --- | --- |
+| Any word | 0.2 |
+| A word with a digit | 0.6 |
+| A word with a capital letter that does not open a sentence | 0.5 |
+
+`transcripts/<video>.txt` names the marked word numbers in its third line, so the chat model reads them.
+The chat model proposes the right word for a marked word by its meaning and writes it to `doubts.json`, as the reels-plan skill says.
+The studio leaves out a doubt whose word is not marked, or whose fix is empty or the same as the heard word.
+So a model that corrects what the speaker said clearly cannot change the subtitles.
+A video heard before the recognizer gave the share has no marked words.
+
+The «Монтаж» step asks about every doubtful word the cut plays, above the words of its part, and «Вопросы» walks to it.
+The word is marked in the words of the part until it is answered.
+«Послушать» plays 1 s before the word, the word and 1 s after it.
+«Взять» puts the proposed word into the subtitles, and «Оставить» keeps the word as heard.
+Both are kept as a subtitle correction in `timeline.json`, so a word the person corrects in the words of the part counts as answered too.
+
 ## Key thoughts
 
 The chat model writes the key thoughts to `texts.json`, each tied to the words of one phrase.
@@ -343,6 +370,7 @@ Each video folder holds these next to `plan.json`:
 | `gaze/<video>.txt` | The share of looks into the camera for each stretch of speech, which the chat model reads |
 | `blocks.json` | The blocks and their takes, written by the chat model |
 | `inserts.json` | The pictures, clips and PDF pages to show over phrases, written by the chat model |
+| `doubts.json` | The proposed right words for the doubtful words, written by the chat model |
 | `texts.json` | The titles and key thoughts to show over phrases, written by the chat model |
 | `zooms.json` | The key words to zoom on, each with an id, its video and its word numbers, written by the chat model |
 | `rules.json` | The rules of the reel, `pause` and `zoom`. A new reel starts with the pinned rules, and the chat model may write it |

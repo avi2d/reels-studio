@@ -1,6 +1,8 @@
 import { REEL_WIDTH } from "../shared/framing.ts"
+import { unsureIndexes } from "../shared/doubts.ts"
 import type { Transcript } from "../shared/plan.ts"
 import { SILENCE_LUFS } from "../shared/reel.ts"
+import { CLOSE_UP_FROM_SECONDS } from "../shared/retouch.ts"
 import type { Rgb } from "../shared/reel.ts"
 import { cameraShare, FADE, type Clip, type Frame, type Gaze, type Push } from "../shared/timeline.ts"
 
@@ -187,7 +189,7 @@ export const firstSeconds = (parts: ReadonlyArray<Part>, seconds: number): Reado
 }
 
 export const retouchArgs = (looker: string, video: { readonly before: string; readonly folder: string; readonly closeUp: boolean }, encoder: string): ReadonlyArray<string> => [
-  "run", "--project", looker, "python", `${looker}/retouch.py`, "--encoder", encoder, ...(video.closeUp ? [] : ["--no-close-up"]), video.before, video.folder
+  "run", "--project", looker, "python", `${looker}/retouch.py`, "--encoder", encoder, ...(video.closeUp ? ["--close-up-from", String(CLOSE_UP_FROM_SECONDS)] : ["--no-close-up"]), video.before, video.folder
 ]
 
 export const retouchedFrames = (line: string): number | undefined => {
@@ -270,9 +272,11 @@ export const transcriptText = (video: string, transcript: Transcript): string =>
   })
   const tail = transcript.duration - (transcript.words.at(-1)?.end ?? 0)
   if (tail >= NAMED_PAUSE) lines.push(`(pause ${tail.toFixed(1)} s)`)
+  const unsure = unsureIndexes(transcript)
   return [
     `Video ${video}, ${transcript.duration.toFixed(1)} s. Each line is one stretch of speech with its start and end in seconds.`,
     "Each word is written as number:word. A plan names the words to remove by these numbers.",
+    ...unsure.length === 0 ? [] : [`The studio is unsure it heard these words right: ${unsure.join(", ")}.`],
     "",
     ...lines
   ].join("\n") + "\n"

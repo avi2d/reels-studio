@@ -1,6 +1,6 @@
 ---
 name: reels-plan
-description: The order of work on one Reels video, plan first and video second, and the formats of plan.json, blocks.json, zooms.json and rules.json. Use at the start of every conversation about a video, when the person asks to cut, shorten, caption or assemble a video, to gather its blocks and takes, to change the zooms on key words or a rule such as the length of pauses, and before writing or changing plan.md, plan.json, blocks.json, zooms.json or rules.json.
+description: The order of work on one Reels video, plan first and video second, and the formats of plan.json, blocks.json, doubts.json, zooms.json and rules.json. Use at the start of every conversation about a video, when the person asks to cut, shorten, caption or assemble a video, to gather its blocks and takes, to change the zooms on key words or a rule such as the length of pauses, and before writing or changing plan.md, plan.json, blocks.json, doubts.json, zooms.json or rules.json.
 ---
 
 # Plan first, video second
@@ -54,6 +54,7 @@ It then lists on the page what it did, with the reason of every chosen take.
 `transcripts/<video name>.txt` holds one stretch of speech per line, with its start and end in seconds.
 Each word is written as `number:word`.
 A line `(pause 2.4 s)` marks silence of a second or more.
+A line at the top can name the word numbers the studio is unsure it heard right, as «Doubtful words» below says.
 A repeated take shows as the same sentence said twice or more: keep the last complete take unless the person names another.
 
 ## Blocks and takes
@@ -61,7 +62,7 @@ A repeated take shows as the same sentence said twice or more: keep the last com
 The person films one thought several times, in one video or across several.
 A block is one thought of the reel, and a take is one attempt to say it.
 Write `blocks.json` when the studio or the person asks to gather the blocks, and write it again after a new video is heard.
-When the studio asks, write only `blocks.json` and ask nothing, since the person does not see that message.
+When the studio asks, write only `blocks.json` and `doubts.json` and ask nothing, since the person does not see that message.
 The page then shows the blocks as a row, with the first take of each block chosen.
 The person chooses another take, moves and deletes blocks and removes pauses on the page, and you never write those choices.
 
@@ -101,6 +102,35 @@ The person chooses another take, moves and deletes blocks and removes pauses on 
   Never put a number, a percent or a file name in it.
 - Two takes never share a word.
 - Write the whole file again on every change, as valid JSON and nothing else.
+
+## Doubtful words
+
+The subtitles show every word as the studio heard it, and a misheard law term, name or number misleads the viewer.
+The studio marks by itself the words its recognizer was unsure of, and the page asks the person about each.
+Your part is the meaning: propose the right word for a marked word.
+The page asks only about the marked words, so a word you name that the studio did not mark is left as heard.
+Write `doubts.json` every time you write `blocks.json`.
+
+1. Read the line at the top of each transcript that names the words the studio is unsure of.
+2. For each of them, decide from the sentence around it what was said, and write it as `fix` when it differs from the heard word.
+   Leave a word out when the heard word fits the sentence.
+3. A fix is a word that sounds close to the heard word, such as «Роспотребнацере» heard for «Роспотребнадзор».
+   It never changes what the speaker said, even when the speaker is wrong in law: a wrong court or a wrong article number said clearly stays out of `doubts.json`.
+4. Never write about these words in the chat, since the page asks the person.
+
+```json
+{
+  "doubts": [
+    { "video": "IMG_0002.MOV", "index": 14, "fix": "Роспотребнадзор", "reason": "Так называется служба, куда пишут жалобу" }
+  ]
+}
+```
+
+- `video` is the file name from `source/`, exactly as written there.
+- `index` is the number of the word in its transcript.
+- `fix` is the one word that goes into the subtitles instead of the heard word.
+- `reason` is one short Russian sentence that says why, or an empty string.
+- Write `{ "doubts": [] }` when nothing needs a fix, and the whole file again on every change, as valid JSON and nothing else.
 
 ## plan.json
 

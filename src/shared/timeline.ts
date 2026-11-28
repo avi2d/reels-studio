@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect"
 import type { Span, Transcript } from "./plan.ts"
+import { PlannedDoubts } from "./doubts-file.ts"
 import { PlannedTexts } from "./texts.ts"
 import { PlannedZooms, ZoomAnswer, ZoomLevel, type Push } from "./zoom-plan.ts"
 
@@ -141,6 +142,7 @@ export const TimelineView = Schema.Struct({
   inserts: PlannedInserts,
   texts: PlannedTexts,
   zooms: PlannedZooms,
+  doubts: PlannedDoubts.pipe(Schema.withDecodingDefaultKey(Effect.succeed({ state: "none" as const }))),
   timeline: Schema.Union([
     Schema.Struct({ state: Schema.Literals(["none", "unreadable"]) }),
     Schema.Struct({ state: Schema.Literal("ready"), blocks: Schema.Array(Block), dropped: Schema.Int, edits: Edits, rest: PauseRest, zoom: ZoomLevel })

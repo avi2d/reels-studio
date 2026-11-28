@@ -16,7 +16,7 @@ Each video folder holds these, named after the video:
 | Path | What it holds |
 | --- | --- |
 | `source/` | The uploaded original, which the studio never changes |
-| `transcripts/<video>.json` | Each word with its start and end in seconds |
+| `transcripts/<video>.json` | Each word with its start and end in seconds, and as `sure` the share from 0 to 1 of how sure the recognizer is of it |
 | `transcripts/<video>.txt` | The same words numbered, which the chat model reads |
 | `preview/<video>.mp4` | The small copy the page plays, with a key frame every half second |
 | `preview/<video>.mp4.gop` | The key frame distance the preview was made with. A preview with no such record counts as old |

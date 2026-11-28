@@ -3,6 +3,8 @@ import type { Transcript, VideoView } from "../shared/plan.ts"
 import { kindOfName } from "../shared/chat.ts"
 import { onFrames } from "./media-commands.ts"
 import { Gathered } from "../shared/gather.ts"
+import { DoubtsFile, type PlannedDoubts } from "../shared/doubts-file.ts"
+import { isValidDoubt } from "../shared/doubts.ts"
 import { insertPlaces, plannedVisual, shownInserts } from "../shared/inserts.ts"
 import { coversOf, cutOf, facesByVideo } from "../shared/joins.ts"
 import {
@@ -22,6 +24,7 @@ const decodeBlocks = Schema.decodeUnknownOption(Schema.fromJsonString(Blocks))
 const decodeGathered = Schema.decodeUnknownOption(Schema.fromJsonString(Gathered))
 const decodeInserts = Schema.decodeUnknownOption(Schema.fromJsonString(InsertsFile))
 const decodeZooms = Schema.decodeUnknownOption(Schema.fromJsonString(ZoomsFile))
+const decodeDoubts = Schema.decodeUnknownOption(Schema.fromJsonString(DoubtsFile))
 
 export const readGathered = Effect.fnUntraced(function*(dir: string) {
   const fs = yield* FileSystem.FileSystem
@@ -116,6 +119,19 @@ const readZooms = Effect.fnUntraced(function*(dir: string, transcripts: Readonly
   return { state: "ready", planned } satisfies PlannedZooms
 })
 
+const readDoubts = Effect.fnUntraced(function*(dir: string, transcripts: ReadonlyMap<string, Transcript>) {
+  const fs = yield* FileSystem.FileSystem
+  const file = `${dir}/doubts.json`
+  if (!(yield* fs.exists(file))) return { state: "none" } satisfies PlannedDoubts
+  const written = Option.getOrUndefined(decodeDoubts(yield* fs.readFileString(file)))
+  if (written === undefined) {
+    yield* Effect.logError("the doubtful words are unreadable", file)
+    return { state: "unreadable" } satisfies PlannedDoubts
+  }
+  const planned = written.doubts.filter((one) => isValidDoubt(transcripts.get(one.video)?.words ?? [], one))
+  return { state: "ready", planned, dropped: written.doubts.length - planned.length } satisfies PlannedDoubts
+})
+
 const facesOf = (name: string, measured: Gaze): ReadonlyArray<VideoFaces> => {
   if (measured.heads === undefined) return []
   return [{
@@ -153,10 +169,11 @@ export const readTimeline = Effect.fnUntraced(function*(dir: string, names: Read
   const inserts = yield* readInserts(dir, transcripts, attached)
   const texts = yield* readTexts(dir)
   const zooms = yield* readZooms(dir, transcripts)
+  const doubts = yield* readDoubts(dir, transcripts)
   const written = yield* readBlocks(dir)
-  if (written === "none" || written === "unreadable") return { looks, faces, pictures, inserts, texts, zooms, timeline: { state: written } } satisfies TimelineView
+  if (written === "none" || written === "unreadable") return { looks, faces, pictures, inserts, texts, zooms, doubts, timeline: { state: written } } satisfies TimelineView
   const rules = yield* reelRules(dir)
-  return { looks, faces, pictures, inserts, texts, zooms, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir), rest: rules.pause, zoom: rules.zoom } } satisfies TimelineView
+  return { looks, faces, pictures, inserts, texts, zooms, doubts, timeline: { state: "ready", ...soundBlocks(written, transcripts, gazes), edits: yield* readEdits(dir), rest: rules.pause, zoom: rules.zoom } } satisfies TimelineView
 })
 
 export interface Cut {

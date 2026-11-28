@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { videoLines } from "../../src/server/chat.ts"
+import { videoLines } from "../../src/server/chat-videos.ts"
 import { gazeText } from "../../src/server/media-commands.ts"
 import { lengthOf, type Transcript } from "../../src/shared/plan.ts"
 import {
@@ -133,7 +133,8 @@ test("the chat model is told where the gaze file is, or to rank by speech alone 
   const lines = videoLines(videos, {
     looks: [{ video: "a", state: "measured" }, { video: "b", state: "waiting" }],
     timeline: { state: "unreadable" },
-    inserts: { state: "none" }
+    inserts: { state: "none" },
+    doubts: { state: "none" }
   })
   expect(lines).toContain("gaze/a.txt")
   expect(lines).not.toContain("gaze/b.txt")
