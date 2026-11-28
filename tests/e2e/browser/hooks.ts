@@ -17,6 +17,7 @@ const address = (path: string): string => new URL(path, setting("REELS_BROWSER_U
 const folderExists = (id: string): Promise<boolean> =>
   stat(join(setting("REELS_BROWSER_DIR"), "projects", id)).then(() => true, () => false)
 
+// The heading gains the cut length when it loads.
 const montageHeading = (page: Page) => page.getByRole("heading", { name: /^Монтаж(?: \d+:\d{2})?$/u, level: 1 })
 
 const reelId = (page: Page): string => {

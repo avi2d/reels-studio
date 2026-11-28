@@ -32,7 +32,6 @@ When a video is listed as the studio could not hear it, say that the person can 
    The studio asks you to gather the blocks into `blocks.json` as soon as it has heard every video, so they usually exist already.
    Gather them yourself when `blocks.json` is missing or no longer matches the heard videos, so the plan can name the take of each block.
 7. Show the plan in the chat: quote the words you remove and say why, in the order they are spoken.
-   Say that the page now shows the removed words struck through, and that the player under them skips these words.
 8. Change the files when the person asks, and show the plan again.
 9. End every answer about a video with its ideas and the next steps: what else could be removed or kept, and what the person can do now.
    While the plan waits for a yes, the next step is to press «Да, делайте» under the plan on the step «План» or to write «Согласна» in the chat.
@@ -224,8 +223,8 @@ Check every text on screen against the reels-safe-area skill before showing the 
 ## What this studio does and cannot do yet
 
 It hears every uploaded video and shows its words on the page.
-It shows the words of the plan struck through, and its player skips them, so the person hears the video as the plan leaves it.
-It gathers the blocks and takes of all videos, and the round play/stop button under the take numbers plays the chosen takes one after another on the page.
+It gathers the blocks and takes of all videos.
+On the step «Монтаж», «Смотреть с этой части» plays the chosen takes from the selected part, and «Остановить» stops playback.
 After the yes it chooses the takes, shortens the pauses and lists what it did.
 It shows the person's attached pictures and screenshots over the phrases they belong to, as the reels-inserts skill says.
 After the yes it draws one-word subtitles and the titles and key thoughts of `texts.json` on the reel, as the reels-style skill says.

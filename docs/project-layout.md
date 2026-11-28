@@ -11,7 +11,7 @@ The studio keeps its code, skills and per-video folders in these places.
 | --- | --- |
 | `src/index.ts` | The entry that starts the server |
 | `src/server/` | The routes, the video folders, the resumable upload, the chat and the transcription job |
-| `src/shared/plan.ts` | The transcript and plan formats and the spans the player skips, used by the server and the page |
+| `src/shared/plan.ts` | The transcript and plan formats and the sum of span lengths, used by the server and the page |
 | `src/shared/timeline.ts` | The formats of the gaze samples, the blocks, the takes and the person's choices, and the spans the montage plays |
 | `src/shared/framing.ts` | The zoom that keeps the eyes on one line across a join, used by the page and the reel build |
 | `src/shared/zoom-plan.ts` | The format of `zooms.json`, the zoom strengths and the push a part plays |
