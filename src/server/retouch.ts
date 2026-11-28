@@ -45,7 +45,7 @@ const encodeTrialRun = Effect.fnUntraced(function*(dir: string, clips: ReadonlyA
   yield* fs.remove(place.work, { recursive: true, force: true })
   yield* fs.makeDirectory(place.work, { recursive: true })
   const before = `${place.work}/before.mp4`
-  yield* renderParts(dir, parts, [], place.work, before, (share) => onDone(share * RENDER_SHARE))
+  yield* renderParts(dir, parts, [], "off", place.work, before, (share) => onDone(share * RENDER_SHARE))
   yield* retouchVideo({ before, folder: place.work, frames, closeUp: true }, (share) => onDone(RENDER_SHARE + share * RETOUCH_SHARE)).pipe(
     Effect.catchIf((error) => error instanceof ToolFailed && error.code === NO_CLOSE_UP_EXIT, () => Effect.fail(new TrialFoundNoFace({ why: "unseen" })))
   )

@@ -1,5 +1,6 @@
 import { REEL_WIDTH } from "../shared/framing.ts"
 import { unsureIndexes } from "../shared/doubts.ts"
+import type { Cleaned, Noise } from "../shared/noise.ts"
 import type { Transcript } from "../shared/plan.ts"
 import { SILENCE_LUFS } from "../shared/reel.ts"
 import { CLOSE_UP_FROM_SECONDS } from "../shared/retouch.ts"
@@ -161,18 +162,49 @@ const partVideo = (part: Part, look: Look): string => {
   return [`fps=${REEL_RATE}`, lookFilter(look, part.frame), ...push === undefined ? [] : [push]].join(",")
 }
 
-export const fadesOf = (seconds: number): string => {
+const fadesOf = (seconds: number): string => {
   const fade = Math.min(FADE, seconds / 2)
   return `afade=t=in:d=${fade},afade=t=out:st=${(seconds - fade).toFixed(4)}:d=${fade}`
 }
 
-export const partArgs = (source: string, part: Part, look: Look, encoder: string, output: string): ReadonlyArray<string> => {
+const CLEAN_RATE = 48000
+const FFT_DELAY_SAMPLES = CLEAN_RATE / 40
+const LOW_FREQUENCY_NOISE_PROFILE = "24|22|18|14|11|7|4|0|-4|-7|-11|-14|-18|-22|-24"
+const REDUCTION = {
+  light: { reduction: 8, floor: -49 },
+  strong: { reduction: 18, floor: -45 }
+} satisfies Record<Cleaned, { reduction: number; floor: number }>
+
+export const noiseFilters = (noise: Noise): ReadonlyArray<string> => {
+  if (noise === "off") return []
+  const { reduction, floor } = REDUCTION[noise]
+  // afftdn delays audio by two hops without shifting timestamps or flushing its tail.
+  return [
+    `aresample=${CLEAN_RATE}`, "highpass=f=70",
+    `apad=pad_len=${FFT_DELAY_SAMPLES}`,
+    `afftdn=nr=${reduction}:nf=${floor}:gs=3:nt=custom:bn=${LOW_FREQUENCY_NOISE_PROFILE}`,
+    `atrim=start_sample=${FFT_DELAY_SAMPLES}`,
+    `asetpts=PTS-${FFT_DELAY_SAMPLES}/SR/TB`
+  ]
+}
+
+export const partSoundFilter = (seconds: number, noise: Noise): string => [...noiseFilters(noise), fadesOf(seconds)].join(",")
+
+// Cleaning the preview audio would run the filter on sound that has already been compressed.
+export const cleanPreviewArgs = (files: { readonly preview: string; readonly source: string }, noise: Cleaned, output: string): ReadonlyArray<string> => [
+  "-hide_banner", "-loglevel", "error", "-y", "-i", files.preview, "-i", files.source,
+  "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-af", noiseFilters(noise).join(","),
+  "-c:a", "aac", "-b:a", "96k", "-ac", "1", "-movflags", "+faststart", "-f", "mp4", output
+]
+
+export const partArgs = (source: string, part: Part, look: Look, noise: Noise, encoder: string, output: string): ReadonlyArray<string> => {
   const seconds = part.frames / REEL_RATE
   return [
     "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y",
     "-ss", part.start.toFixed(4), "-i", source,
-    "-map", "0:v:0", "-map", "0:a:0", "-frames:v", String(part.frames), "-t", seconds.toFixed(6),
-    "-vf", partVideo(part, look), "-af", fadesOf(seconds),
+    // FFmpeg 8.0.1 can stall with apad and afftdn when picture and sound use separate filter graphs.
+    "-filter_complex", `[0:v:0]${partVideo(part, look)}[picture];[0:a:0]${partSoundFilter(seconds, noise)}[sound]`,
+    "-map", "[picture]", "-map", "[sound]", "-frames:v", String(part.frames), "-t", seconds.toFixed(6),
     "-c:v", encoder, "-profile:v", "high", "-b:v", "10M", "-maxrate", "12M", "-bufsize", "24M", "-g", String(REEL_RATE * 2),
     "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
     "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2", "-map_metadata", "-1", "-f", "mov", output

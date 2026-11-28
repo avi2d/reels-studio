@@ -30,26 +30,26 @@ const filterOf = (args: ReadonlyArray<string>, flag: string): string => args[arg
 
 test("a part of an HDR original is tone-mapped to BT.709 and cropped to 1080 by 1920, a plain one is not tone-mapped", () => {
   const part = { video: "a.mov", start: 2, frames: 60 }
-  const hdr = partArgs("a.mov", part, { hdr: true, gain: undefined }, "libx264", "p.mov")
-  expect(filterOf(hdr, "-vf")).toContain("tonemap")
-  expect(filterOf(hdr, "-vf")).toContain("crop=1080:1920")
+  const hdr = partArgs("a.mov", part, { hdr: true, gain: undefined }, "off", "libx264", "p.mov")
+  expect(filterOf(hdr, "-filter_complex")).toContain("tonemap")
+  expect(filterOf(hdr, "-filter_complex")).toContain("crop=1080:1920")
   expect(filterOf(hdr, "-color_trc")).toBe("bt709")
-  expect(filterOf(partArgs("a.mov", part, { hdr: false, gain: undefined }, "libx264", "p.mov"), "-vf")).not.toContain("tonemap")
+  expect(filterOf(partArgs("a.mov", part, { hdr: false, gain: undefined }, "off", "libx264", "p.mov"), "-filter_complex")).not.toContain("tonemap")
 })
 
 test("a face off centre in a horizontal source is kept in the crop, not cut off by a crop in the middle", () => {
-  const args = partArgs("a.mov", { video: "a.mov", start: 2, frames: 60 }, { hdr: false, gain: undefined, faceLeft: 1.11875 }, "libx264", "p.mov")
-  expect(filterOf(args, "-vf")).toContain("crop=1080:1920:2148.00:")
+  const args = partArgs("a.mov", { video: "a.mov", start: 2, frames: 60 }, { hdr: false, gain: undefined, faceLeft: 1.11875 }, "off", "libx264", "p.mov")
+  expect(filterOf(args, "-filter_complex")).toContain("crop=1080:1920:2148.00:")
 })
 
 test("a horizontal source with no face found is still cropped in the middle", () => {
-  const args = partArgs("a.mov", { video: "a.mov", start: 2, frames: 60 }, { hdr: false, gain: undefined, faceLeft: undefined }, "libx264", "p.mov")
-  expect(filterOf(args, "-vf")).toContain("crop=1080:1920,setsar=1")
+  const args = partArgs("a.mov", { video: "a.mov", start: 2, frames: 60 }, { hdr: false, gain: undefined, faceLeft: undefined }, "off", "libx264", "p.mov")
+  expect(filterOf(args, "-filter_complex")).toContain("crop=1080:1920,setsar=1")
 })
 
 test("the sound of a two-second part fades in and fades out 0.06 s before its end, not at the end", () => {
-  const args = partArgs("a.mov", { video: "a.mov", start: 0, frames: 60 }, { hdr: false, gain: undefined }, "libx264", "p.mov")
-  expect(filterOf(args, "-af")).toBe("afade=t=in:d=0.06,afade=t=out:st=1.9400:d=0.06")
+  const args = partArgs("a.mov", { video: "a.mov", start: 0, frames: 60 }, { hdr: false, gain: undefined }, "off", "libx264", "p.mov")
+  expect(filterOf(args, "-filter_complex")).toContain("[0:a:0]afade=t=in:d=0.06,afade=t=out:st=1.9400:d=0.06[sound]")
 })
 
 test("the join list names every part in order in the ffconcat format", () => {

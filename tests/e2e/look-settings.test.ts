@@ -4,6 +4,7 @@ import { chromium, type Browser, type Page, type Route } from "playwright-core"
 import { Schema } from "effect"
 import { NewLooks, type ExampleLook, type LooksView } from "../../src/shared/looks.ts"
 import { NO_EDITS, type TimelinePage } from "../../src/shared/timeline.ts"
+import type { SoundCheck } from "../../src/shared/reel.ts"
 
 let browser: Browser
 let server: ReturnType<typeof Bun.serve>
@@ -86,6 +87,176 @@ const withPage = async (saved: LooksView, save: (route: Route, change: NewLooks)
   } finally {
     await page.close()
   }
+}
+
+test("a trim of the same recording does not reload its cleaned preview, but a manual noise switch does", async () => {
+  const page = await browser.newPage()
+  try {
+    const ready = timeline.timeline
+    if (ready.state !== "ready") throw new Error("The fixture needs a ready cut")
+    let trimmed = false
+    await page.route("**/api/projects/review/timeline", (route) => route.fulfill({ json: trimmed
+      ? { ...timeline, timeline: { ...ready, edits: { ...ready.edits, deleted: ["second"] } } }
+      : { ...timeline, gathering: true } }))
+    await page.route("**/api/projects/review/noise", (route) =>
+      route.fulfill({ json: { job: { state: "idle" }, noise: "strong", cleaned: { made: "fixture" } } }))
+    await page.route("**/api/projects/review/noise/choice", (route) =>
+      route.fulfill({ json: { job: { state: "idle" }, noise: "light", cleaned: { made: "fixture" } } }))
+    await page.route("**/noise/*/a.mp4?made=*", (route) =>
+      route.fulfill({ contentType: "video/mp4", path: `${directory}/a.mp4` }))
+    await page.goto(server.url.href)
+    const video = page.locator('video[src*="/noise/strong/"]')
+    await video.waitFor({ state: "attached" })
+    await video.evaluate((node) => {
+      const count = () => {
+        node.dataset.sourceChanges = String(Number(node.dataset.sourceChanges) + 1)
+      }
+      node.dataset.sourceChanges = "0"
+      new MutationObserver((records) => records.forEach(count)).observe(node, { attributeFilter: ["src"] })
+    })
+    trimmed = true
+    await page.getByText("0:00 / 0:04", { exact: true }).waitFor()
+    expect(await video.getAttribute("data-source-changes", { timeout: 2000 })).toBe("0")
+    await page.getByRole("button", { name: "Убрать слегка", exact: true }).click()
+    const light = page.locator('video[src*="/noise/light/"]')
+    await light.waitFor({ state: "attached" })
+    expect(await light.getAttribute("data-source-changes")).toBe("1")
+  } finally {
+    await page.close()
+  }
+}, 15_000)
+
+const heardAt = (db: number, fresh: boolean): SoundCheck => ({
+  job: fresh ? { state: "idle" } : { state: "running", done: 0.5 },
+  heard: {
+    fresh, seconds: 8,
+    levelling: {
+      before: -24, after: { lufs: -14, lra: 0, truePeak: -2 },
+      series: { before: [], after: [] }, passages: []
+    },
+    parts: [{ video: "a.mp4", from: 0, to: 8, gains: [{ time: 0, db }] }]
+  }
+})
+
+test("switching noise on step 4 uses the selected preview gain without keeping the old gain or reopening", async () => {
+  const page = await browser.newPage()
+  page.setDefaultTimeout(5000)
+  let selected = false
+  let measured = false
+  try {
+    await page.addInitScript(() => {
+      const setTarget: unknown = Object.getOwnPropertyDescriptor(AudioParam.prototype, "setTargetAtTime")?.value
+      if (typeof setTarget !== "function") throw new Error("Web Audio must support gain targets")
+      AudioParam.prototype.setTargetAtTime = function(value, ...rest) {
+        document.documentElement.dataset.previewGain = String(value)
+        return Reflect.apply(setTarget, this, [value, ...rest])
+      }
+    })
+    await page.route("**/api/projects/review/noise", (route) => route.fulfill({ json: {
+      job: { state: "idle" }, ...(selected ? { noise: "strong", cleaned: { made: "fixture" } } : { noise: "off" })
+    } }))
+    await page.route("**/api/projects/review/noise/choice", (route) => {
+      selected = true
+      return route.fulfill({ json: { job: { state: "idle" }, noise: "strong", cleaned: { made: "fixture" } } })
+    })
+    await page.route("**/noise/strong/a.mp4?made=*", (route) =>
+      route.fulfill({ contentType: "video/mp4", path: `${directory}/a.mp4` }))
+    await page.route("**/api/projects/review/sound", (route) =>
+      route.fulfill({ json: selected && measured ? heardAt(20, true) : heardAt(6, !selected) }))
+    const gain = (target: number) => page.waitForFunction((want) =>
+      Number(document.documentElement.dataset.previewGain) === want
+      && [...document.querySelectorAll("video")].some((video) => !video.paused && video.currentTime > 0), target)
+    const watch = page.getByRole("button", { name: "Смотреть ролик", exact: true })
+    await page.goto(server.url.href)
+    await watch.click()
+    await gain(10 ** (6 / 20))
+    const [checking] = await Promise.all([
+      page.waitForResponse((response) => response.url().endsWith("/sound")),
+      page.getByRole("button", { name: "Убрать сильно", exact: true }).click()
+    ])
+    expect(await checking.finished()).toBeNull()
+    await page.locator('video[src*="/noise/strong/"]').waitFor({ state: "attached" })
+    await gain(1)
+    measured = true
+    await gain(10)
+    await page.reload()
+    await page.locator('video[src*="/noise/strong/"]').waitFor({ state: "attached" })
+    await watch.click()
+    await gain(10)
+  } finally {
+    await page.close()
+  }
+}, 20_000)
+
+for (const change of ["add", "remove", "replace", "change before the first reply"] as const) {
+  test(`a ${change} during noise cleaning neither strands the latest sources nor repeats finished work`, async () => {
+    const page = await browser.newPage()
+    let release: (() => void) | undefined
+    try {
+      const ready = timeline.timeline
+      if (ready.state !== "ready") throw new Error("The fixture needs a ready cut")
+      const block = (video: string) => ({ id: video, title: video, takes: [{ video, from: 0, to: 0, reason: "" }] })
+      const before = change === "remove" ? ["a.mp4", "b.mp4"] : ["a.mp4"]
+      const after = change === "replace" ? ["b.mp4"] : change === "remove" ? ["a.mp4"] : ["a.mp4", "b.mp4"]
+      let changed = false
+      let finished = false
+      let posts = 0
+      let polls = 0
+      const firstReply = new Promise<void>((resolve) => { release = resolve })
+      await page.route("**/api/projects/review/timeline", (route) => route.fulfill({ json: {
+        ...timeline, gathering: !changed, texts: { state: "none" },
+        timeline: { ...ready, blocks: (changed ? after : before).map(block) }
+      } }))
+      await page.route("**/api/projects/review/videos", (route) => route.fulfill({ json: {
+        videos: ["a.mp4", "b.mp4"].map((name) => ({ name, state: "ready", transcript: {
+          duration: 8, words: [{ text: name, start: 0, end: 4 }]
+        } }))
+      } }))
+      await page.route("**/api/projects/review/noise", async (route) => {
+        if (route.request().method() === "POST") {
+          posts += 1
+          if (posts === 1 && change === "change before the first reply") await firstReply
+          if (posts < 3) {
+            await route.fulfill({ json: { noise: "strong", job: { state: "running", done: 0.5 } } })
+            return
+          }
+          await route.fulfill({ json: { noise: "strong", job: { state: "idle" }, cleaned: { made: "latest" } } })
+          return
+        }
+        polls += 1
+        await route.fulfill({ json: { noise: "strong", job: finished ? { state: "idle" } : { state: "running", done: 0.5 },
+          ...(finished && change === "remove" ? { cleaned: { made: "latest" } } : {}) } })
+      })
+      await page.route("**/noise/*/*.mp4?made=*", (route) =>
+        route.fulfill({ contentType: "video/mp4", path: `${directory}/a.mp4` }))
+      const started = page.waitForRequest((request) => request.method() === "POST" && request.url().endsWith("/noise"))
+      await page.goto(server.url.href)
+      await started
+      if (change !== "change before the first reply") await page.getByRole("status").filter({ hasText: "50%" }).waitFor()
+      const refreshed = page.waitForRequest((request) => request.method() === "POST" && request.url().endsWith("/noise"))
+      changed = true
+      await refreshed
+      release?.()
+      await page.getByRole("status").filter({ hasText: "50%" }).waitFor()
+      expect(posts).toBe(2)
+      finished = true
+      await page.locator('video[src*="/noise/strong/"][src*="made=latest"]').first().waitFor({ state: "attached" })
+      const expectedPosts = change === "remove" ? 2 : 3
+      expect(posts).toBe(expectedPosts)
+      const first = after[0]
+      if (first === undefined) throw new Error("The latest cut must have a video")
+      expect(await page.locator(`video[data-video="${first}"]`).getAttribute("src")).toContain("made=latest")
+      expect(await page.getByRole("status").filter({ hasText: "Пока студия чистит звук" }).count()).toBe(0)
+      const finishedPolls = polls
+      await page.clock.install()
+      await page.clock.runFor(4000)
+      expect(posts).toBe(expectedPosts)
+      expect(polls).toBe(finishedPolls)
+    } finally {
+      release?.()
+      await page.close()
+    }
+  }, 15_000)
 }
 
 for (const control of ["style", "size", "plate"] as const) {

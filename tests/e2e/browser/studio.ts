@@ -3,10 +3,11 @@ import { copyFile, mkdir, mkdtemp, readdir, stat, writeFile } from "node:fs/prom
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { ProductCheck } from "@avi2dg/checks/browser-hooks.ts"
-import { Schema } from "effect"
+import { Option, Schema } from "effect"
 import type { Page, Request } from "playwright-core"
 import { UploadedVideo } from "../../../src/shared/library.ts"
 import { STEPS, STUDIO_PATH, stepPath } from "../../../src/shared/page.ts"
+import { ReelView } from "../../../src/shared/reel.ts"
 import { TimelinePage } from "../../../src/shared/timeline.ts"
 import { CHAT_PICTURE, CHAT_REPLY, FIRST_WORDS, PLAN_TASK, PLAN_TEXT, SLOW_MESSAGE, SOURCE_VIDEO, TASK_FILE, setting, timeout } from "./scenario.ts"
 
@@ -542,6 +543,22 @@ const dropFirstBlock = async (page: Page, id: string): Promise<void> => {
   assert(saved.ok(), `The studio refused the montage edit: ${saved.status()}`)
 }
 
+const waitForBuilt = async (page: Page, id: string): Promise<void> => {
+  const heading = page.getByRole("heading", { level: 1 })
+  try {
+    await page.getByRole("heading", { name: "Ролики готовы", exact: true, level: 1 }).waitFor({ timeout: BUILD })
+  } catch (cause) {
+    const screen = await heading.textContent({ timeout })
+    const response = await page.request.get(address(`/api/projects/${id}/reel`), { timeout })
+    const view = Schema.decodeUnknownOption(ReelView)(await response.json())
+    const state = Option.match(view, {
+      onNone: () => ({ status: response.status() }),
+      onSome: ({ job, file }) => ({ job, fresh: file?.fresh, status: response.status() })
+    })
+    throw new Error(`Step 5 did not show ready reels. Heading: ${screen}. Server: ${JSON.stringify(state)}`, { cause })
+  }
+}
+
 const reelsStep: ProductCheck = {
   name: "step 5 builds the reel with progress, downloads a 1080 by 1920 file for each chosen app and none for the unchosen one, reads «Ролики устарели» after a montage edit, and a stopped rebuild keeps the earlier file instead of dropping it",
   run: async (page) => {
@@ -554,7 +571,7 @@ const reelsStep: ProductCheck = {
     await page.getByRole("heading", { name: "Ролики", exact: true, level: 1 }).waitFor()
     await page.getByRole("button", { name: "Собрать ролик", exact: true }).click()
     await page.getByRole("heading", { name: "Собираю ролики", exact: true, level: 1 }).waitFor()
-    await page.getByRole("heading", { name: "Ролики готовы", exact: true, level: 1 }).waitFor({ timeout: BUILD })
+    await waitForBuilt(page, id)
     assert.deepEqual(await page.getByRole("tab").allInnerTexts(), ["Instagram", "TikTok"], "Step 5 must show a tab for each chosen app and none for YouTube Shorts")
     assert.equal(await sizeOf(await downloadReel(page, "Instagram")), "1080,1920", "The Instagram reel must be 1080 by 1920")
     await page.getByRole("tab", { name: "TikTok", exact: true }).click()

@@ -20,6 +20,7 @@ test("new heads stale a centred reel even when its parts and zooms have not chan
     await mkdir(`${dir}/gaze`)
     const base = {
       made: "2026-11-24T00:00:00.000Z",
+      noise: "strong",
       files: [{ app: "Instagram", video: "file-instagram.mp4" }, { app: "YouTube Shorts", video: "file-youtube.mp4" }, { app: "TikTok", video: "file-tiktok.mp4" }],
       parts: [{ video: "a.mov", start: 0, frames: 30 }, { video: "b.mov", start: 0, frames: 30 }]
     }
@@ -57,6 +58,7 @@ test("a one-file record from before the three apps stays playable as Instagram's
     expect(view.file?.apps).toEqual([{ app: "Instagram", size: "published".length }])
     expect(view.file?.fresh).toBe(false)
     await writeFile(`${dir}/task.json`, JSON.stringify({ apps: ["Instagram"], files: [] }))
+    await writeFile(`${dir}/looks.json`, JSON.stringify({ noise: "off" }))
     const chosen = await Effect.runPromise(readReel(dir, cut, { state: "idle" }).pipe(Effect.provide(BunServices.layer)))
     expect(chosen.file?.fresh).toBe(true)
   } finally {

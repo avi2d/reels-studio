@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect"
 import { Face } from "./face.ts"
+import { Noise, NOISE_DEFAULT } from "./noise.ts"
 
 export const SubtitleStyle = Schema.Literals(["brand", "plate", "example"])
 export type SubtitleStyle = typeof SubtitleStyle.Type
@@ -20,12 +21,13 @@ const NO_PLATE: NamePlate = { shown: false, text: "" }
 
 export const Looks = Schema.Struct({
   face: Face.pipe(Schema.withDecodingDefaultKey(Effect.succeed("off" as const))),
+  noise: Noise.pipe(Schema.withDecodingDefaultKey(Effect.succeed(NOISE_DEFAULT))),
   subtitles: SubtitleLook.pipe(Schema.withDecodingDefaultKey(Effect.succeed(BRAND_SUBTITLES))),
   plate: NamePlate.pipe(Schema.withDecodingDefaultKey(Effect.succeed(NO_PLATE)))
 })
 export type Looks = typeof Looks.Type
 
-export const NO_LOOKS: Looks = { face: "off", subtitles: BRAND_SUBTITLES, plate: NO_PLATE }
+export const NO_LOOKS: Looks = { face: "off", noise: NOISE_DEFAULT, subtitles: BRAND_SUBTITLES, plate: NO_PLATE }
 
 const Colour = Schema.String.check(Schema.isPattern(/^#[0-9a-f]{6}$/iu))
 

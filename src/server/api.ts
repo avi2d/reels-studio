@@ -29,6 +29,7 @@ import { appOf, madeOf, pageOf, pictureOf, versionOf } from "./api-request.ts"
 import { WebPages } from "./web-pages.ts"
 import { body, json, param, reply } from "./api-reply.ts"
 import { looksRoutes } from "./looks-api.ts"
+import { noiseRoutes } from "./noise-api.ts"
 
 const decodeRuleId = Schema.decodeUnknownOption(RuleId)
 
@@ -365,5 +366,4 @@ const homeOnly = HttpRouter.middleware(
   { global: true }
 )
 
-export const apiRoutes = Layer.mergeAll(projects, brief, rules, chat, uploads, videos, reel, posts, retouch, looksRoutes, homeOnly)
-
+export const apiRoutes = Layer.mergeAll(projects, brief, rules, chat, uploads, videos, reel, posts, retouch, looksRoutes, noiseRoutes, homeOnly)

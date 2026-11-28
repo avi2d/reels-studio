@@ -1,5 +1,6 @@
 import { Effect, FileSystem, Option, Schema, Semaphore } from "effect"
 import { ExampleLook, Looks, NO_LOOKS, type LooksView, type NewLooks } from "../shared/looks.ts"
+import type { Noise } from "../shared/noise.ts"
 import { badRequest, orUnavailable } from "./api-error.ts"
 import { readText } from "./approval.ts"
 import { reportUnreadable } from "./unreadable.ts"
@@ -34,6 +35,14 @@ const replaceLooks = Effect.fnUntraced(function*(dir: string, change: (looks: Lo
 
 export const updateLooks = Effect.fnUntraced(function*(dir: string, change: (looks: Looks) => Looks) {
   return yield* replaceLooks(dir, change).pipe(Semaphore.withPermit(writing))
+})
+
+export const readNoise = Effect.fnUntraced(function*(dir: string) {
+  return (yield* readLooks(dir)).noise
+})
+
+export const writeNoise = Effect.fnUntraced(function*(dir: string, noise: Noise) {
+  yield* updateLooks(dir, (looks) => ({ ...looks, noise }))
 })
 
 export const readExample = Effect.fnUntraced(function*(dir: string) {
