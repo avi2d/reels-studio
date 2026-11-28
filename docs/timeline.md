@@ -212,6 +212,7 @@ Under the choices, the step shows the noise level of the pauses before and after
 A pause is a window more than 20 dB below the median window, so a recording with no such window shows no level.
 The build and the sound check apply the chosen strength to the sound of each part before the levelling.
 On «Ролики», files built with another choice count as out of date.
+
 ## The subtitle look
 
 The «Оформление» step sets how the subtitles look, in `looks.json`.
