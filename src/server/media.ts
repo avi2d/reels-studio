@@ -13,7 +13,7 @@ import { sourceNames } from "./reuse.ts"
 import { Settings } from "./settings.ts"
 import { buildReel, builtSound, readReel, reelFrameAt, reelPictureAt, reelVideoAt, type ReelVersion } from "./reel.ts"
 import { readChecks } from "./reel-checks.ts"
-import { checkSentence, firstFailure } from "../shared/reel-checks.ts"
+import { checkSentence, firstBuildFailure } from "../shared/reel-checks.ts"
 import { noFaceOf, runTrial } from "./retouch.ts"
 import { checkSound, readSoundCheck, soundKeyOf } from "./sound-check.ts"
 import { readCut, readMontageCut, readTimeline, type Cut } from "./timeline-files.ts"
@@ -198,8 +198,8 @@ const reelHandlers = (folder: (id: string) => Effect.Effect<string, ApiError>, r
     if (job?.state === "waiting" || job?.state === "running") return yield* reelOf(dir)
     const { cut, checks } = yield* checksOf(dir)
     if (cut.clips.length === 0) return yield* badRequest("В монтаже нет ни одного блока. Сначала соберите блоки.")
-    const failed = firstFailure(checks)
-    if (failed !== undefined && failed.id !== "loudness") return yield* badRequest(checkSentence(failed))
+    const failed = firstBuildFailure(checks)
+    if (failed !== undefined) return yield* badRequest(checkSentence(failed))
     yield* queueWaiting(reels, dir)
     return yield* reelOf(dir)
   }, orBroken, Effect.provideContext(context))

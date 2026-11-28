@@ -22,20 +22,22 @@ const namedText = (montage: MontageCut | undefined, id: string | undefined): { r
   return named.part === undefined ? { text: named.name } : { text: named.name, part: named.part }
 }
 
-// Measuring the ink renders every frame of the reel, so one result serves every poll until the texts change.
 const textsCheck = Effect.fnUntraced(function*(dir: string, cut: Cut, montage: MontageCut | undefined, seconds: number) {
   if (cut.captions.texts.length === 0) return { id: "texts", state: "inside" } satisfies TextsCheck
-  const key = `${dir}:${seconds}:${Bun.hash(JSON.stringify([cut.captions.texts, cut.captions.look]))}`
+  const key = `${dir}:${seconds}:${Bun.hash(JSON.stringify([cut.captions.texts, cut.captions.look, cut.captions.title]))}`
   const known = measured.get(key)
   if (known !== undefined) return known
   const fs = yield* FileSystem.FileSystem
-  const work = yield* fs.makeTempDirectory({ prefix: "reel-check-" })
-  const found = yield* firstTextOutside(work, cut.captions, seconds).pipe(
-    Effect.ensuring(fs.remove(work, { recursive: true }).pipe(Effect.catch((error) => Effect.logError("the text check files were not removed", error)))),
-    Effect.map((outside): TextsCheck => outside === "inside" ? { id: "texts", state: "inside" } : { id: "texts", state: "outside", ...namedText(montage, outside.id) }),
+  const found = yield* Effect.gen(function*() {
+    const work = yield* fs.makeTempDirectory({ prefix: "reel-check-" })
+    return yield* firstTextOutside(work, cut.captions, seconds).pipe(
+      Effect.ensuring(fs.remove(work, { recursive: true }).pipe(Effect.catch((error) => Effect.logError("the text check files were not removed", error)))),
+      Effect.map((outside): TextsCheck => outside === "inside" ? { id: "texts", state: "inside" } : { id: "texts", state: "outside", ...namedText(montage, outside.id) })
+    )
+  }).pipe(
     Effect.catch((error) => Effect.as(Effect.logError("the on-screen texts were not measured", error), { id: "texts", state: "unmeasured" } satisfies TextsCheck))
   )
-  return remember(key, found)
+  return found.state === "unmeasured" ? found : remember(key, found)
 })
 
 const placesCheck = (montage: MontageCut | undefined): PlacesCheck => {

@@ -41,8 +41,10 @@ export const markOf = (check: ReelCheck): Mark => {
 export const checkList = (checks: ReelChecks): ReadonlyArray<ReelCheck> => [checks.texts, checks.places, checks.length, checks.loudness]
 
 // Loudness is heard on the built file, so only the other checks can stop a build.
-export const blocksBuild = (checks: ReelChecks): boolean =>
-  [checks.texts, checks.places, checks.length].some((check) => markOf(check) === "fail")
+export const firstBuildFailure = (checks: ReelChecks): ReelCheck | undefined =>
+  checkList(checks).find((check) => check.id !== "loudness" && markOf(check) === "fail")
+
+export const blocksBuild = (checks: ReelChecks): boolean => firstBuildFailure(checks) !== undefined
 
 export const opensDownload = (checks: ReelChecks): boolean => checkList(checks).every((check) => markOf(check) === "pass")
 
@@ -77,7 +79,5 @@ export const checkSentence = (check: ReelCheck): string => {
       return check.level === "good" ? "Громкость в норме." : "Громкость близко к норме."
   }
 }
-
-export const firstFailure = (checks: ReelChecks): ReelCheck | undefined => checkList(checks).find((check) => markOf(check) === "fail")
 
 export const placeOf = (check: ReelCheck): string | undefined => "part" in check ? check.part : undefined
