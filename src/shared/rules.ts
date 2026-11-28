@@ -96,9 +96,10 @@ const zoomChange = (cut: Cut, from: ZoomLevel, to: ZoomLevel, rest: number): typ
   const placed = assemble(cut.blocks, cut.edits, cut.transcripts, rest)
   const faces = facesByVideo(cut.faces)
   const clips = cutOf(clipsOf(placed), faces, cut.transcripts, cut.edits)
-  const places = zoomedOf(clips, cut.zooms, faces, cut.transcripts, cut.edits, to).places
-  const zooms = places.flatMap((place): ReadonlyArray<FollowingZoom> => {
-    if (place.given || place.state !== "zoomed") return []
+  const zoomedUnder = (rule: ZoomLevel) => zoomedOf(clips, cut.zooms, faces, cut.transcripts, cut.edits, rule).places
+  const before = new Set(zoomedUnder(from).flatMap((place) => place.state === "zoomed" ? [place.planned.id] : []))
+  const zooms = zoomedUnder(to).flatMap((place): ReadonlyArray<FollowingZoom> => {
+    if (place.given || (place.state !== "zoomed" && !before.has(place.planned.id))) return []
     const one = placed.find((candidate) => candidate.block.id === place.block)
     if (one === undefined) return []
     const zoom = place.planned
