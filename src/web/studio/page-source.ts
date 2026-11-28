@@ -8,7 +8,7 @@ export const sourceOf = (visual: Visual, sources: ReadonlyArray<PageSource>): Pa
 export const sourceKind = (source: PageSource): string => source.articles.length > 0 ? "Текст закона" : "Страница из интернета"
 
 const missingArticles = (phrase: string, sources: ReadonlyArray<PageSource>): ReadonlyArray<string> =>
-  [...new Set(articleMentions(phrase.split(/\s+/u)).map((mention) => mention.number))].filter((number) => isMissing(number, sources))
+  [...new Set(articleMentions(phrase.split(/\s+/u)))].filter((number) => isMissing(number, sources))
 
 export const sourceLines = (source: PageSource): ReadonlyArray<HTMLElement> => [
   h("span", { class: "hint" }, "Источник: ", h("a", { href: source.address, target: "_blank", rel: "noopener noreferrer" }, siteOf(source.address))),

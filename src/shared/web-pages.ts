@@ -24,32 +24,34 @@ const HEADING = /(?:^|\n)[ \t]*Статья[ \t\u00a0]+(\d+(?:\.\d+)*)/gu
 
 export const articlesOf = (text: string): ReadonlyArray<string> => [...new Set([...text.matchAll(HEADING)].map((match) => match[1] ?? ""))]
 
-const ARTICLE_WORD = /^(?:стать(?:я|и|е|ю|ей|ям|ях|ями)|ст\.?)$/u
+const ARTICLE_WORD = /^(?:стать(?:я|и|е|ю|ей|ям|ях|ями)|ст)$/u
+const PART_WORD = /^(?:част[а-яё]*|ч|пункт[а-яё]*|подпункт[а-яё]*|п|пп)$/u
 const NUMBER = /^(\d+(?:\.\d+)*)(?:-?[а-яё]{1,3})?$/u
-const EDGES = /^[«"'([]+|[»"')\],;:!?]+$/gu
+const LEADING = /^[«"'([]+/u
+const TRAILING = /[»"')\],;:!?.]+$/u
+const GLUED_ARTICLE = /^(ст\.)(?=\d)/u
 
-const tokenOf = (word: string): string => {
-  const bare = word.toLowerCase().replace(EDGES, "")
-  return bare.endsWith(".") && bare !== "ст." ? bare.slice(0, -1) : bare
-}
+const tokensOf = (word: string): ReadonlyArray<string> =>
+  word.toLowerCase().replace(LEADING, "").split(GLUED_ARTICLE)
+    .map((part) => part.replace(TRAILING, ""))
+    .filter((token) => token !== "")
 
 const numberOf = (token: string): string | undefined => NUMBER.exec(token)?.[1]
 
-interface Mention {
-  readonly number: string
-  readonly at: number
+const isListedAfterArticleWord = (tokens: ReadonlyArray<string>, at: number): boolean => {
+  const before = tokens.slice(0, at).reverse()
+  const end = before.findIndex((token) => token !== "и" && numberOf(token) === undefined)
+  return ARTICLE_WORD.test(before[end] ?? "")
 }
 
-export const articleMentions = (words: ReadonlyArray<string>): ReadonlyArray<Mention> => {
-  const tokens = words.map(tokenOf)
-  return tokens.flatMap((token, at): ReadonlyArray<Mention> => {
+const isBeforeArticleWord = (tokens: ReadonlyArray<string>, at: number): boolean =>
+  ARTICLE_WORD.test(tokens[at + 1] ?? "") && !PART_WORD.test(tokens[at - 1] ?? "")
+
+export const articleMentions = (words: ReadonlyArray<string>): ReadonlyArray<string> => {
+  const tokens = words.flatMap(tokensOf)
+  return tokens.flatMap((token, at): ReadonlyArray<string> => {
     const number = numberOf(token)
-    if (number === undefined) return []
-    const before = tokens[at - 1]
-    const after = tokens[at + 1]
-    const named = (before !== undefined && ARTICLE_WORD.test(before)) ||
-      (after !== undefined && ARTICLE_WORD.test(after) && token !== number)
-    return named ? [{ number, at }] : []
+    return number !== undefined && (isListedAfterArticleWord(tokens, at) || isBeforeArticleWord(tokens, at)) ? [number] : []
   })
 }
 

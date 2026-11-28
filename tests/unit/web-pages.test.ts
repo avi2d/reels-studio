@@ -19,19 +19,39 @@ test("a dotted article number keeps its dot part instead of being cut to the fir
 })
 
 test("an article named before its number is found, with the trailing full stop dropped", () => {
-  expect(articleMentions(["Проверьте", "статью", "620."])).toEqual([{ number: "620", at: 2 }])
+  expect(articleMentions(["Проверьте", "статью", "620."])).toEqual(["620"])
 })
 
 test("an article named after an ordinal number is found, not missed for the -й ending", () => {
-  expect(articleMentions(["в", "18-й", "статье"])).toEqual([{ number: "18", at: 1 }])
+  expect(articleMentions(["в", "18-й", "статье"])).toEqual(["18"])
 })
 
 test("the short form ст. is an article word, not a sentence end", () => {
-  expect(articleMentions(["ст.", "620"])).toEqual([{ number: "620", at: 1 }])
+  expect(articleMentions(["ст.", "620"])).toEqual(["620"])
+})
+
+test("a bare number before the article word is found, not missed for lacking an ordinal ending", () => {
+  expect(articleMentions(["по", "159", "статье", "УК"])).toEqual(["159"])
+})
+
+test("every number in a list after the article word is found, not only the first", () => {
+  expect(articleMentions(["статьи", "620", "и", "621"])).toEqual(["620", "621"])
+  expect(articleMentions(["статьи", "620,", "621", "и", "622"])).toEqual(["620", "621", "622"])
+})
+
+test("a closing quote before the full stop does not hide the number", () => {
+  expect(articleMentions(["статья", "620»."])).toEqual(["620"])
+})
+
+test("ст. glued to its number is still an article word", () => {
+  expect(articleMentions(["ст.620"])).toEqual(["620"])
+  expect(articleMentions(["(ст.620)"])).toEqual(["620"])
 })
 
 test("a part number before статьи is not mistaken for an article number", () => {
-  expect(articleMentions(["часть", "1", "статьи", "12.8"])).toEqual([{ number: "12.8", at: 3 }])
+  expect(articleMentions(["часть", "1", "статьи", "12.8"])).toEqual(["12.8"])
+  expect(articleMentions(["ч.", "2", "ст.", "159"])).toEqual(["159"])
+  expect(articleMentions(["пунктом", "2", "статьи", "450"])).toEqual(["450"])
 })
 
 test("a number with no article word next to it is not a mention", () => {
