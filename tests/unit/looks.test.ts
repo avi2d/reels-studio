@@ -18,9 +18,9 @@ test("both looks reads and writes carry the example title through the wire schem
   try {
     await writeFile(`${dir}/example.json`, JSON.stringify(example))
     const read = await Effect.runPromise(looksView(dir).pipe(Effect.provide(BunFileSystem.layer)))
-    expect(Schema.decodeUnknownSync(LooksView)(read).example).toEqual(example)
+    expect(Schema.decodeSync(LooksView)(read).example).toEqual(example)
     const written = await Effect.runPromise(writeLooks(dir, { subtitles: { style: "example", size: "normal" } }).pipe(Effect.provide(BunFileSystem.layer)))
-    expect(Schema.decodeUnknownSync(LooksView)(written).example).toEqual(example)
+    expect(Schema.decodeSync(LooksView)(written).example).toEqual(example)
     expect(written.subtitles.style).toBe("example")
   } finally {
     await rm(dir, { recursive: true, force: true })
@@ -33,8 +33,7 @@ test("example and text readers log changed invalid content once and clear repair
   const messages: Array<unknown> = []
   const logger = Logger.make((options) => { messages.push(options.message) })
   const read = () => Effect.runPromise(Effect.all([readExample(dir), readTexts(dir)]).pipe(
-    Effect.provide(BunFileSystem.layer),
-    Effect.provide(Logger.layer([logger]))
+    Effect.provide([BunFileSystem.layer, Logger.layer([logger])])
   ))
   const invalid = async (text: string): Promise<void> => {
     await writeFile(`${dir}/example.json`, text)

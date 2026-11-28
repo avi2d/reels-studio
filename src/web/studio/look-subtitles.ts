@@ -89,14 +89,15 @@ export interface LookSubtitles {
   readonly dispose: () => void
 }
 
-export const lookSubtitles = (projectId: string, onChange: (view: LooksView) => void): LookSubtitles => {
-  const state: { view: LooksView | undefined; confirmed: LooksView | undefined; asked: number; timer: number } = { view: undefined, confirmed: undefined, asked: 0, timer: 0 }
-  const cards = styleCards((change) => { choose(change) })
-  const sizes = SIZES.map(([size, name]) => ({ size, choice: button("quiet", name, { "aria-pressed": "false", click: () => { choose({ size }) } }) }))
+const sizeChoices = (choose: (change: Partial<SubtitleLook>) => void) =>
+  SIZES.map(([size, name]) => ({ size, choice: button("quiet", name, { "aria-pressed": "false", click: () => { choose({ size }) } }) }))
+
+const settingsControls = (choose: (change: Partial<SubtitleLook>) => void, onSwitch: () => void, onType: () => void) => {
+  const cards = styleCards(choose)
+  const sizes = sizeChoices(choose)
   const exampleNote = h("div", { class: "hint look-example", id: "look-example-note" })
-  const { node: plateRow, shown, text, textRow } = plateControls(() => { savePlate() }, () => { savePlateLater() })
+  const plate = plateControls(onSwitch, onType)
   const problem = h("p", { class: "error", role: "alert" })
-  const preview = framePreview()
   const node = h("section", { class: "group look-settings", "aria-labelledby": "look-subtitles" },
     h("h2", { class: "group__title", id: "look-subtitles" }, "Субтитры"),
     h("div", { class: "look-row" },
@@ -107,37 +108,71 @@ export const lookSubtitles = (projectId: string, onChange: (view: LooksView) => 
     h("div", { class: "look-row" },
       h("span", { class: "look-row__label", id: "look-size-title" }, "Размер"),
       h("div", { class: "look-row__control" }, h("div", { class: "seg", role: "group", "aria-labelledby": "look-size-title" }, ...sizes.map((one) => one.choice)))),
-    plateRow,
+    plate.node,
     problem)
+  return { node, cards, sizes, exampleNote, plate, problem }
+}
 
-  const show = (view: LooksView): void => {
+type SettingsControls = ReturnType<typeof settingsControls>
+
+// A failed save leaves the typed plate text in the input, so the next save sends it again.
+const paintSettings = ({ cards, sizes, exampleNote, plate }: SettingsControls, view: LooksView, keepDraft: boolean): void => {
+  paintCards(cards, view)
+  for (const { size, choice } of sizes) {
+    const on = view.subtitles.size === size
+    choice.className = `btn btn--${on ? "main" : "quiet"}`
+    choice.setAttribute("aria-pressed", String(on))
+  }
+  exampleNote.replaceChildren(...exampleLines(view))
+  plate.shown.checked = view.plate.shown
+  plate.textRow.hidden = !view.plate.shown
+  if (!keepDraft && document.activeElement !== plate.text) plate.text.value = view.plate.text
+}
+
+interface LookState {
+  view: LooksView | undefined
+  // The reply of the highest request number that succeeded, whatever order replies arrive in.
+  confirmed: LooksView | undefined
+  confirmedAt: number
+  asked: number
+  pending: number
+  timer: number
+}
+
+export const lookSubtitles = (projectId: string, onChange: (view: LooksView) => void): LookSubtitles => {
+  const state: LookState = { view: undefined, confirmed: undefined, confirmedAt: 0, asked: 0, pending: 0, timer: 0 }
+  const controls = settingsControls((change) => { choose(change) }, () => { savePlate() }, () => { savePlateLater() })
+  const { node, plate: { shown, text, textRow }, problem } = controls
+  const preview = framePreview()
+
+  const show = (view: LooksView, keepDraft = false): void => {
     state.view = view
-    paintCards(cards, view)
-    for (const { size, choice } of sizes) {
-      const on = view.subtitles.size === size
-      choice.className = `btn btn--${on ? "main" : "quiet"}`
-      choice.setAttribute("aria-pressed", String(on))
-    }
-    exampleNote.replaceChildren(...exampleLines(view))
-    shown.checked = view.plate.shown
-    textRow.hidden = !view.plate.shown
-    if (document.activeElement !== text) text.value = view.plate.text
+    paintSettings(controls, view, keepDraft)
     onChange(view)
+  }
+
+  const settle = (failed: boolean): void => {
+    state.pending -= 1
+    const { confirmed, view } = state
+    if (state.pending > 0 || confirmed === undefined) return
+    show(state.timer === 0 || view === undefined ? confirmed : { ...confirmed, plate: view.plate }, failed)
   }
 
   const ask = (call: Effect.Effect<LooksView, Api.Failed>): void => {
     state.asked += 1
+    state.pending += 1
     const asked = state.asked
     Effect.runFork(call.pipe(
       Effect.map((view) => {
-        if (asked !== state.asked) return
-        state.confirmed = view
-        show(state.timer === 0 || state.view === undefined ? view : { ...view, plate: state.view.plate })
+        if (asked > state.confirmedAt) {
+          state.confirmed = view
+          state.confirmedAt = asked
+        }
+        settle(false)
       }),
       Effect.catchTag("Failed", (error) => Effect.sync(() => {
-        if (asked !== state.asked) return
-        if (state.confirmed !== undefined) show(state.confirmed)
         problem.textContent = error.message
+        settle(true)
       }))
     ))
   }
@@ -148,12 +183,11 @@ export const lookSubtitles = (projectId: string, onChange: (view: LooksView) => 
   }
 
   function choose(change: Partial<SubtitleLook>): void {
-    const now = state.view?.subtitles
-    if (now === undefined) return
-    const next = { ...now, ...change }
-    if (next.style === now.style && next.size === now.size) return
-    state.view = state.view === undefined ? undefined : { ...state.view, subtitles: next }
-    if (state.view !== undefined) show(state.view)
+    const { view } = state
+    if (view === undefined) return
+    const next = { ...view.subtitles, ...change }
+    if (next.style === view.subtitles.style && next.size === view.subtitles.size) return
+    show({ ...view, subtitles: next })
     save({ subtitles: next })
   }
 

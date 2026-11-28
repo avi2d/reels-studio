@@ -8,6 +8,7 @@ import { NO_EDITS, type TimelinePage } from "../../src/shared/timeline.ts"
 let browser: Browser
 let server: ReturnType<typeof Bun.serve>
 let directory: string
+const cleanups: Array<() => Promise<unknown>> = []
 
 const example: ExampleLook = {
   took: ["Заголовок по центру"],
@@ -33,6 +34,7 @@ beforeAll(async () => {
   if (Bun.which("ffmpeg") === null) throw new Error("ffmpeg is required for look-settings playback")
   await mkdir("node_modules/.cache", { recursive: true })
   directory = await mkdtemp("node_modules/.cache/look-settings-")
+  cleanups.push(() => rm(directory, { recursive: true, force: true }))
   const media = Bun.spawn(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=blue:s=160x284:r=30:d=8",
     "-f", "lavfi", "-i", "sine=frequency=440:duration=8", "-c:v", "libx264", "-pix_fmt", "yuv420p",
     "-c:a", "aac", "-movflags", "+faststart", `${directory}/a.mp4`], { stderr: "inherit" })
@@ -61,13 +63,13 @@ beforeAll(async () => {
       </script></body>`, { headers: { "content-type": "text/html" } })
     }
   })
+  cleanups.push(() => server.stop(true))
   browser = await chromium.launch({ executablePath, headless: true, args: ["--no-sandbox"] })
+  cleanups.push(() => browser.close())
 }, 20_000)
 
 afterAll(async () => {
-  await browser?.close()
-  await server?.stop(true)
-  if (directory !== undefined) await rm(directory, { recursive: true, force: true })
+  for (const cleanup of cleanups.reverse()) await cleanup()
 })
 
 const withPage = async (saved: LooksView, save: (route: Route, change: NewLooks) => Promise<void>, run: (page: Page) => Promise<void>): Promise<void> => {
@@ -109,6 +111,50 @@ test("a rejected name edit restores the preview but keeps the focused draft inst
     expect(await input.inputValue()).toBe("Анна")
     expect(await page.locator(".plate-preview").textContent()).toBe("Мария")
   }))
+
+test("a failed name save on blur keeps the typed text and sends it again instead of reverting the input", () => {
+  const sent: Array<NewLooks> = []
+  return withPage({ ...initial, plate: { shown: true, text: "Мария" } }, async (route, change) => {
+    sent.push(change)
+    await route.fulfill({ status: 400, json: { error: rejected } })
+  }, async (page) => {
+    const input = page.getByRole("textbox", { name: "Текст плашки" })
+    await input.fill("Анна")
+    const failed = page.waitForResponse((response) => response.request().method() === "PUT")
+    await input.evaluate((node) => { node.blur() })
+    await failed
+    await page.getByRole("alert").filter({ hasText: rejected }).waitFor()
+    expect(await input.inputValue()).toBe("Анна")
+    expect(await page.locator(".plate-preview").textContent()).toBe("Мария")
+    const again = page.waitForResponse((response) => response.request().method() === "PUT")
+    await page.getByRole("switch").click()
+    await again
+    expect(sent.at(-1)?.plate?.text).toBe("Анна")
+  })
+})
+
+test("a late success of an older save becomes the confirmed view after a newer save fails instead of being dropped", () => {
+  let release: (() => void) | undefined
+  const held = new Promise<void>((resolve) => { release = resolve })
+  let calls = 0
+  return withPage(initial, async (route, change) => {
+    calls += 1
+    if (calls === 1) {
+      await held
+      await route.fulfill({ json: { ...initial, ...change } })
+    } else await route.fulfill({ status: 400, json: { error: rejected } })
+  }, async (page) => {
+    const firstRequest = page.waitForRequest((request) => request.method() === "PUT")
+    await page.getByRole("button", { name: "Крупные", exact: true }).click()
+    await firstRequest
+    await page.getByRole("radio", { name: /Жёлтая плашка$/u }).click()
+    await page.getByRole("alert").filter({ hasText: rejected }).waitFor()
+    release?.()
+    await page.locator('button[aria-pressed="true"]', { hasText: "Крупные" }).waitFor()
+    expect(await page.getByRole("radio", { name: /Ваш стиль$/u }).getAttribute("aria-checked")).toBe("true")
+    expect(await page.getByRole("alert").textContent()).toBe(rejected)
+  })
+})
 
 test("an earlier plate reply does not replace a newer debounced name in the preview", () => {
   let release: (() => void) | undefined
