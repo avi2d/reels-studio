@@ -8,19 +8,13 @@ import { canReplace, doneOf as insertDone, KEEP, KEEP_CLIP, pictureChooser, REMO
 import { alignNote, COVER, doneOf as joinDone, offered, type PlaceActions, trimNote } from "../timeline-places.ts"
 import { visualName } from "../timeline-row.ts"
 import { joinKey, type Numbered } from "./montage-model.ts"
-import { button } from "./ui.ts"
+import { button, card, choice } from "./ui.ts"
 
 export interface AskActions extends PlaceActions {
   readonly showInsert: (span: Span) => void
   readonly answerInsert: (answer: InsertAnswer) => void
   readonly visualUrl: (visual: InsertPlace["visual"]) => string
 }
-
-const choice = (label: string, does: string, on: boolean, key: string, run: () => void): HTMLButtonElement =>
-  button(on ? "main" : "quiet", label, { title: does, "aria-pressed": String(on), "data-key": key, click: run })
-
-const card = (open: boolean, key: string, ...children: ReadonlyArray<Node>): HTMLElement =>
-  h("section", { class: open ? "ask ask--open" : "ask", "data-ask": key, tabindex: "-1" }, ...children)
 
 export const joinAsk = ({ place, number }: Numbered<Place>, inside: boolean, pictures: ReadonlyArray<string>, actions: AskActions): HTMLElement => {
   const key = joinKey(place.join)

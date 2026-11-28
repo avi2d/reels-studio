@@ -27,7 +27,6 @@ test("a dropped text in part 1 leaves «Заголовок» to the shown openin
 test("a removed title is told as removed with «его» instead of the «её» of a key thought", () => {
   const removed: TextPlace = { planned: planned("opening", 2), state: "dropped", reason: "removed" }
   const texts = namedTexts([removed, shown("later", 5, 6)], placed, [])
-  if (removed.state !== "dropped") throw new Error("not dropped")
   expect(texts.map(({ name }) => name)).toEqual(["Заголовок", "Мысль 1"])
   expect(whyDropped(removed, (id) => nameIn(texts, id))).toBe("Вы убрали его из ролика.")
 })

@@ -5,7 +5,7 @@ import { h } from "../dom.ts"
 import { formatLength } from "../format.ts"
 import { whyDropped, type DroppedText } from "../text-drops.ts"
 import type { NamedText } from "../text-names.ts"
-import { button } from "./ui.ts"
+import { button, card, choice } from "./ui.ts"
 
 export interface TextActions {
   readonly showText: (span: Span) => void
@@ -90,10 +90,7 @@ export const textAsk = ({ place, name }: NamedText, phrase: string, actions: Tex
   const removed = place.state === "dropped" && place.reason === "removed"
   const facts = [`на словах «${phrase}»`, ...place.state === "shown" ? [formatLength(place.shown.start)] : [], ...place.answer === undefined ? [] : [DONE[place.answer.answer]]]
   const answer = (one: TextAnswer): void => { actions.answerText(one) }
-  const choice = (label: string, does: string, on: boolean, key: string, run: () => void): HTMLButtonElement =>
-    button(on ? "main" : "quiet", label, { title: does, "aria-pressed": String(on), "data-key": key, click: run })
   const shown = linesView(lines, removed)
-  const card = h("section", { class: place.answer === undefined ? "ask ask--open" : "ask", "data-ask": `text:${id}`, tabindex: "-1" })
   const retype = choice("Исправить", "Написать надпись своими словами", place.answer?.answer === "retyped", `retype-text:${id}`, () => {
     const form = editor(name, id, lines, (typed) => { answer({ id, answer: "retyped", lines: typed }) }, () => {
       const focused = form.contains(document.activeElement)
@@ -113,12 +110,11 @@ export const textAsk = ({ place, name }: NamedText, phrase: string, actions: Tex
     choice("Оставить", "Надпись встанет в ролик как есть", place.answer?.answer === "keep", `keep-text:${id}`, () => { answer({ id, answer: "keep" }) }),
     retype,
     choice("Убрать", "Надписи не будет в ролике", removed, `remove-text:${id}`, () => { answer({ id, answer: "remove" }) }))
-  card.append(
+  return card(place.answer === undefined, `text:${id}`,
     h("p", { class: "ask__title" }, h("b", {}, name), ` · ${facts.join(" · ")}`),
     shown,
     ...place.answer?.answer === "retyped" ? [h("p", { class: "hint" }, `Предложено: «${place.planned.lines.map((line) => line.text).join(" ")}»`)] : [],
     acts)
-  return card
 }
 
 export const droppedText = (name: string, place: DroppedText, nameOf: (id: string) => string): HTMLElement =>
