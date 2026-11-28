@@ -10,9 +10,10 @@ import type { EditableSubtitle } from "../timeline-row.ts"
 import { icon } from "./icons.ts"
 import { insertAsk, joinAsk, wordAsk, type AskActions } from "./montage-asks.ts"
 import type { Numbered, Part } from "./montage-model.ts"
+import { zoomGroup, type ZoomActions } from "./montage-zooms.ts"
 import { button, menuButton } from "./ui.ts"
 
-export interface PartActions extends AskActions {
+export interface PartActions extends AskActions, ZoomActions {
   readonly choose: (block: string, take: Take) => void
   readonly hearTake: (block: string, take: Take) => void
   readonly hearPause: (one: Placed, pause: Pause) => void
@@ -157,6 +158,7 @@ export const partDetail = (part: Part, data: PartData, actions: PartActions): HT
     wordsGroup(part, data, actions),
     ...part.one.block.takes.length < 2 ? [] : [group("Дубль", h("ul", { class: "takes" }, ...part.one.block.takes.map((take) => takeItem(part.one, take, data, actions))))],
     ...joinGroup(part, data, actions),
+    ...zoomGroup(part.zooms, data.phraseOf, actions),
     ...screenGroup(part, data, actions))
 }
 
