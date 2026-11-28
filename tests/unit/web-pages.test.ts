@@ -54,6 +54,22 @@ test("a part number before статьи is not mistaken for an article number", 
   expect(articleMentions(["пунктом", "2", "статьи", "450"])).toEqual(["450"])
 })
 
+test("part numbers listed before статьи are not mistaken for article numbers", () => {
+  expect(articleMentions(["по", "частям", "1", "и", "2", "статьи", "159"])).toEqual(["159"])
+  expect(articleMentions(["ч.", "1,", "2", "ст.", "159"])).toEqual(["159"])
+  expect(articleMentions(["части", "1", "и", "3", "статьи", "450"])).toEqual(["450"])
+  expect(articleMentions(["пунктами", "1", "и", "2", "статьи", "450", "ГК"])).toEqual(["450"])
+})
+
+test("a count of articles is not an article number", () => {
+  expect(articleMentions(["в", "законе", "3", "статьи"])).toEqual([])
+})
+
+test("a list after the article word stops at a number that counts something else", () => {
+  expect(articleMentions(["статья", "159", "и", "5", "лет"])).toEqual(["159"])
+  expect(articleMentions(["статьи", "620", "и", "621", "ГК"])).toEqual(["620", "621"])
+})
+
 test("a number with no article word next to it is not a mention", () => {
   expect(articleMentions(["Это", "стоит", "620", "рублей"])).toEqual([])
 })
