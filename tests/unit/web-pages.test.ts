@@ -125,6 +125,17 @@ test.each([
   expect(articleMentions(phrase.split(" "))).toEqual(expected)
 })
 
+test.each([
+  ["ч. 3 ст. 30, ч. 1 ст. 105 УК РФ", ["30", "105"]],
+  ["часть 3 статьи 30, часть 1 статьи 105", ["30", "105"]],
+  ["статья 158 часть 5 статьи 159", ["158", "159"]],
+  ["ст. 158, ч. 3 ст. 159 УК", ["158", "159"]],
+  ["по статье 228, пункт 1 статьи 229", ["228", "229"]],
+  ["ст. 159 и ч. 3 ст. 160", ["159", "160"]]
+])("the part number of a second citation is not read as an article after the first: %s", (phrase, expected) => {
+  expect(articleMentions(phrase.split(" "))).toEqual(expected)
+})
+
 test("a count of articles is not an article number", () => {
   expect(articleMentions(["в", "законе", "3", "статьи"])).toEqual([])
 })
