@@ -24,6 +24,8 @@ const ZOOM_INSTEAD = { off: "без приближений", soft: "мягких
 
 const ZOOM_BACK = { off: "Снова без приближений", soft: "Вернуть мягкие", full: "Вернуть сильные" } satisfies Record<ZoomLevel, string>
 
+const ZOOM_BACK_WITH_PAUSE = { off: "снова без приближений", soft: "мягкие", full: "сильные" } satisfies Record<ZoomLevel, string>
+
 const RULE_STEP = { pause: "montage", zoom: "montage" } satisfies Record<RuleId, Step>
 
 export const hasRules = (step: Step): boolean => Object.values(RULE_STEP).some((owner) => owner === step)
@@ -38,23 +40,28 @@ const lengthLine = (change: PauseChange): string => {
   return `Пауз изменилось: ${change.pauses.length}. Ролик ${shift > 0 ? "длиннее" : "короче"} на ${formatPause(Math.abs(shift))}.`
 }
 
-const zoomCard = (change: ZoomChange, undo: () => void): HTMLElement =>
+export const undoLabel = (changes: ReadonlyArray<RuleChangeView>): string | undefined => {
+  const [first, ...rest] = changes
+  if (first === undefined) return undefined
+  if (rest.length === 0) return first.id === "pause" ? `Вернуть ${seconds(first.from)}` : ZOOM_BACK[first.from]
+  return `Вернуть ${changes.map((one) => one.id === "pause" ? seconds(one.from) : ZOOM_BACK_WITH_PAUSE[one.from]).join(" и ")}`
+}
+
+const zoomCard = (change: ZoomChange): HTMLElement =>
   h("div", { class: "studio-rules__change" },
     h("p", {}, h("b", {}, "Правило изменено из чата: "), `${ZOOM_PHRASES[change.to]} вместо ${ZOOM_INSTEAD[change.from]}.`),
     h("p", { class: "hint" }, change.zooms.length === 0
       ? "В ролике пока нет приближений, которые следуют правилу."
       : `Приближений изменилось: ${change.zooms.length}. Те, что вы выбрали в части сами, остались как были.`),
     ...change.zooms.length === 0 ? [] : [h("ol", { class: "studio-rules__pauses" }, ...change.zooms.map((zoom) =>
-      h("li", {}, `«${zoom.block}», на «${zoom.words}»`)))],
-    button("quiet", ZOOM_BACK[change.from], { class: "btn btn--quiet btn--start", "data-key": "undo", click: undo }, "retry"))
+      h("li", {}, `«${zoom.block}», на «${zoom.words}»`)))])
 
-const changeCard = (change: RuleChangeView, undo: () => void): HTMLElement => change.id === "zoom" ? zoomCard(change, undo) :
+const changeCard = (change: RuleChangeView): HTMLElement => change.id === "zoom" ? zoomCard(change) :
   h("div", { class: "studio-rules__change" },
     h("p", {}, h("b", {}, "Правило изменено из чата: "), `${pausePhrase(change.to)} вместо ${seconds(change.from)}.`),
     h("p", { class: "hint" }, lengthLine(change)),
     ...change.pauses.length === 0 ? [] : [h("ol", { class: "studio-rules__pauses" }, ...change.pauses.map((pause) =>
-      h("li", {}, `«${pause.block}», после «${pause.word}»: ${seconds(pause.from)} → ${seconds(pause.to)}`)))],
-    button("quiet", `Вернуть ${seconds(change.from)}`, { class: "btn btn--quiet btn--start", "data-key": "undo", click: undo }, "retry"))
+      h("li", {}, `«${pause.block}», после «${pause.word}»: ${seconds(pause.from)} → ${seconds(pause.to)}`)))])
 
 export interface RulesPanel {
   readonly node: HTMLElement
@@ -63,7 +70,7 @@ export interface RulesPanel {
 
 export const rulesPanel = (id: string, step: Step, chat: Pick<StudioChat, "status" | "watch">, changed?: () => void): RulesPanel => {
   const list = h("ul", { class: "studio-rules__list" })
-  const change = h("div", {})
+  const change = h("div", { class: "studio-rules__changes" })
   const problem = h("p", { class: "error", role: "alert" })
   const node = h("section", { class: "studio-plan__card studio-rules", "aria-labelledby": "studio-rules-title", hidden: true },
     h("h2", { id: "studio-rules-title" }, "Правила"),
@@ -110,7 +117,10 @@ export const rulesPanel = (id: string, step: Step, chat: Pick<StudioChat, "statu
     const focused = active instanceof HTMLElement && node.contains(active) ? active.dataset["key"] : undefined
     list.replaceChildren(...view.rules.filter((rule) => RULE_STEP[rule.id] === step).map(ruleItem))
     const undo = (): void => { if (!busy && chat.status() !== "busy") load(Api.undoRule(id), changed) }
-    change.replaceChildren(...view.changes.filter((one) => RULE_STEP[one.id] === step).map((one) => changeCard(one, undo)))
+    const changes = view.changes.filter((one) => RULE_STEP[one.id] === step)
+    const label = undoLabel(changes)
+    change.replaceChildren(...changes.map(changeCard),
+      ...label === undefined ? [] : [button("quiet", label, { class: "btn btn--quiet btn--start", "data-key": "undo", click: undo }, "retry")])
     lock()
     node.hidden = false
     if (focused !== undefined) (node.querySelector<HTMLElement>(`[data-key="${focused}"]`) ?? list.querySelector("button"))?.focus()

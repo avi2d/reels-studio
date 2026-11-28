@@ -36,7 +36,6 @@ When a video is listed as the studio could not hear it, say that the person can 
 8. Change the files when the person asks, and show the plan again.
 9. End every answer about a video with its ideas and the next steps: what else could be removed or kept, and what the person can do now.
    While the plan waits for a yes, the next step is to press «Согласна» under the plan on the page or to write it in the chat.
-   The plan has its yes when `approval.json` holds the same text as `plan.md`, and then you never ask for another one.
 10. When the person agrees, follow «After the yes».
 
 ## After the yes

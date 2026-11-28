@@ -77,9 +77,27 @@ const centreOf = (faces: VideoFaces | undefined, clip: Clip, time: number): { re
   return { x: clamp(head.x, 0, VIEW_WIDTH), y: clamp(head.y, 0, 1) }
 }
 
-interface Pushed {
-  readonly push: Push
-  readonly video: string
+interface Candidate {
+  readonly place: ZoomPlace
+  readonly push?: Push
+}
+
+const easedApart = (candidates: ReadonlyArray<Candidate>): ReadonlyArray<Candidate> => {
+  const soonest = new Map<string, number>()
+  const eased = new Map<Candidate, Push>()
+  const latestFirst = candidates.flatMap((one) => one.push === undefined ? [] : [{ one, push: one.push }]).sort((a, b) => b.push.start - a.push.start)
+  for (const { one, push } of latestFirst) {
+    const video = one.place.planned.video
+    const peak = Math.min(push.peak, (soonest.get(video) ?? Number.POSITIVE_INFINITY) - ZOOM_OUT_SECONDS)
+    if (peak - push.start < ZOOM_OUT_SECONDS) continue
+    eased.set(one, { ...push, peak, end: peak + ZOOM_OUT_SECONDS })
+    soonest.set(video, push.start)
+  }
+  return candidates.flatMap((one): ReadonlyArray<Candidate> => {
+    if (one.push === undefined) return [one]
+    const push = eased.get(one)
+    return push === undefined ? [] : [{ place: one.place, push }]
+  })
 }
 
 export const zoomedOf = (
@@ -90,8 +108,7 @@ export const zoomedOf = (
   edits: Edits,
   rule: ZoomLevel
 ): { readonly clips: ReadonlyArray<Clip>; readonly places: ReadonlyArray<ZoomPlace> } => {
-  const places: Array<ZoomPlace> = []
-  const pushed: Array<Pushed> = []
+  const candidates: Array<Candidate> = []
   for (const zoom of apartZooms(planned)) {
     const span = spanOf(zoom, transcripts)
     if (span === undefined) continue
@@ -105,22 +122,18 @@ export const zoomedOf = (
     const video = faces.get(zoom.video)
     const scale = Math.min(ZOOM_SCALES[level], zoomLimit(video?.aspect, video?.height) / (clip.frame?.scale ?? 1))
     if (level === "off" || scale < SEEN_SCALE) {
-      places.push({ ...place, state: level === "off" ? "off" : "limited" })
+      candidates.push({ place: { ...place, state: level === "off" ? "off" : "limited" } })
       continue
     }
     const peak = Math.max(span.end, span.start + LEAST_PUSH_SECONDS)
-    pushed.push({ video: zoom.video, push: { start: span.start, peak, end: peak + ZOOM_OUT_SECONDS, scale, ...centreOf(video, clip, span.start) } })
-    places.push({ ...place, state: "zoomed" })
+    candidates.push({ place: { ...place, state: "zoomed" }, push: { start: span.start, peak, end: peak + ZOOM_OUT_SECONDS, scale, ...centreOf(video, clip, span.start) } })
   }
-  const apart = pushed.map((one): Pushed => {
-    const next = pushed.filter((other) => other.video === one.video && other.push.start > one.push.start).reduce((soonest, other) => Math.min(soonest, other.push.start), Number.POSITIVE_INFINITY)
-    return { ...one, push: { ...one.push, peak: Math.min(one.push.peak, next), end: Math.min(one.push.end, next) } }
-  })
+  const apart = easedApart(candidates)
   const zoomed = clips.map((clip): Clip => {
-    const pushes = apart.filter((one) => overlaps(clip, one.video, one.push.start, one.push.end)).map((one) => one.push)
+    const pushes = apart.flatMap(({ place, push }) => push !== undefined && overlaps(clip, place.planned.video, push.start, push.end) ? [push] : [])
     return pushes.length === 0 ? clip : { ...clip, pushes }
   })
-  return { clips: zoomed, places }
+  return { clips: zoomed, places: apart.map((one) => one.place) }
 }
 
 export const withZoom = (edits: Edits, id: string, level: ZoomLevel): Edits => ({

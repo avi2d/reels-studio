@@ -64,6 +64,36 @@ test("a second zoom on words the first already holds is dropped instead of makin
   expect(apartZooms([zoom("a", 3, 5), zoom("b", 5, 6), zoom("c", 7, 7)]).map((one) => one.id)).toEqual(["a", "c"])
 })
 
+const FRAME = 1 / 30
+const said = (spans: ReadonlyArray<readonly [number, number]>): ReadonlyMap<string, Transcript> =>
+  new Map([["a", { duration: 20, words: spans.map(([start, end], index) => ({ start, end, text: `w${index}` })) }]])
+const largestFrameStep = (clips: ReadonlyArray<Clip>, from: number, to: number): number => {
+  const pushes = clips.flatMap((one) => one.pushes ?? [])
+  let last = 1
+  let largest = 0
+  for (let frame = Math.round(from / FRAME); frame <= Math.round(to / FRAME); frame += 1) {
+    const scale = zoomAt(pushes, frame * FRAME)?.scale ?? 1
+    largest = Math.max(largest, Math.abs(scale - last))
+    last = scale
+  }
+  return largest
+}
+
+test("a zoom that starts before the last one could rise drops the last one, instead of snapping it from almost full back to none in one frame", () => {
+  const { clips, places } = zoomedOf([clip("one", 0, 12)], [zoom("one", 0, 0), zoom("two", 1, 1)], faces, said([[6, 6.3], [6.35, 6.6]]), NO_EDITS, "full")
+  expect(largestFrameStep(clips, 5, 8)).toBeLessThan(0.05)
+  expect(places.map((place) => place.planned.id)).toEqual(["two"])
+})
+
+test("a zoom close after another lets the first reach its full push and ease out before the next starts, instead of dropping it or cutting it off", () => {
+  const { clips, places } = zoomedOf([clip("one", 0, 12)], [zoom("one", 0, 0), zoom("two", 1, 1)], faces, said([[6, 6.3], [6.8, 7]]), NO_EDITS, "full")
+  const pushes = clips[0]?.pushes ?? []
+  expect(zoomAt(pushes, 6.5)?.scale).toBeCloseTo(ZOOM_SCALES.full)
+  expect(zoomAt(pushes, 6.8)).toBeUndefined()
+  expect(largestFrameStep(clips, 5, 8)).toBeLessThan(0.05)
+  expect(places.map((place) => place.state)).toEqual(["zoomed", "zoomed"])
+})
+
 test("a zoom that starts before the last one has eased out cuts the last one short, so two pushes never add up", () => {
   const { clips } = zoomedOf(reel, [zoom("one", 6, 6), zoom("two", 7, 7)], faces, transcripts, NO_EDITS, "full")
   const [first, second] = clips[1]?.pushes ?? []

@@ -288,7 +288,8 @@ On each, the picture pushes in slowly around the eyes, so they stay on one line,
 The push grows over the key words and lasts at least 0.6 s.
 A strong zoom enlarges by 15 % and a soft one by 7 %.
 With a join zoom in the same part, the two together stay within the join zoom limit.
-Two pushes of one video never add up: the earlier one stops where the later one starts.
+Two pushes of one video never add up: the earlier one pulls back fully before the later one starts.
+When that leaves the earlier one less than 0.3 s to push in, the studio leaves it out, and the step does not list it.
 
 The step «Монтаж» lists the zooms of each part under «Приближение», with their words and time.
 «Нет», «Мягкое» and «Сильное» set one zoom, and `timeline.json` keeps the answer by the zoom id.

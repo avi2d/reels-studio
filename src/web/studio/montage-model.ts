@@ -64,10 +64,16 @@ export const questionKey = (question: Question): string => question.kind === "jo
 
 export const isOpen = (question: Question): boolean => question.place.place.answer === undefined
 
-export const cutOfPage = (view: TimelinePage, timeline: Ready, transcripts: ReadonlyMap<string, Transcript>, edits: Edits): Cut => {
+export const zoomedReel = (view: TimelinePage, timeline: Ready, transcripts: ReadonlyMap<string, Transcript>, edits: Edits): ReturnType<typeof zoomedOf> & { readonly placed: ReadonlyArray<Placed> } => {
   const placed = assemble(timeline.blocks, edits, transcripts, timeline.rest)
   const faces = facesByVideo(view.faces)
-  const zoomed = zoomedOf(cutOf(clipsOf(placed), faces, transcripts, edits), view.zooms.state === "ready" ? view.zooms.planned : [], faces, transcripts, edits, timeline.zoom)
+  return { ...zoomedOf(cutOf(clipsOf(placed), faces, transcripts, edits), view.zooms.state === "ready" ? view.zooms.planned : [], faces, transcripts, edits, timeline.zoom), placed }
+}
+
+export const cutOfPage = (view: TimelinePage, timeline: Ready, transcripts: ReadonlyMap<string, Transcript>, edits: Edits): Cut => {
+  const zoomed = zoomedReel(view, timeline, transcripts, edits)
+  const { placed } = zoomed
+  const faces = facesByVideo(view.faces)
   const reel = zoomed.clips
   const zooms = numbered(zoomed.places)
   const joins = numbered(placesOf(clipsOf(placed), faces, transcripts, edits))

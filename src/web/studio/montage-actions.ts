@@ -1,8 +1,8 @@
 import { aroundInsert, reelWithin, shiftedBy, withInsert, type Shown } from "../../shared/inserts.ts"
-import { AROUND_JOIN_SECONDS, aroundJoin, cutOf, facesByVideo, withAnswer, withCover } from "../../shared/joins.ts"
+import { AROUND_JOIN_SECONDS, aroundJoin, withAnswer, withCover } from "../../shared/joins.ts"
 import { lengthOf } from "../../shared/plan.ts"
 import {
-  arrange, assemble, clipsOf, playedSpans, withChoice, withDeleted, withManualPauses, within,
+  arrange, playedSpans, withChoice, withDeleted, withManualPauses, within,
   type Block, type Clip, type Edits, type Take
 } from "../../shared/timeline.ts"
 import * as Api from "../api.ts"
@@ -10,6 +10,7 @@ import { h } from "../dom.ts"
 import type { EditHistory } from "../edit-history.ts"
 import { correctSubtitle } from "../timeline-subtitles.ts"
 import { withZoom } from "../../shared/zooms.ts"
+import { zoomedReel } from "./montage-model.ts"
 import type { PartActions } from "./montage-part.ts"
 import type { State } from "./montage-screen.ts"
 import { button } from "./ui.ts"
@@ -63,8 +64,7 @@ const joinActions = ({ state, history, hear }: ActionsContext): Pick<PartActions
     const timeline = loaded?.view.timeline
     if (loaded === undefined || timeline?.state !== "ready") return
     const leave = withAnswer(state.edits, join, "leave")
-    const reel = cutOf(clipsOf(assemble(timeline.blocks, leave, loaded.transcripts, timeline.rest)), facesByVideo(loaded.view.faces), loaded.transcripts, leave)
-    hear(aroundJoin(reel, join, AROUND_JOIN_SECONDS), [])
+    hear(aroundJoin(zoomedReel(loaded.view, timeline, loaded.transcripts, leave).clips, join, AROUND_JOIN_SECONDS), [])
   },
   answer: (join, answer) => { history.change(withAnswer(state.edits, join, answer)) },
   cover: (join, picture) => { history.change(withCover(state.edits, join, picture)) }
