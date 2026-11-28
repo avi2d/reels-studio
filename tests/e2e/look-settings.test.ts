@@ -4,6 +4,7 @@ import { chromium, type Browser, type Page, type Route } from "playwright-core"
 import { Schema } from "effect"
 import { NewLooks, type ExampleLook, type LooksView } from "../../src/shared/looks.ts"
 import { NO_EDITS, type TimelinePage } from "../../src/shared/timeline.ts"
+import type { SoundCheck } from "../../src/shared/reel.ts"
 
 let browser: Browser
 let server: ReturnType<typeof Bun.serve>
@@ -124,6 +125,68 @@ test("a trim of the same recording does not reload its cleaned preview, but a ma
     await page.close()
   }
 }, 15_000)
+
+const heardAt = (db: number, fresh: boolean): SoundCheck => ({
+  job: fresh ? { state: "idle" } : { state: "running", done: 0.5 },
+  heard: {
+    fresh, seconds: 8,
+    levelling: {
+      before: -24, after: { lufs: -14, lra: 0, truePeak: -2 },
+      series: { before: [], after: [] }, passages: []
+    },
+    parts: [{ video: "a.mp4", from: 0, to: 8, gains: [{ time: 0, db }] }]
+  }
+})
+
+test("switching noise on step 4 uses the selected preview gain without keeping the old gain or reopening", async () => {
+  const page = await browser.newPage()
+  page.setDefaultTimeout(5000)
+  let selected = false
+  let measured = false
+  try {
+    await page.addInitScript(() => {
+      const setTarget: unknown = Object.getOwnPropertyDescriptor(AudioParam.prototype, "setTargetAtTime")?.value
+      if (typeof setTarget !== "function") throw new Error("Web Audio must support gain targets")
+      AudioParam.prototype.setTargetAtTime = function(value, ...rest) {
+        document.documentElement.dataset.previewGain = String(value)
+        return Reflect.apply(setTarget, this, [value, ...rest])
+      }
+    })
+    await page.route("**/api/projects/review/noise", (route) => route.fulfill({ json: {
+      job: { state: "idle" }, ...(selected ? { noise: "strong", cleaned: { made: "fixture" } } : { noise: "off" })
+    } }))
+    await page.route("**/api/projects/review/noise/choice", (route) => {
+      selected = true
+      return route.fulfill({ json: { job: { state: "idle" }, noise: "strong", cleaned: { made: "fixture" } } })
+    })
+    await page.route("**/noise/strong/a.mp4?made=*", (route) =>
+      route.fulfill({ contentType: "video/mp4", path: `${directory}/a.mp4` }))
+    await page.route("**/api/projects/review/sound", (route) =>
+      route.fulfill({ json: selected && measured ? heardAt(20, true) : heardAt(6, !selected) }))
+    const gain = (target: number) => page.waitForFunction((want) =>
+      Number(document.documentElement.dataset.previewGain) === want
+      && [...document.querySelectorAll("video")].some((video) => !video.paused && video.currentTime > 0), target)
+    const watch = page.getByRole("button", { name: "Смотреть ролик", exact: true })
+    await page.goto(server.url.href)
+    await watch.click()
+    await gain(10 ** (6 / 20))
+    const [checking] = await Promise.all([
+      page.waitForResponse((response) => response.url().endsWith("/sound")),
+      page.getByRole("button", { name: "Убрать сильно", exact: true }).click()
+    ])
+    expect(await checking.finished()).toBeNull()
+    await page.locator('video[src*="/noise/strong/"]').waitFor({ state: "attached" })
+    await gain(1)
+    measured = true
+    await gain(10)
+    await page.reload()
+    await page.locator('video[src*="/noise/strong/"]').waitFor({ state: "attached" })
+    await watch.click()
+    await gain(10)
+  } finally {
+    await page.close()
+  }
+}, 20_000)
 
 for (const change of ["add", "remove", "replace", "change before the first reply"] as const) {
   test(`a ${change} during noise cleaning neither strands the latest sources nor repeats finished work`, async () => {

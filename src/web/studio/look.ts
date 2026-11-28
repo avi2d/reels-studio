@@ -1,4 +1,5 @@
 import { lookAt, type Shown } from "../../shared/inserts.ts"
+import type { Noise } from "../../shared/noise.ts"
 import { stepPath } from "../../shared/page.ts"
 import type { ShownWord } from "../../shared/subtitles.ts"
 import { NO_EDITS, type Edits } from "../../shared/timeline.ts"
@@ -65,9 +66,19 @@ const lookGroups = (subtitles: Node, face: Node, noise: Node): HTMLElement =>
         h("h2", { class: "group__title", id: "look-sound" }, "Звук"),
         noise))
 
+const lookSound = (projectId: string) => {
+  const sound = montageSound(projectId, { freshGainsOnly: true })
+  let previewMatchesChoice = false
+  const previewChoice = (choice: Noise | undefined): void => {
+    previewMatchesChoice = choice !== undefined
+    if (previewMatchesChoice) sound.refresh()
+  }
+  return { node: sound.node, previewChoice, dbAt: (video: string, time: number) => previewMatchesChoice ? sound.dbAt(video, time) : 0 }
+}
+
 export const lookStep = (projectId: string): LookStep => {
   const state: State = { loaded: undefined, cut: undefined, drawn: "", edits: NO_EDITS, base: undefined, shown: [], overlay: [], words: [], playing: undefined }
-  const sound = montageSound(projectId)
+  const sound = lookSound(projectId)
   const overlay = insertView(Api.insertUrls(projectId))
   const thought = h("div", { class: "thought-preview", "aria-hidden": "true" })
   const margins = lookMargins(projectId)
@@ -75,7 +86,7 @@ export const lookStep = (projectId: string): LookStep => {
   const clock = h("span", { class: "clock" })
   const frame = h("div", { class: "frame" }, overlay.node, thought)
   const face = lookFace(projectId)
-  const noise = lookNoise(projectId, (urlOf) => { player.source(urlOf) })
+  const noise = lookNoise(projectId, (urlOf) => { player.source(urlOf) }, sound.previewChoice)
   const subtitles = lookSubtitles(projectId, (view) => {
     const middle = view.subtitles.style === "example" && view.example?.title === "middle"
     const { box } = textAreaOf("Instagram")
@@ -149,7 +160,6 @@ export const lookStep = (projectId: string): LookStep => {
   // The loader stops once its anchor leaves the page, so the first load waits until the caller has put the body on the page.
   queueMicrotask(() => {
     refresh()
-    sound.refresh()
     face.refresh()
     subtitles.refresh()
   })

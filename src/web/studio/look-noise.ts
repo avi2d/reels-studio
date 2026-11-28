@@ -45,8 +45,9 @@ export interface LookNoise {
   readonly dispose: () => void
 }
 
-export const lookNoise = (projectId: string, onSource: (urlOf: UrlOf) => void): LookNoise => {
+export const lookNoise = (projectId: string, onSource: (urlOf: UrlOf) => void, onPreviewChoice: (choice: Noise | undefined) => void): LookNoise => {
   let source = ""
+  let previewChoice: Noise | undefined
   let refreshState: "idle" | "requested" | "pending" = "idle"
   const choices = CHOICES.map(([noise, label]) => [noise, button("quiet", label, { "aria-pressed": "false", click: () => { choose(noise) } })] as const)
   const facts = h("div", { class: "look-noise__facts" })
@@ -59,6 +60,18 @@ export const lookNoise = (projectId: string, onSource: (urlOf: UrlOf) => void): 
     h("div", { class: "look-row__control" },
       h("div", { class: "seg look-noise__choices", role: "group", "aria-labelledby": "look-noise-title" }, ...choices.map(([, choice]) => choice)),
       h("p", { class: "hint" }, ABOUT), facts, status, bar, problem, again))
+
+  const showPreview = (view: NoiseView): void => {
+    const choice = view.noise === "off" || view.cleaned !== undefined ? view.noise : undefined
+    if (choice !== previewChoice) {
+      previewChoice = choice
+      onPreviewChoice(choice)
+    }
+    const key = sourceKey(view)
+    if (key === source) return
+    source = key
+    onSource(sourceOf(projectId, view))
+  }
 
   const show = (view: NoiseView): void => {
     if (!isBusy(view)) {
@@ -79,10 +92,7 @@ export const lookNoise = (projectId: string, onSource: (urlOf: UrlOf) => void): 
     bar.value = view.job.state === "running" ? view.job.done : 0
     problem.textContent = view.job.state === "failed" ? FAILED : ""
     again.hidden = view.job.state !== "failed"
-    const key = sourceKey(view)
-    if (key === source) return
-    source = key
-    onSource(sourceOf(projectId, view))
+    showPreview(view)
   }
 
   const requests = queued({ node, problem, isBusy, show, load: Api.getNoise(projectId) })
