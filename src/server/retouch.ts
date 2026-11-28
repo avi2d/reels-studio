@@ -1,10 +1,11 @@
-import { DateTime, Effect, FileSystem, Option, Schema } from "effect"
+import { Cause, Data, DateTime, Effect, FileSystem, Option, Schema } from "effect"
+import type { NoFace } from "../shared/face.ts"
 import type { ReelJob } from "../shared/reel.ts"
-import { TRIAL_SECONDS, type RetouchPicture, type RetouchView } from "../shared/retouch.ts"
+import { CLOSE_UP_FROM_SECONDS, TRIAL_SECONDS, type RetouchPicture, type RetouchView } from "../shared/retouch.ts"
 import type { Clip } from "../shared/timeline.ts"
 import { readFace, retouchVideo } from "./face.ts"
-import { compareArgs, firstSeconds, partsOf, secondsOf } from "./media-commands.ts"
-import { tool } from "./media-jobs.ts"
+import { compareArgs, firstSeconds, partsOf, REEL_RATE, secondsOf } from "./media-commands.ts"
+import { tool, ToolFailed } from "./media-jobs.ts"
 import { builtFace, renderParts } from "./reel.ts"
 import { Settings } from "./settings.ts"
 
@@ -13,6 +14,13 @@ const decodeMeasured = Schema.decodeUnknownEffect(Measured)
 const TrialFile = Schema.fromJsonString(Schema.Struct({ made: Schema.String, seconds: Schema.Finite, took: Schema.Finite }))
 const decodeTrial = Schema.decodeUnknownOption(TrialFile)
 const encodeTrial = Schema.encodeEffect(TrialFile)
+
+class TrialFoundNoFace extends Data.TaggedError("TrialFoundNoFace")<{ readonly why: NoFace }> {}
+
+export const noFaceOf = (cause: Cause.Cause<unknown>): Option.Option<NoFace> =>
+  Option.map(Option.filter(Cause.findErrorOption(cause), (error) => error instanceof TrialFoundNoFace), (error) => error.why)
+
+const NO_CLOSE_UP_EXIT = 66
 
 const RENDER_SHARE = 0.3
 const RETOUCH_SHARE = 0.65
@@ -32,11 +40,14 @@ const encodeTrialRun = Effect.fnUntraced(function*(dir: string, clips: ReadonlyA
   const place = trialPlaces(dir)
   const parts = firstSeconds(partsOf(clips), TRIAL_SECONDS)
   const frames = parts.reduce((total, part) => total + part.frames, 0)
+  if (frames < CLOSE_UP_FROM_SECONDS * REEL_RATE) return yield* new TrialFoundNoFace({ why: "short-cut" })
   yield* fs.remove(place.work, { recursive: true, force: true })
   yield* fs.makeDirectory(place.work, { recursive: true })
   const before = `${place.work}/before.mp4`
   yield* renderParts(dir, parts, [], place.work, before, (share) => onDone(share * RENDER_SHARE))
-  yield* retouchVideo({ before, folder: place.work, frames, closeUp: true }, (share) => onDone(RENDER_SHARE + share * RETOUCH_SHARE))
+  yield* retouchVideo({ before, folder: place.work, frames, closeUp: true }, (share) => onDone(RENDER_SHARE + share * RETOUCH_SHARE)).pipe(
+    Effect.catchIf((error) => error instanceof ToolFailed && error.code === NO_CLOSE_UP_EXIT, () => Effect.fail(new TrialFoundNoFace({ why: "unseen" })))
+  )
   const measured = yield* decodeMeasured(yield* fs.readFileString(`${place.work}/retouch.json`))
   yield* tool("ffmpeg", compareArgs(before, `${place.work}/after.mp4`, settings.encoder, `${place.work}/compare.mp4`), settings.heavy)
   yield* fs.remove(place.record, { force: true })

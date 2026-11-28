@@ -1,8 +1,9 @@
 import { Schema } from "effect"
-import { Face } from "./face.ts"
+import { Face, NoFace } from "./face.ts"
 
 export const ReelJob = Schema.Union([
-  Schema.Struct({ state: Schema.Literals(["idle", "waiting", "failed"]) }),
+  Schema.Struct({ state: Schema.Literals(["idle", "waiting"]) }),
+  Schema.Struct({ state: Schema.Literal("failed"), noFace: Schema.optionalKey(NoFace) }),
   Schema.Struct({ state: Schema.Literal("running"), done: Schema.Finite })
 ])
 export type ReelJob = typeof ReelJob.Type

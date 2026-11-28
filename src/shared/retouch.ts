@@ -3,6 +3,7 @@ import { Face } from "./face.ts"
 import { ReelJob } from "./reel.ts"
 
 export const TRIAL_SECONDS = 20
+export const CLOSE_UP_FROM_SECONDS = 3
 
 export const RetouchPicture = Schema.Literals(["before.jpg", "after.jpg", "compare.mp4"])
 export type RetouchPicture = typeof RetouchPicture.Type

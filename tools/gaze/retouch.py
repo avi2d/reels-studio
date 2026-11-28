@@ -144,6 +144,7 @@ def main() -> None:
     parser.add_argument("folder")
     parser.add_argument("--encoder", default="libx264")
     parser.add_argument("--close-up", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--close-up-from", type=float, default=3)
     args = parser.parse_args()
     folder = Path(args.folder)
 
@@ -190,7 +191,7 @@ def main() -> None:
             else:
                 steady = steady + (points - steady) * STEADY
             done = retouch(frame, steady)
-            if args.close_up and not pictured and frames >= RATE * 3:
+            if args.close_up and not pictured and frames >= RATE * args.close_up_from:
                 cv2.imwrite(str(folder / "before.jpg"), close_up(frame, steady), [cv2.IMWRITE_JPEG_QUALITY, 92])
                 cv2.imwrite(str(folder / "after.jpg"), close_up(done, steady), [cv2.IMWRITE_JPEG_QUALITY, 92])
                 pictured = True
@@ -205,7 +206,7 @@ def main() -> None:
         print("The video cannot be read or written.", file=sys.stderr)
         raise SystemExit(65)
     if args.close_up and not pictured:
-        print("No face was found after the first 3 seconds, so there is no close-up.", file=sys.stderr)
+        print(f"No face was found after the first {args.close_up_from:g} seconds, so there is no close-up.", file=sys.stderr)
         raise SystemExit(66)
     took = time.monotonic() - started
     result = {"seconds": frames / RATE, "took": round(took, 2)}
