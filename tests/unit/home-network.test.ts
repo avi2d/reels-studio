@@ -6,6 +6,12 @@ test("a public address is refused, not treated as home", () => {
   expect(isHomeAddress("2001:4860:4860::8888")).toBe(false)
 })
 
+test("carrier-grade NAT is not home, including mapped addresses", () => {
+  for (const address of ["100.64.0.0", "100.100.100.100", "100.127.255.255", "::ffff:6440:1"]) {
+    expect(isHomeAddress(address)).toBe(false)
+  }
+})
+
 test("the RFC 1918 block 172.16/12 ends at 172.31, so 172.32 is not home", () => {
   expect(isHomeAddress("172.16.0.1")).toBe(true)
   expect(isHomeAddress("172.31.255.254")).toBe(true)

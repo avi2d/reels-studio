@@ -4,7 +4,7 @@ import os from "node:os"
 const home = new BlockList()
 for (const [address, prefix] of [
   ["10.0.0.0", 8], ["127.0.0.0", 8], ["172.16.0.0", 12],
-  ["192.168.0.0", 16], ["169.254.0.0", 16], ["100.64.0.0", 10]
+  ["192.168.0.0", 16], ["169.254.0.0", 16]
 ] as const) home.addSubnet(address, prefix, "ipv4")
 home.addAddress("::1", "ipv6")
 home.addSubnet("fc00::", 7, "ipv6")

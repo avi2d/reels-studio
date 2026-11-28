@@ -3,7 +3,7 @@ import { request as httpRequest } from "node:http"
 import { request as httpsRequest } from "node:https"
 import { Context, Effect, Schema } from "effect"
 import { ApiError, badRequest } from "./api-error.ts"
-import { checkedAddress, isOutside } from "./web-page-commands.ts"
+import { checkedRequestAddress, isOutside, isSinkAddress } from "./web-page-commands.ts"
 
 export const AT_HOME = "Этот адрес ведёт в домашнюю сеть. Студия открывает только страницы в интернете."
 export const NOT_OPENED = "Страница не открылась. Проверьте адрес или попробуйте позже."
@@ -15,7 +15,8 @@ const outsideAddress = Effect.fnUntraced(function*(host: string) {
     catch: () => badRequest(NOT_OPENED)
   })
   const first = addresses[0]
-  if (first === undefined || !addresses.every((one) => isOutside(one.address))) return yield* badRequest(AT_HOME)
+  if (addresses.some((one) => !isOutside(one.address) && !isSinkAddress(one.address))) return yield* badRequest(AT_HOME)
+  if (first === undefined || addresses.some((one) => isSinkAddress(one.address))) return yield* badRequest(NOT_OPENED)
   return first
 })
 
@@ -30,7 +31,7 @@ export const PageRequest = Schema.Struct({
 export type PageRequest = typeof PageRequest.Type
 
 export const pageResponse = Effect.fnUntraced(function*(request: PageRequest) {
-  const url = checkedAddress(request.url)
+  const url = checkedRequestAddress(request.url)
   if (url === undefined) return yield* badRequest(NOT_OPENED)
   const destination = yield* (yield* WebPageAddress)(url.hostname)
   return yield* Effect.callback<{
@@ -45,7 +46,15 @@ export const pageResponse = Effect.fnUntraced(function*(request: PageRequest) {
       lookup: (_host, _options, done) => done(null, destination.address, destination.family)
     }, (incoming) => {
       const chunks: Array<Buffer> = []
-      incoming.on("data", (chunk: Buffer) => { chunks.push(chunk) })
+      let size = 0
+      incoming.on("data", (chunk: Buffer) => {
+        size += chunk.length
+        if (size > 16 * 1024 * 1024) {
+          resume(Effect.fail(badRequest(NOT_OPENED)))
+          incoming.destroy()
+          outgoing.destroy()
+        } else chunks.push(chunk)
+      })
       incoming.on("error", () => { resume(Effect.fail(badRequest(NOT_OPENED))) })
       incoming.on("end", () => {
         const responseHeaders: Array<{ name: string; value: string }> = []

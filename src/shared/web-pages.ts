@@ -40,7 +40,6 @@ interface Mention {
   readonly at: number
 }
 
-// Both orders are said: «статья 18» and «в 18-й статье».
 export const articleMentions = (words: ReadonlyArray<string>): ReadonlyArray<Mention> => {
   const tokens = words.map(tokenOf)
   return tokens.flatMap((token, at): ReadonlyArray<Mention> => {
@@ -48,7 +47,8 @@ export const articleMentions = (words: ReadonlyArray<string>): ReadonlyArray<Men
     if (number === undefined) return []
     const before = tokens[at - 1]
     const after = tokens[at + 1]
-    const named = (before !== undefined && ARTICLE_WORD.test(before)) || (after !== undefined && ARTICLE_WORD.test(after))
+    const named = (before !== undefined && ARTICLE_WORD.test(before)) ||
+      (after !== undefined && ARTICLE_WORD.test(after) && token !== number)
     return named ? [{ number, at }] : []
   })
 }

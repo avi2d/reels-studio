@@ -4,9 +4,9 @@ import { isHomeAddress } from "./home-network.ts"
 const LONGEST_ADDRESS = 2000
 const LONGEST_LICENCE = 200
 
-export const checkedAddress = (address: string): URL | undefined => {
+export const checkedRequestAddress = (address: string): URL | undefined => {
   const trimmed = address.trim()
-  if (trimmed.length > LONGEST_ADDRESS || !URL.canParse(trimmed)) return undefined
+  if (!URL.canParse(trimmed)) return undefined
   const url = new URL(trimmed)
   if (url.protocol !== "http:" && url.protocol !== "https:") return undefined
   if (url.username !== "" || url.password !== "" || url.hostname === "") return undefined
@@ -14,14 +14,23 @@ export const checkedAddress = (address: string): URL | undefined => {
   return url
 }
 
+export const checkedAddress = (address: string): URL | undefined =>
+  address.trim().length > LONGEST_ADDRESS ? undefined : checkedRequestAddress(address)
+
+const sinks = new BlockList()
+sinks.addSubnet("0.0.0.0", 8, "ipv4")
+sinks.addAddress("::", "ipv6")
+
+export const isSinkAddress = (address: string): boolean =>
+  sinks.check(address, isIP(address) === 6 ? "ipv6" : "ipv4")
+
 const unroutable = new BlockList()
-unroutable.addSubnet("0.0.0.0", 8, "ipv4")
-unroutable.addAddress("::", "ipv6")
+unroutable.addSubnet("100.64.0.0", 10, "ipv4")
 unroutable.addSubnet("64:ff9b::", 96, "ipv6")
 unroutable.addSubnet("64:ff9b:1::", 48, "ipv6")
 
 export const isOutside = (address: string): boolean =>
-  isIP(address) !== 0 && !isHomeAddress(address) && !unroutable.check(address, isIP(address) === 6 ? "ipv6" : "ipv4")
+  isIP(address) !== 0 && !isHomeAddress(address) && !isSinkAddress(address) && !unroutable.check(address, isIP(address) === 6 ? "ipv6" : "ipv4")
 
 export const pageName = (url: URL, digest: string): string =>
   `web-${url.hostname.toLowerCase().replace(/^www\./u, "").replace(/[^a-z0-9.-]/gu, "-")}-${digest.slice(0, 10)}.pdf`

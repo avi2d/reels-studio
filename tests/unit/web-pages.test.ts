@@ -30,6 +30,10 @@ test("the short form ст. is an article word, not a sentence end", () => {
   expect(articleMentions(["ст.", "620"])).toEqual([{ number: "620", at: 1 }])
 })
 
+test("a part number before статьи is not mistaken for an article number", () => {
+  expect(articleMentions(["часть", "1", "статьи", "12.8"])).toEqual([{ number: "12.8", at: 3 }])
+})
+
 test("a number with no article word next to it is not a mention", () => {
   expect(articleMentions(["Это", "стоит", "620", "рублей"])).toEqual([])
 })

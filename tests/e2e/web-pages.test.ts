@@ -5,7 +5,7 @@ import { Effect, Layer, Schema } from "effect"
 import { Attachments } from "../../src/server/attachments.ts"
 import { Projects } from "../../src/server/projects.ts"
 import { Settings } from "../../src/server/settings.ts"
-import { AT_HOME, NOT_OPENED, WebPageAddress } from "../../src/server/web-page-access.ts"
+import { AT_HOME, WebPageAddress } from "../../src/server/web-page-access.ts"
 import { WebPages } from "../../src/server/web-pages.ts"
 import { WebPagesFile } from "../../src/shared/web-pages.ts"
 import { projectAt } from "../unit/server-fixtures.ts"
@@ -27,7 +27,7 @@ const saved = (dir: string, address: string) => Effect.runPromise(Effect.gen(fun
     host: "127.0.0.1", port: 8765, projectsDir: dir, pi: "pi", models: [],
     root: process.cwd(), heavy: [], encoder: "libx264", chrome
   })),
-  Layer.succeed(WebPageAddress, (host) => host === "outside.test" || host === "localhost" ? Effect.succeed({ address: "127.0.0.1", family: 4 }) : actualAddress(host))
+  Layer.succeed(WebPageAddress, (host) => host === "outside.test" || host === "localhost" ? Effect.succeed({ address: "127.0.0.1", family: 4 }) : actualAddress(host === "sink.test" ? "0.0.0.0" : host))
 ))))))
 
 test("an outside page keeps its PDF and licence from one load, not a second unguarded browser", async () => {
@@ -66,7 +66,7 @@ test("an outside page keeps its PDF and licence from one load, not a second ungu
   }
 }, 30000)
 
-test("home requests and unfilterable workers leave no PDF or source record", async () => {
+test("home requests leave no PDF or source record", async () => {
   await mkdir("node_modules/.cache", { recursive: true })
   let privateHits = 0
   const server = Bun.serve({
@@ -83,23 +83,19 @@ test("home requests and unfilterable workers leave no PDF or source record", asy
         "/js-redirect": `<script>location.href=${JSON.stringify(privateUrl)}</script>`,
         "/fetch": `<script>fetch(${JSON.stringify(privateUrl)})</script>`,
         "/xhr": `<script>const x=new XMLHttpRequest();x.open("GET",${JSON.stringify(privateUrl)});x.send()</script>`,
-        "/socket": `<script>new WebSocket(${JSON.stringify(privateUrl.replace("http:", "ws:"))})</script>`,
-        "/worker": `<script>new Worker("/worker.js")</script>`,
-        "/worker.js": `fetch(${JSON.stringify(privateUrl)})`,
-        "/service-worker": '<script>navigator.serviceWorker.register("/worker.js")</script>'
+        "/socket": `<script>new WebSocket(${JSON.stringify(privateUrl.replace("http:", "ws:"))})</script>`
       }
-      return new Response(pages[path] ?? "", { headers: { "content-type": path.endsWith(".js") ? "text/javascript" : "text/html" } })
+      return new Response(pages[path] ?? "", { headers: { "content-type": "text/html" } })
     }
   })
   try {
-    for (const path of ["/redirect", "/frame", "/image", "/script", "/js-redirect", "/fetch", "/xhr", "/socket", "/worker", "/service-worker"]) {
+    for (const path of ["/redirect", "/frame", "/image", "/script", "/js-redirect", "/fetch", "/xhr", "/socket"]) {
       const dir = await mkdtemp("node_modules/.cache/web-page-")
       try {
-        const host = path === "/service-worker" ? "localhost" : "outside.test"
-        const result = await saved(dir, `http://${host}:${server.port}${path}`)
+        const result = await saved(dir, `http://outside.test:${server.port}${path}`)
         expect(result._tag).toBe("Failure")
         if (result._tag !== "Failure") throw new Error("A home-network request was saved")
-        expect(result.failure.message).toBe(path.endsWith("worker") ? NOT_OPENED : AT_HOME)
+        expect(result.failure.message).toBe(AT_HOME)
         expect(await readdir(`${dir}/attached`).catch(() => [])).toEqual([])
         expect(await Bun.file(`${dir}/web-pages.json`).exists()).toBe(false)
         expect(privateHits).toBe(0)
@@ -107,3 +103,110 @@ test("home requests and unfilterable workers leave no PDF or source record", asy
     }
   } finally { await server.stop(true) }
 }, 60000)
+
+test("unreachable, cancelled, sink, worker and socket resources do not discard a public page", async () => {
+  await mkdir("node_modules/.cache", { recursive: true })
+  const dir = await mkdtemp("node_modules/.cache/web-resources-")
+  const started = Promise.withResolvers<void>()
+  const aborted = Promise.withResolvers<void>()
+  const paths = new Set<string>()
+  const server = Bun.serve({
+    hostname: "127.0.0.1", port: 0,
+    async fetch(request): Promise<Response> {
+      const url = new URL(request.url)
+      paths.add(url.pathname)
+      if (url.pathname === "/cancelled") {
+        started.resolve()
+        await aborted.promise
+        return new Response("late response")
+      }
+      if (url.pathname === "/abort-ready") {
+        await started.promise
+        return new Response("ready")
+      }
+      if (url.pathname === "/abort-ack") aborted.resolve()
+      if (url.pathname === "/large") return new Response(new Uint8Array(17 * 1024 * 1024))
+      if (url.pathname === "/long") return new Response("long address works")
+      if (url.pathname === "/poll") {
+        return new Response(new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode("pending")) } }))
+      }
+      if (url.pathname === "/worker.js") return new Response(`fetch("http://127.0.0.1:${server.port}/private")`, { headers: { "content-type": "text/javascript" } })
+      if (url.pathname !== "/page") return new Response("")
+      return new Response(`<h1>Статья 620</h1><a rel="license">waiting</a><script>
+        const failures = [
+          fetch("http://unreachable.invalid/").then(() => false, () => true),
+          fetch("http://sink.test:${server.port}/sink").then(() => false, () => true),
+          fetch("/large").then(() => false, () => true)
+        ];
+        const controller = new AbortController();
+        const cancelled = fetch("/cancelled", {signal: controller.signal}).then(() => false, e => e.name === "AbortError");
+        fetch("/abort-ready").then(() => { controller.abort(); return fetch("/abort-ack") });
+        failures.push(cancelled);
+        failures.push(new Promise(resolve => {
+          const socket = new WebSocket("ws://outside.test:${server.port}/socket");
+          socket.onerror = () => resolve(true);
+          socket.onopen = () => resolve(false);
+        }));
+        new Worker("/worker.js");
+        fetch("/poll");
+        const long = fetch("/long?q=" + "x".repeat(2100)).then(r => r.text());
+        Promise.all([Promise.all(failures), long]).then(([failed, text]) => {
+          document.querySelector('[rel="license"]').textContent =
+            failed.every(Boolean) && text === "long address works" ? "CC BY 4.0" : "unexpected resource result";
+        });
+      </script>`, { headers: { "content-type": "text/html" } })
+    }
+  })
+  try {
+    const result = await saved(dir, `http://outside.test:${server.port}/page`)
+    expect(result._tag).toBe("Success")
+    if (result._tag !== "Success") throw result.failure
+    expect(result.success.licence).toBe("CC BY 4.0")
+    expect((await readFile(`${dir}/attached/${result.success.file}`)).subarray(0, 5).toString()).toBe("%PDF-")
+    const record = Schema.decodeUnknownSync(Schema.fromJsonString(WebPagesFile))(await readFile(`${dir}/web-pages.json`, "utf8"))
+    expect(record.pages).toHaveLength(1)
+    expect(paths.has("/cancelled")).toBe(true)
+    expect(paths.has("/abort-ack")).toBe(true)
+    expect(paths.has("/long")).toBe(true)
+    expect(paths.has("/poll")).toBe(true)
+    expect(paths.has("/sink")).toBe(false)
+    expect(paths.has("/socket")).toBe(false)
+    expect(paths.has("/private")).toBe(false)
+  } finally {
+    aborted.resolve()
+    await server.stop(true)
+    await rm(dir, { recursive: true, force: true })
+  }
+}, 15000)
+
+test("dedicated, shared and service workers are blocked without discarding their page", async () => {
+  await mkdir("node_modules/.cache", { recursive: true })
+  let privateHits = 0
+  const server = Bun.serve({
+    hostname: "127.0.0.1", port: 0,
+    fetch(request): Response {
+      const path = new URL(request.url).pathname
+      if (path === "/private") privateHits++
+      if (path === "/worker.js") return new Response(`fetch("http://127.0.0.1:${server.port}/private")`, { headers: { "content-type": "text/javascript" } })
+      const scripts: Readonly<Record<string, string>> = {
+        "/dedicated": 'new Worker("/worker.js")',
+        "/shared": 'new SharedWorker("/worker.js")',
+        "/service": 'navigator.serviceWorker.register("/worker.js")'
+      }
+      return new Response(`<h1>Статья 620</h1><a rel="license">CC BY 4.0</a><script>${scripts[path] ?? ""}</script>`, { headers: { "content-type": "text/html" } })
+    }
+  })
+  try {
+    for (const path of ["/dedicated", "/shared", "/service"]) {
+      const dir = await mkdtemp("node_modules/.cache/web-worker-")
+      try {
+        const result = await saved(dir, `http://localhost:${server.port}${path}`)
+        expect(result._tag).toBe("Success")
+        if (result._tag !== "Success") throw result.failure
+        expect(result.success.licence).toBe("CC BY 4.0")
+        expect((await readFile(`${dir}/attached/${result.success.file}`)).subarray(0, 5).toString()).toBe("%PDF-")
+        expect(privateHits).toBe(0)
+      } finally { await rm(dir, { recursive: true, force: true }) }
+    }
+  } finally { await server.stop(true) }
+}, 30000)
